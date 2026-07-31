@@ -1,0 +1,157 @@
+/*
+  Semantic, property-specific utilities. With the default theme wiped, these are
+  the only color/surface/border classes that exist — no `text-gray-500` possible.
+*/
+
+@utility bg-canvas {
+  background-color: var(--ds-surface-canvas);
+}
+@utility bg-raised {
+  background-color: var(--ds-surface-raised);
+}
+@utility bg-muted-surface {
+  background-color: var(--ds-surface-muted);
+}
+@utility bg-hover-surface {
+  background-color: var(--ds-surface-hover);
+}
+@utility bg-scrim {
+  background-color: var(--ds-surface-scrim);
+}
+
+/* Primary CTA — снежно-синий градиент по рецепту CTA: не цвет-токен,
+   а image. Хрома растёт с глубиной, hue слегка дрейфует к фиолету
+   (250.3 → 254.5), светлота падает 69.1 → 60.5. */
+@utility bg-primary-gradient {
+  background-image: linear-gradient(
+    oklch(69.1% 0.162 250.3) 0%,
+    oklch(60.5% 0.204 254.5) 100%
+  );
+}
+
+@utility text-strong {
+  color: var(--ds-content-strong);
+}
+@utility text-default {
+  color: var(--ds-content-default);
+}
+@utility text-muted-content {
+  color: var(--ds-content-muted);
+}
+
+@utility border-subtle {
+  border-color: var(--ds-border-subtle);
+}
+@utility border-strong {
+  border-color: var(--ds-border-strong);
+}
+
+@utility icon-nav {
+  width: var(--size-icon-nav);
+  height: var(--size-icon-nav);
+}
+
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--ds-focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+/* ——— Button feel ——— */
+
+/* Постоянная промоция кнопки в собственный слой: scale едет на композиторе,
+   иначе первый кадр нажатия пере-растеризует кнопку и иконка дёргается. */
+@utility will-change-scale {
+  will-change: scale;
+}
+
+/* Third surface step for the pressed state — derived, not a token. */
+@utility bg-active-surface {
+  background-color: color-mix(in oklab, var(--ds-surface-hover), oklch(0% 0 0) 3%);
+}
+
+/* Solid (тёмная заливка) чуть светлеет в нажатии. */
+@utility press-solid {
+  filter: brightness(110%) contrast(95%);
+}
+
+/* Colors snap in 125ms; the press scale rides the spring. */
+@utility btn-transition {
+  transition:
+    background-color 125ms ease-out,
+    color 125ms ease-out,
+    border-color 125ms ease-out,
+    filter 125ms ease-out,
+    scale var(--duration-press) var(--ease-press);
+}
+
+/* Inner content of a button: margin-left animates the parent width without a
+   ResizeObserver — так лоадер плавно раздвигает кнопку. */
+@utility btn-content {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+  transition: margin-left var(--duration-press) var(--ease-press);
+}
+
+/* Dynamic spinner: steady rotation + slower eased rotation + arc-length
+   morph, поэтому каждый цикл выглядит чуть иначе. */
+@keyframes spin-linear {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@keyframes spin-ease {
+  0% {
+    transform: rotate(0deg);
+  }
+  22% {
+    transform: rotate(1turn);
+  }
+  47% {
+    transform: rotate(2turn);
+  }
+  68% {
+    transform: rotate(3turn);
+  }
+  to {
+    transform: rotate(4turn);
+  }
+}
+@keyframes spin-arc {
+  0% {
+    stroke-dasharray: 14 999;
+  }
+  16% {
+    stroke-dasharray: 5 999;
+  }
+  37% {
+    stroke-dasharray: 26 999;
+  }
+  55% {
+    stroke-dasharray: 9 999;
+  }
+  74% {
+    stroke-dasharray: 30 999;
+  }
+  90% {
+    stroke-dasharray: 12 999;
+  }
+  to {
+    stroke-dasharray: 14 999;
+  }
+}
+@utility spin-linear {
+  transform-origin: center;
+  animation: spin-linear 1.2s linear infinite;
+}
+@utility spin-ease {
+  transform-origin: center;
+  animation: spin-ease 4.2s ease-in-out infinite;
+}
+@utility spin-arc {
+  transform-origin: center;
+  stroke-dasharray: 14 999;
+  animation: spin-arc 3.3s ease-in-out infinite;
+}

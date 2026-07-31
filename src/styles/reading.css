@@ -1,0 +1,128 @@
+/*
+  Scoped reading typography + book-content integrity. Font family + size come
+  from reader settings via CSS custom properties; pagination geometry is set
+  inline by ReadingView. The book's own stylesheet is injected scoped under
+  `.book-content` at render time, so author formatting applies only there.
+  No hardcoded colors.
+*/
+
+.reading {
+  color: var(--reading-text, var(--ds-content-strong));
+  font-family: var(--reading-font-family, var(--font-sans));
+  font-size: var(--reading-font-size, 1.125rem);
+  /* Remap targets for book font-family declarations (see scopeBookCss):
+     follow the user's reading font when set, else JP serif/sans generics. */
+  --book-font-serif: var(--reading-font-family, "Hiragino Mincho ProN", "Yu Mincho", serif);
+  --book-font-sans: var(--reading-font-family, "Hiragino Sans", "Yu Gothic", sans-serif);
+  /* Quality line breaking: kinsoku (no dangling punctuation), keep latin words
+     whole, wrap long tokens gracefully, balance horizontal lines. */
+  line-break: strict;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+  line-height: var(--reading-line-height, 1.9);
+}
+
+.reading :where(ruby) {
+  ruby-align: center;
+}
+
+.reading :where(rt) {
+  font-size: 0.55em;
+  font-weight: var(--font-weight-normal);
+  color: var(--reading-muted, var(--ds-content-muted));
+}
+
+/* Furigana toggle (settings): hide annotations without reflow — visibility
+   keeps the ruby box metrics, so pagination doesn't shift when switching. */
+[data-furigana="off"] :where(rt) {
+  visibility: hidden;
+}
+
+/* Vertical (tate): lines keep their natural length and pack at the inline
+   start — no justification. Justified columns stretch to the exact column-box
+   height, which glues the first glyph to the page box top and the last glyph
+   to the bottom edge (and lets ruby below the last line poke past the box).
+   The reference reader ships justification off by default for the same reason.
+   Margins/indents are NOT overridden: the book's own stylesheet (minus the
+   properties the reader owns) and the UA default decide paragraph spacing —
+   same as the reference reader. */
+.reading[data-vertical="true"] {
+  text-orientation: mixed;
+  line-height: var(--reading-line-height, 2);
+}
+
+/* Block integrity: never slice a paragraph, image, or divider across a
+   column/page break; constrain illustrations to the page box. */
+.reading .book-content :where(p) {
+  break-inside: avoid;
+}
+
+.reading .book-content :where(img),
+.reading .book-content :where(svg) {
+  max-width: 100%;
+  max-height: var(--reading-page-height, 100vh);
+  object-fit: contain;
+  break-inside: avoid;
+}
+
+/* Illustration wrapper: centers the image inside its column (along the inline
+   axis — vertically in vertical writing, horizontally in horizontal) and keeps
+   it atomic at fragmentation. Gaiji images (inline glyphs) are never wrapped —
+   see the render pass in ReadingView. The wrapper is a block-level flex box:
+   its inline size fills the column, its block size follows the image. */
+.reading .book-content .image-wrap {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+  max-height: var(--reading-page-height, 100vh);
+  break-inside: avoid;
+}
+
+.reading .book-content :where(hr),
+.reading .book-content :where(h1),
+.reading .book-content :where(h2),
+.reading .book-content :where(h3) {
+  break-inside: avoid;
+  break-after: avoid;
+}
+
+/* PDF pages: the page renders on a canvas (exact fidelity — layouts,
+   formulas, scans survive), and pdf.js's text layer sits on top: invisible
+   absolutely-positioned spans that make the page's text selectable.
+   Sizing comes from the
+   --scale-factor custom property set alongside the render. */
+.pdf-page {
+  position: relative;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
+}
+
+/* Reading theme for PDF: the page is a raster of print, so the theme is a
+   recolor filter over the canvas ("none" in the light theme) — the sepia
+   paper / dark mode comes from the --reading-pdf-filter variable. */
+.pdf-page canvas {
+  filter: var(--reading-pdf-filter, none);
+}
+
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  transform-origin: 0 0;
+}
+
+.pdf-text-layer :where(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.pdf-text-layer ::selection {
+  background: rgb(0 0 0 / 0.25);
+}

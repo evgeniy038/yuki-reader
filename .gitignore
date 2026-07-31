@@ -1,0 +1,32 @@
+# dependencies
+node_modules
+.pnpm-store
+.pnpm-debug.log*
+
+# build output
+dist
+build
+out
+*.tsbuildinfo
+
+# pwa dev artifacts
+dev-dist
+
+**/.DS_Store
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.log
+.DS_Store
+Thumbs.db
+
+# private working notes, never published
+/private-docs/

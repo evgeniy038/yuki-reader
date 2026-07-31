@@ -1,0 +1,175 @@
+/*
+  yuki design tokens.
+  Rule: `--*: initial` wipes Tailwind's default theme, then we whitelist ONLY the
+  tokens we want. Consequence: utilities we did not declare (font-bold,
+  font-semibold, text-xl, bg-red-500, ...) do NOT compile. The design rules
+  (no bold, compact type, no hardcoded color/radius) are enforced by the build,
+  not by convention. Numeric spacing utilities derive from --spacing; arbitrary
+  values (w-[..], max-w-[..]) are not used in app code.
+
+  Type hierarchy = size + color + weight. Weights are regular/medium only.
+  Sizes: xs 12 / sm 13 / base 14 / lg 16.
+  Colors are a single cool neutral oklch axis (hue 254.624, chroma ~0.002 —
+  как в the shared palette); the "accent" is neutral inversion (dark CTA on light),
+  never a hue. `--color-*` aliases exist so the official shadcn (base-vega)
+  components in ui/ resolve to our values.
+*/
+
+@theme {
+  --*: initial;
+
+  /* Font family: Inter (variable) — sturdier at 400 than the system stack. */
+  --font-sans:
+    "Inter Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    system-ui, sans-serif;
+
+  /* Weights — whitelist only. font-bold / font-semibold cannot compile. */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+
+  /* Type scale — whitelist only. text-xl and up cannot compile. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-xs--font-weight: 400;
+  --text-xs--letter-spacing: 0;
+
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.125rem;
+  --text-sm--font-weight: 400;
+  --text-sm--letter-spacing: 0;
+
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.25rem;
+  --text-base--font-weight: 400;
+
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-lg--font-weight: 500;
+
+  /* Breakpoints for the responsive library grid. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+
+  /* Spacing: numeric utilities (p-1.5, h-10, size-4, min-w-44, ...) derive from
+     the base. Hand-written arbitrary values (w-[..], max-w-[..]) stay banned. */
+  --spacing: 0.25rem;
+
+  /* Radii ladder — правило, а не точечные классы: page-карточка 16
+     (`rounded-card`) → вложенная в неё панель 12 (`rounded-pane`) → контролы
+     md 8 (= media) / sm 6 → pill. Вложенная поверхность всегда на шаг
+     МЕНЬШЕ родителя, никогда тот же радиус. xl держим синонимом card для
+     shadcn-примитивов. */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-media: 0.5rem;
+  --radius-card: 1rem;
+  --radius-pane: 0.75rem;
+  --radius-pill: 9999px;
+  /* Heatmap cell (stats): smaller than sm — the bottom of the ladder. */
+  --radius-heat: 0.1875rem;
+
+  /* Icon size in the interface chrome — 16. */
+  --size-icon-nav: 1rem;
+
+  /* Elevation (neutral oklch + alpha). */
+  --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.05);
+  --shadow-floating:
+    0 1px 3px oklch(0% 0 0 / 0.1), 0 1px 2px -1px oklch(0% 0 0 / 0.1);
+
+  /* Primary CTA: светлая синяя лесенка (градиент в utilities.css), тени —
+     по рецепту CTA целиком: внутренний белый блик,
+     микротени и фирменная обводка-кольцо; кольцо сидит между стопами
+     градиента по светлоте (69.1 → 64.6 → 60.5). Текст с полупиксельной
+     тенью для читаемости на градиенте. */
+  --shadow-primary:
+    inset 0 0 1px 1px rgb(255 255 255 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.08),
+    0 2px 2px rgb(0 0 0 / 0.04), 0 0 0 1px oklch(64.6% 0.178 252.4);
+  --text-shadow-primary: 0 0.5px oklch(23% 0.075 255 / 0.33);
+
+  /* shadcn (base-vega) token aliases — official component classes resolve to
+     our values: xs ≈ card, md/lg ≈ floating. */
+  --shadow-xs: var(--shadow-card);
+  --shadow-md: var(--shadow-floating);
+  --shadow-lg: var(--shadow-floating);
+
+  /* Container widths used by components (dialog sm:max-w-md, shelf 6xl). */
+  --container-md: 28rem;
+  --container-lg: 32rem;
+  --container-6xl: 72rem;
+
+  /* Misc tokens the official components reference. */
+  --tracking-widest: 0.1em;
+  --blur-xs: 4px;
+
+  /* shadcn semantic colors, mapped onto the yuki tokens. `primary` — the deep
+     end of the blue CTA gradient; the button itself uses
+     bg-primary-gradient, small controls (slider, switch) too. */
+  --color-background: var(--ds-surface-canvas);
+  --color-foreground: var(--ds-content-strong);
+  --color-card: var(--ds-surface-raised);
+  --color-card-foreground: var(--ds-content-strong);
+  --color-popover: var(--ds-surface-raised);
+  --color-popover-foreground: var(--ds-content-strong);
+  --color-primary: oklch(60.5% 0.204 254.5);
+  --color-primary-foreground: var(--ds-content-inverse);
+  --color-secondary: var(--ds-surface-muted);
+  --color-secondary-foreground: var(--ds-content-strong);
+  --color-muted: var(--ds-surface-muted);
+  --color-muted-foreground: var(--ds-content-muted);
+  --color-destructive: var(--ds-surface-accent);
+  --color-border: var(--ds-border-subtle);
+  --color-input: var(--ds-border-subtle);
+  --color-ring: var(--ds-focus-ring);
+  --color-black: oklch(0% 0 0);
+  --color-white: oklch(100% 0 0);
+
+  /* Heatmap intensity ladder (stats activity grid): 0 = no reading that day,
+     4 = >90 active minutes. Mixed from primary so the ladder follows the
+     accent automatically; thresholds live in core/stats.ts (heatLevel). */
+  --color-heat-0: var(--ds-surface-muted);
+  --color-heat-1: color-mix(in oklab, var(--color-primary) 25%, var(--ds-surface-raised));
+  --color-heat-2: color-mix(in oklab, var(--color-primary) 45%, var(--ds-surface-raised));
+  --color-heat-3: color-mix(in oklab, var(--color-primary) 70%, var(--ds-surface-raised));
+  --color-heat-4: var(--color-primary);
+
+  /* Motion — quiet, 150ms. */
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Button press: colors snap in 125ms, the scale rides a 389ms spring
+     with a slight overshoot. */
+  --duration-press: 389.17ms;
+  --ease-press: linear(0 0%, 0.013389 1%, 0.049373 2%, 0.102262 3%, 0.167133 4%, 0.239788 5%, 0.316716 6%, 0.395034 7%, 0.472432 8%, 0.547109 9%, 0.617715 10%, 0.68329 11%, 0.743204 12%, 0.797107 13%, 0.844877 14%, 0.886576 15%, 0.922409 16%, 0.952689 17%, 0.977806 18%, 0.998202 19%, 1.014346 20%, 1.026718 21%, 1.035795 22%, 1.042036 23%, 1.045879 24%, 1.04773 25%, 1.047962 26%, 1.046909 27%, 1.04487 28%, 1.042104 29%, 1.038837 30%, 1.035258 31%, 1.031524 32%, 1.027766 33%, 1.024084 34%, 1.020558 35%, 1.017245 36%, 1.014186 37%, 1.011406 38%, 1.008919 39%, 1.006726 40%, 1.004821 41%, 1.003194 42%, 1.001828 43%, 1.000702 44%, 0.999796 45%, 0.999085 46%, 0.998548 47%, 0.998162 48%, 0.997904 49%, 0.997755 50%, 0.997695 51%, 0.997707 52%, 0.997776 53%, 0.997887 54%, 0.998029 55%, 0.998192 56%, 0.998368 57%, 0.998548 58%, 0.998728 59%, 0.998903 60%, 0.999069 61%, 0.999224 62%, 0.999366 63%, 0.999495 64%, 0.99961 65%, 0.99971 66%, 0.999797 67%, 0.999871 68%, 0.999932 69%);
+}
+
+:root {
+  color-scheme: light;
+
+  /* Global tracking: -0.15px applied to all text via base layer. */
+  --ds-tracking: -0.009375rem;
+
+  /* Surfaces — cool neutral axis (hue 254.624, как в the shared palette). */
+  --ds-surface-canvas: oklch(98.184% 0.002 254.624);
+  --ds-surface-raised: oklch(99.7% 0.001 254.624);
+  --ds-surface-muted: oklch(96.184% 0.002 254.624);
+  --ds-surface-hover: oklch(94.5% 0.004 254.624);
+  --ds-surface-accent: oklch(24.314% 0.007 254.624);
+  --ds-surface-accent-soft: oklch(24.314% 0.007 254.624 / 0.08);
+  --ds-surface-scrim: oklch(24.314% 0.007 254.624 / 0.2);
+
+  /* Content — the same cool axis. */
+  --ds-content-strong: oklch(24.314% 0.007 254.624);
+  --ds-content-default: oklch(38.288% 0.004 254.624);
+  --ds-content-muted: oklch(52.5% 0.008 254.624);
+  --ds-content-inverse: oklch(99.7% 0.001 254.624);
+
+  /* Borders. */
+  --ds-border-subtle: oklch(88% 0.006 254.624);
+  --ds-border-strong: oklch(82% 0.006 254.624);
+
+  /* Interaction. */
+  --ds-focus-ring: oklch(24.314% 0.007 254.624);
+}
