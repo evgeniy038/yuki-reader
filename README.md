@@ -1,5 +1,7 @@
 # yuki reader (ゆき)
 
+**[yukireader.app](https://yukireader.app/)**
+
 A quiet offline-first reader for Japanese novels (EPUB) and English books
 (PDF). Runs in the browser, works fully offline after the first visit —
 library, progress and stats stay local in IndexedDB.
@@ -7,6 +9,8 @@ library, progress and stats stay local in IndexedDB.
 - EPUB: vertical/horizontal layout, glyph-safe pagination, furigana
 - PDF: two-page spreads, page background follows the reading theme
 - Reading stats, automatic bookmarks, EN/RU interface
+
+![Library](screenshots/library.png)
 
 ## Feedback
 
