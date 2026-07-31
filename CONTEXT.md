@@ -198,9 +198,11 @@ actions (open, rename, move to another series, delete) and drag reorder.
 say.
 
 The manga reader mirrors the PDF one, but right-to-left: cover alone, then
-spreads with the EARLIER page on the right; left means forward (click zones,
-arrow keys, wheel). Pages come from the pages store as object URLs in a
-small window around the current page (a volume never sits in memory whole).
+spreads with the EARLIER page on the right; left means forward (slim
+edge-click strips, arrow keys). The wheel zooms toward the cursor and a drag
+pans while zoomed in; a page turn resets both. Pages come from the pages
+store as object URLs in a small window around the current page (a volume
+never sits in memory whole).
 With a sidecar, its text boxes overlay the scan in source-image pixels,
 scaled with the page: hidden until hovered, click pins a box open (and makes
 the lines selectable) without turning the page; smaller boxes stack above

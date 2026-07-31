@@ -126,6 +126,16 @@ export function LibraryPage({
   const groupLabel = (id: "ja" | "en" | "other") =>
     id === "ja" ? "日本語" : id === "en" ? "English" : t("library.other");
 
+  // Within a language section, manga series and books split into named
+  // subsections (only when both kinds are present): native labels for
+  // Japanese (小説 / 漫画), localized otherwise.
+  const subLabel = (groupId: "ja" | "en" | "other", kind: "novels" | "manga") =>
+    groupId === "ja"
+      ? kind === "novels"
+        ? "小説"
+        : "漫画"
+      : t(kind === "novels" ? "library.novels" : "library.manga");
+
   const openableIds = useMemo(() => new Set(dataRef.current.keys()), [books]);
 
   const detailsBook = detailsId
@@ -227,31 +237,51 @@ export function LibraryPage({
         ) : books.length === 0 ? (
           <LibraryEmpty onAdd={() => fileRef.current?.click()} />
         ) : (
-          groups.map((group, index) => (
-            <section
-              key={group.id}
-              className={index < groups.length - 1 ? "mb-10" : ""}
-            >
-              {showGroupHeaders ? (
-                <PageSectionTitle>
-                  {groupLabel(group.id)} · {group.items.length}
-                </PageSectionTitle>
-              ) : null}
-              <LibraryGrid
-                items={group.items.map(({ item }) => item)}
-                openableIds={openableIds}
-                flashId={flashId}
-                onOpenBook={onOpenBook}
-                onDetails={setDetailsId}
-                onRename={setRenamingId}
-                onChangeCover={pickCoverFor}
-                onDelete={setDeletingId}
-                onOpenSeries={onOpenSeries}
-                onRenameSeries={setRenamingSeries}
-                onDeleteSeries={setDeletingSeries}
-              />
-            </section>
-          ))
+          groups.map((group, index) => {
+            const novels = group.items.filter(({ item }) => item.kind === "book");
+            const manga = group.items.filter(({ item }) => item.kind === "series");
+            const subs = [
+              { kind: "novels" as const, items: novels },
+              { kind: "manga" as const, items: manga },
+            ].filter((sub) => sub.items.length > 0);
+            return (
+              <section
+                key={group.id}
+                className={index < groups.length - 1 ? "mb-10" : ""}
+              >
+                {showGroupHeaders ? (
+                  <PageSectionTitle>
+                    {groupLabel(group.id)} · {group.items.length}
+                  </PageSectionTitle>
+                ) : null}
+                {subs.map((sub, subIndex) => (
+                  <div
+                    key={sub.kind}
+                    className={subIndex < subs.length - 1 ? "mb-8" : ""}
+                  >
+                    {subs.length > 1 ? (
+                      <h3 className="mb-3 text-xs text-muted-content">
+                        {subLabel(group.id, sub.kind)}
+                      </h3>
+                    ) : null}
+                    <LibraryGrid
+                      items={sub.items.map(({ item }) => item)}
+                      openableIds={openableIds}
+                      flashId={flashId}
+                      onOpenBook={onOpenBook}
+                      onDetails={setDetailsId}
+                      onRename={setRenamingId}
+                      onChangeCover={pickCoverFor}
+                      onDelete={setDeletingId}
+                      onOpenSeries={onOpenSeries}
+                      onRenameSeries={setRenamingSeries}
+                      onDeleteSeries={setDeletingSeries}
+                    />
+                  </div>
+                ))}
+              </section>
+            );
+          })
         )}
       </PageContent>
       {renamingId ? (

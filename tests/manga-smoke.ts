@@ -212,8 +212,36 @@ async function main(): Promise<void> {
   await page.keyboard.press("ArrowRight");
   await settleOnPage(page, 1);
   check((await currentPage(page)) === 1, "reader: right arrow moves back");
+
+  // Zoom: the wheel zooms in (transform on the page set), a drag pans, and a
+  // page turn resets both.
+  await page.mouse.move(640, 400);
+  await page.mouse.wheel(0, -600);
+  await page.waitForTimeout(300);
+  const zoomed = await page.evaluate(
+    () =>
+      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+        .transform ?? "",
+  );
+  check(/scale\((?!1\))/.test(zoomed), "zoom: the wheel zooms the page");
+  await page.mouse.down();
+  await page.mouse.move(700, 440, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const panned = await page.evaluate(
+    () =>
+      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+        .transform ?? "",
+  );
+  check(panned !== zoomed && panned.includes("translate"), "zoom: drag pans");
   await page.keyboard.press("ArrowLeft");
   await settleOnPage(page, 2);
+  const reset = await page.evaluate(
+    () =>
+      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+        .transform ?? "",
+  );
+  check(reset.includes("scale(1)"), "zoom: a page turn resets the zoom");
   await page.waitForTimeout(3_500); // bookmark dwell
 
   await exitToShelf(page); // a manga volume exits to its series page

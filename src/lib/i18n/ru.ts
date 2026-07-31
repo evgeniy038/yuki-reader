@@ -22,6 +22,8 @@ export const ru: Messages = {
       progress: "Прогресс",
     },
     other: "Другое",
+    novels: "Романы",
+    manga: "Манга",
     finished: "Прочитано",
     menu: {
       open: "Открыть",
@@ -176,7 +178,15 @@ export const ru: Messages = {
     volumeCount_many: "{{count, number}} томов",
     volumeCount_other: "{{count, number}} томов",
     volume: "Том {{index}}",
-    renameSeries: "Переименовать серию",
+    seriesMenu: {
+      aria: "действия с серией",
+      rename: "Переименовать серию",
+      move: "Перенести серию…",
+      delete: "Удалить серию",
+    },
+    moveSeries: {
+      title: "Перенести все тома в серию",
+    },
     addVolume: "Добавить том",
     moveToSeries: "Перенести в серию…",
     move: {

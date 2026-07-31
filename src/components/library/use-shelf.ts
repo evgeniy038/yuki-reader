@@ -372,6 +372,40 @@ export function useShelf(demoMode: boolean) {
     void updateBookMeta(id, { series, volumeIndex });
   };
 
+  // Move a whole series into another one (merge): volumes keep their numbers
+  // where free, the rest land at the end in order.
+  const moveSeries = (fromSeries: string, toSeries: string) => {
+    if (fromSeries === toSeries) return;
+    const taken = new Set(
+      books
+        .filter((book) => book.series === toSeries)
+        .map((book) => book.volumeIndex),
+    );
+    let next =
+      Math.max(0, ...[...taken].filter((n): n is number => n !== undefined)) + 1;
+    const moving = books
+      .filter((book) => book.series === fromSeries)
+      .sort(
+        (a, b) =>
+          (a.volumeIndex ?? Infinity) - (b.volumeIndex ?? Infinity) ||
+          a.addedAt - b.addedAt,
+      );
+    const assignments = new Map<string, { series: string; volumeIndex: number }>();
+    for (const volume of moving) {
+      let index = volume.volumeIndex;
+      if (index === undefined || taken.has(index)) index = next++;
+      taken.add(index);
+      assignments.set(volume.id, { series: toSeries, volumeIndex: index });
+    }
+    setBooks((prev) =>
+      prev.map((book) => {
+        const patch = assignments.get(book.id);
+        return patch ? { ...book, ...patch } : book;
+      }),
+    );
+    assignments.forEach((patch, id) => void updateBookMeta(id, patch));
+  };
+
   // Persist a manual reorder: positions become 1..n in the given id order.
   const setVolumeOrder = (orderedIds: string[]) => {
     setBooks((prev) =>
@@ -448,6 +482,7 @@ export function useShelf(demoMode: boolean) {
     renameBook,
     renameSeries,
     moveVolumeToSeries,
+    moveSeries,
     setVolumeOrder,
     changeCover,
   };

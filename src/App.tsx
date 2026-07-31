@@ -220,6 +220,8 @@ export default function App() {
                 onDeleteBook={shelf.removeBook}
                 onRenameSeries={shelf.renameSeries}
                 onMoveVolume={shelf.moveVolumeToSeries}
+                onMoveSeries={shelf.moveSeries}
+                onDeleteSeries={shelf.removeSeries}
                 onReorder={shelf.setVolumeOrder}
                 onAddVolumes={shelf.importManga}
               />

@@ -4,9 +4,13 @@ import { useLatest } from "@/lib/use-latest";
 
 // Trackpad bursts must not machine-gun page turns.
 const WHEEL_GUARD_MS = 220;
+// Click-to-turn zones: a slim strip at each screen edge — wide enough to hit
+// deliberately, narrow enough that selecting text or clicking the page never
+// flips it by accident.
+const EDGE_CLICK_PX = 50;
 
 // Paged-turn input, shared by both readers: wheel (guarded), edge clicks
-// (28% / 72% zones) and paging keys. `vertical` (Japanese books)
+// (50px strips) and paging keys. `vertical` (Japanese books)
 // flips the horizontal wheel sign,
 // mirrors the click zones and swaps the arrow keys; the PDF reader is
 // horizontal-only, so it passes false.
@@ -14,6 +18,7 @@ export function usePagingInput({
   targetRef,
   vertical,
   enabled,
+  wheel = true,
   onStep,
 }: {
   /** Element that owns wheel/click (the scroll box or the stage). */
@@ -21,10 +26,13 @@ export function usePagingInput({
   vertical: boolean;
   /** Input is live only when the book is ready (PDF: document loaded). */
   enabled: boolean;
+  /** Wheel paging — off where the wheel has another job (manga zoom). */
+  wheel?: boolean;
   onStep: (dir: 1 | -1) => void;
 }) {
   const lastWheelRef = useRef(0);
   const verticalRef = useLatest(vertical);
+  const wheelRef = useLatest(wheel);
   const onStepRef = useLatest(onStep);
 
   useEffect(() => {
@@ -32,6 +40,7 @@ export function usePagingInput({
     if (!target || !enabled) return;
 
     const onWheel = (event: WheelEvent) => {
+      if (!wheelRef.current) return;
       event.preventDefault();
       const now = Date.now();
       if (now - lastWheelRef.current < WHEEL_GUARD_MS) return;
@@ -50,11 +59,11 @@ export function usePagingInput({
       const rect = target.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const forward = verticalRef.current
-        ? x < rect.width * 0.28
-        : x > rect.width * 0.72;
+        ? x < EDGE_CLICK_PX
+        : x > rect.width - EDGE_CLICK_PX;
       const back = verticalRef.current
-        ? x > rect.width * 0.72
-        : x < rect.width * 0.28;
+        ? x > rect.width - EDGE_CLICK_PX
+        : x < EDGE_CLICK_PX;
       if (forward) onStepRef.current(1);
       else if (back) onStepRef.current(-1);
     };

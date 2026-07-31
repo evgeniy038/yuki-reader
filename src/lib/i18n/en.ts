@@ -24,6 +24,8 @@ export const en = {
       progress: "Progress",
     },
     other: "Other",
+    novels: "Novels",
+    manga: "Manga",
     finished: "Finished",
     menu: {
       open: "Open",
@@ -178,7 +180,15 @@ export const en = {
     volumeCount_many: "{{count, number}} volumes",
     volumeCount_other: "{{count, number}} volumes",
     volume: "Vol {{index}}",
-    renameSeries: "Rename series",
+    seriesMenu: {
+      aria: "series actions",
+      rename: "Rename series",
+      move: "Move series…",
+      delete: "Delete series",
+    },
+    moveSeries: {
+      title: "Move all volumes to series",
+    },
     addVolume: "Add volume",
     moveToSeries: "Move to series…",
     move: {
