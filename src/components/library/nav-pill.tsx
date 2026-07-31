@@ -35,7 +35,7 @@ export function NavPill({
     >
       <div
         ref={containerRef}
-        className="relative flex items-center rounded-xl border border-subtle bg-raised p-1 shadow-lg"
+        className="relative flex items-center rounded-xl border border-subtle bg-raised p-1 shadow-card"
       >
         {pos ? (
           <span

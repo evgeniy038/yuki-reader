@@ -59,7 +59,8 @@
      (`rounded-card`) → вложенная в неё панель 12 (`rounded-pane`) → контролы
      md 8 (= media) / sm 6 → pill. Вложенная поверхность всегда на шаг
      МЕНЬШЕ родителя, никогда тот же радиус. xl держим синонимом card для
-     shadcn-примитивов. */
+     shadcn-примитивов. SegmentedControl — осознанное исключение: трек,
+     индикатор и кнопки все xl, почти-pill. */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -167,7 +168,7 @@
   --ds-content-inverse: oklch(99.7% 0.001 254.624);
 
   /* Borders. */
-  --ds-border-subtle: oklch(88% 0.006 254.624);
+  --ds-border-subtle: oklch(92.5% 0.006 254.624);
   --ds-border-strong: oklch(82% 0.006 254.624);
 
   /* Interaction. */
