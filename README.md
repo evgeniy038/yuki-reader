@@ -1,4 +1,4 @@
-# yuki
+# yuki reader (ゆき)
 
 A quiet offline-first reader for Japanese novels (EPUB) and English books
 (PDF). Runs in the browser, works fully offline after the first visit —
