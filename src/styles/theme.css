@@ -166,9 +166,8 @@
   --ds-content-muted: oklch(52.5% 0.008 254.624);
   --ds-content-inverse: oklch(99.7% 0.001 254.624);
 
-  /* Borders. */
-  --ds-border-subtle: oklch(92.5% 0.006 254.624);
-  --ds-border-strong: oklch(82% 0.006 254.624);
+  /* Borders — один тон на всё приложение. */
+  --ds-border-subtle: oklch(94% 0.006 254.624);
 
   /* Interaction. */
   --ds-focus-ring: oklch(24.314% 0.007 254.624);

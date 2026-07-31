@@ -21,7 +21,7 @@ const buttonVariants = cva(
         default:
           "border-0 bg-primary-gradient text-primary-foreground shadow-primary text-shadow-primary hover:not-active:brightness-105 active:press-solid",
         outline:
-          "border-strong bg-raised shadow-card hover:bg-muted-surface active:bg-hover-surface aria-expanded:bg-muted-surface",
+          "border-subtle bg-raised shadow-card hover:bg-muted-surface active:bg-hover-surface aria-expanded:bg-muted-surface",
         secondary:
           "bg-muted-surface text-strong hover:bg-hover-surface active:bg-active-surface aria-expanded:bg-hover-surface",
         ghost:

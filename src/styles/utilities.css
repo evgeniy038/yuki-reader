@@ -42,9 +42,6 @@
 @utility border-subtle {
   border-color: var(--ds-border-subtle);
 }
-@utility border-strong {
-  border-color: var(--ds-border-strong);
-}
 
 @utility icon-nav {
   width: var(--size-icon-nav);
