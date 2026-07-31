@@ -47,6 +47,9 @@ pnpm tsx tests/layout-smoke.ts
 деплой): приложение само предложит обновиться карточкой «Новая версия
 готова».
 
-Одноразовая настройка Pages: Settings → Pages → Source: **GitHub Actions**.
+Одноразовая настройка Pages: Settings → Pages → Source: **GitHub Actions**,
+затем в окружении `github-pages` (Settings → Environments) разрешить деплой
+по тегам — Deployment branches → Add rule → type **Tag**, pattern `v*`
+(без этого деплой из тега отклоняется protection-правилом).
 Для project-site (`owner.github.io/yuki`) базовый путь подставляется
 автоматически; для user-site (`owner.github.io`) — собирается с корня.
