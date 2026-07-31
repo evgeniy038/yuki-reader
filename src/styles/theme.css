@@ -93,7 +93,10 @@
   --shadow-md: var(--shadow-floating);
   --shadow-lg: var(--shadow-floating);
 
-  /* Container widths used by components (dialog sm:max-w-md, shelf 6xl). */
+  /* Container widths used by components (dialog xs, empty-state sm,
+     dialog max-w-md, shelf 6xl). */
+  --container-xs: 20rem;
+  --container-sm: 24rem;
   --container-md: 28rem;
   --container-lg: 32rem;
   --container-6xl: 72rem;
