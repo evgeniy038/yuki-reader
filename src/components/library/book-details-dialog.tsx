@@ -41,8 +41,8 @@ export function BookDetailsDialog({
   }, [book.id]);
 
   const pct = Math.round(book.progress * 100);
-  const isPdf = book.format === "pdf";
-  const lengthRow: [string, string] = isPdf
+  const isPaged = book.format === "pdf" || book.format === "manga";
+  const lengthRow: [string, string] = isPaged
     ? [t("details.pages"), book.pageCount != null ? String(book.pageCount) : "—"]
     : [t("details.chapters"), String(chapterCount)];
   const hasReading =

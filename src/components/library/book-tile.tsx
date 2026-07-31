@@ -1,6 +1,7 @@
 import type { Book } from "@/core/library";
 import { readingStateOf } from "@/core/library";
 import { BookOpen, Image, Info, PencilSimple, Trash } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -15,9 +16,13 @@ import { BookCover } from "./book-cover";
 // reading, "Finished" at the end, silence for a fresh book). Click opens;
 // right-click opens the context menu with every per-book action. Hover lifts
 // the cover with a shadow, press settles the tile.
+// `subtitle` overrides the author line (manga volumes show "Vol N" there);
+// `menuExtra` inserts extra context-menu items before the destructive zone.
 export function BookTile({
   book,
   flash = false,
+  subtitle,
+  menuExtra,
   onOpen,
   onDetails,
   onRename,
@@ -26,6 +31,8 @@ export function BookTile({
 }: {
   book: Book;
   flash?: boolean;
+  subtitle?: string;
+  menuExtra?: ReactNode;
   onOpen?: () => void;
   onDetails?: () => void;
   onRename?: () => void;
@@ -40,6 +47,7 @@ export function BookTile({
       : state === "reading"
         ? `${Math.round(book.progress * 100)}%`
         : "";
+  const sub = subtitle ?? book.author ?? " ";
   const content = (
     <>
       <div
@@ -52,8 +60,8 @@ export function BookTile({
       <p className="mt-3 truncate text-sm text-strong" title={book.title}>
         {book.title}
       </p>
-      <p className="mt-0.5 truncate text-xs text-muted-content" title={book.author ?? undefined}>
-        {book.author ?? " "}
+      <p className="mt-0.5 truncate text-xs text-muted-content" title={subtitle ? undefined : (book.author ?? undefined)}>
+        {sub}
       </p>
       <p className="mt-0.5 truncate text-xs text-muted-content tabular-nums">
         {stateLabel || " "}
@@ -89,18 +97,25 @@ export function BookTile({
           <BookOpen />
           {t("library.menu.open")}
         </ContextMenuItem>
-        <ContextMenuItem onClick={onDetails}>
-          <Info />
-          {t("library.menu.details")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={onRename}>
-          <PencilSimple />
-          {t("library.menu.rename")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={onChangeCover}>
-          <Image />
-          {t("library.menu.cover")}
-        </ContextMenuItem>
+        {onDetails ? (
+          <ContextMenuItem onClick={onDetails}>
+            <Info />
+            {t("library.menu.details")}
+          </ContextMenuItem>
+        ) : null}
+        {onRename ? (
+          <ContextMenuItem onClick={onRename}>
+            <PencilSimple />
+            {t("library.menu.rename")}
+          </ContextMenuItem>
+        ) : null}
+        {onChangeCover ? (
+          <ContextMenuItem onClick={onChangeCover}>
+            <Image />
+            {t("library.menu.cover")}
+          </ContextMenuItem>
+        ) : null}
+        {menuExtra}
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onClick={onDelete}>
           <Trash />

@@ -9,6 +9,7 @@ import {
   useNavigate,
 } from "react-router";
 import type { Book } from "@/core/library";
+import { normalizeSeriesKey } from "@/core/mokuro";
 import {
   FONT_SIZE_DEFAULT,
   LINE_HEIGHT_DEFAULT,
@@ -19,6 +20,7 @@ import {
 } from "@/core/reading-settings";
 import { saveProgress } from "@/core/storage";
 import { LibraryPage } from "@/components/library/library-page";
+import { MangaPage } from "@/components/library/manga-page";
 import { NavPill, type AppView } from "@/components/library/nav-pill";
 import { SettingsPage } from "@/components/library/settings-page";
 import { StatsView } from "@/components/library/stats-view";
@@ -96,7 +98,7 @@ export default function App() {
     },
   });
 
-  const { dragging, handlers: dropHandlers } = useFileDrop(shelf.importFile);
+  const { dragging, handlers: dropHandlers } = useFileDrop(shelf.importFiles);
 
   const getBookData = useCallback(
     (id: string) => shelf.dataRef.current.get(id),
@@ -154,7 +156,14 @@ export default function App() {
         settings={readingSettings}
         onSettingsChange={setReadingSettings}
         onProgress={updateProgress}
-        onExit={() => navigate("/")}
+        onExit={() =>
+          // A manga volume exits to its series, not all the way to the shelf.
+          openedBook.format === "manga" && openedBook.series
+            ? navigate(
+                `/manga/${encodeURIComponent(normalizeSeriesKey(openedBook.series))}`,
+              )
+            : navigate("/")
+        }
       />
     );
   }
@@ -199,6 +208,24 @@ export default function App() {
             }
           />
           <Route
+            path="manga/:seriesKey"
+            element={
+              <MangaPage
+                books={shelf.books}
+                shelfReady={shelf.shelfReady}
+                error={shelf.error}
+                notice={shelf.notice}
+                onOpenBook={openBook}
+                onRenameBook={shelf.renameBook}
+                onDeleteBook={shelf.removeBook}
+                onRenameSeries={shelf.renameSeries}
+                onMoveVolume={shelf.moveVolumeToSeries}
+                onReorder={shelf.setVolumeOrder}
+                onAddVolumes={shelf.importManga}
+              />
+            }
+          />
+          <Route
             index
             element={
               <LibraryPage
@@ -209,10 +236,15 @@ export default function App() {
                 flashId={shelf.flashId}
                 dataRef={shelf.dataRef}
                 onOpenBook={openBook}
-                onImportFile={shelf.importFile}
+                onImportFiles={shelf.importFiles}
                 onRenameBook={shelf.renameBook}
                 onDeleteBook={shelf.removeBook}
                 onChangeCover={shelf.changeCover}
+                onOpenSeries={(series) =>
+                  navigate(`/manga/${encodeURIComponent(normalizeSeriesKey(series))}`)
+                }
+                onRenameSeries={shelf.renameSeries}
+                onDeleteSeries={shelf.removeSeries}
               />
             }
           />

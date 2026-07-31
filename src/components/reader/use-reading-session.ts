@@ -91,7 +91,8 @@ export function useReadingSession({
       const s = sessionRef.current;
       if (!s.counted.has(absolute)) {
         s.counted.add(absolute);
-        if (formatRef.current === "pdf") s.pendingPages += pageChars;
+        if (formatRef.current === "pdf" || formatRef.current === "manga")
+          s.pendingPages += pageChars;
         else s.pendingChars += pageChars;
       }
       const now = Date.now();

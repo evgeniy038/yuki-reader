@@ -9,6 +9,7 @@ import {
 import type { OpenedData } from "@/components/library/use-shelf";
 import { ReadingView } from "./reading-view";
 import { PdfReadingView } from "./pdf-reading-view";
+import { MangaReadingView } from "./manga-reading-view";
 import { ReaderChrome } from "./reader-chrome";
 import type { ReaderPanelMode } from "./reader-panel";
 
@@ -75,6 +76,12 @@ export function ReaderScreen({
             onOutlineChange={setPdfHasOutline}
             onProgress={onProgress}
           />
+        ) : book.format === "manga" ? (
+          <MangaReadingView
+            bookId={book.id}
+            initialProgress={book.progress}
+            onProgress={onProgress}
+          />
         ) : (
           <ReadingView
             chapters={data.chapters}
@@ -95,7 +102,8 @@ export function ReaderScreen({
         onExit={onExit}
         settings={settings}
         onSettingsChange={onSettingsChange}
-        showFontSettings={book.format !== "pdf"}
+        showFontSettings={book.format !== "pdf" && book.format !== "manga"}
+        showSearch={book.format !== "manga"}
         tocAvailable={
           book.format === "pdf" ? pdfHasOutline : (data.toc?.length ?? 0) > 0
         }

@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react";
 import { Plus } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import {
+  buildShelfItems,
   groupByLanguage,
   loadShelfSort,
   saveShelfSort,
@@ -12,6 +13,7 @@ import {
   type ShelfSort,
 } from "@/core/library";
 import { blobToDataUrl } from "@/core/import-book";
+import type { MangaInputItem } from "@/core/import-manga";
 import { charCountOfHtml } from "@/core/reading-stats";
 import { Button } from "@/components/ui/button";
 import { DashRing } from "@/components/ui/dash-ring";
@@ -59,10 +61,13 @@ export function LibraryPage({
   flashId,
   dataRef,
   onOpenBook,
-  onImportFile,
+  onImportFiles,
   onRenameBook,
   onDeleteBook,
   onChangeCover,
+  onOpenSeries,
+  onRenameSeries,
+  onDeleteSeries,
 }: {
   books: Book[];
   shelfReady: boolean;
@@ -71,16 +76,21 @@ export function LibraryPage({
   flashId: string | null;
   dataRef: { current: Map<string, OpenedData> };
   onOpenBook: (id: string) => void;
-  onImportFile: (file: File) => void;
+  onImportFiles: (items: MangaInputItem[]) => void;
   onRenameBook: (id: string, title: string) => void;
   onDeleteBook: (id: string) => void;
   onChangeCover: (id: string, cover: string) => void;
+  onOpenSeries: (series: string) => void;
+  onRenameSeries: (series: string, next: string) => void;
+  onDeleteSeries: (series: string) => void;
 }) {
   const { t } = useTranslation();
   const [sort, setSort] = useState<ShelfSort>(() => loadShelfSort());
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [renamingSeries, setRenamingSeries] = useState<string | null>(null);
+  const [deletingSeries, setDeletingSeries] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const coverTargetRef = useRef<string | null>(null);
@@ -100,7 +110,17 @@ export function LibraryPage({
   );
 
   const sorted = useMemo(() => sortBooks(books, sort), [books, sort]);
-  const groups = useMemo(() => groupByLanguage(sorted), [sorted]);
+  const items = useMemo(() => buildShelfItems(sorted), [sorted]);
+  const groups = useMemo(
+    () =>
+      groupByLanguage(
+        items.map((item) => ({
+          item,
+          language: item.kind === "series" ? item.language : item.book.language,
+        })),
+      ),
+    [items],
+  );
   const showGroupHeaders = groups.length > 1;
 
   const groupLabel = (id: "ja" | "en" | "other") =>
@@ -114,7 +134,7 @@ export function LibraryPage({
   const detailsTotalChars = useMemo(() => {
     if (!detailsId) return 0;
     const book = books.find((b) => b.id === detailsId);
-    if (book?.format === "pdf") return 0; // PDF length is pages, not chars
+    if (book?.format === "pdf" || book?.format === "manga") return 0; // paged formats: length is pages, not chars
     const data = dataRef.current.get(detailsId);
     if (!data) return 0;
     return data.chapters.reduce(
@@ -124,9 +144,17 @@ export function LibraryPage({
   }, [detailsId, books, dataRef]);
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = [...(event.target.files ?? [])];
     event.target.value = "";
-    if (file) onImportFile(file);
+    if (files.length === 0) return;
+    onImportFiles(
+      files.map((file) => ({
+        file,
+        path:
+          (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+          file.name,
+      })),
+    );
   };
 
   const pickCoverFor = (id: string) => {
@@ -206,11 +234,11 @@ export function LibraryPage({
             >
               {showGroupHeaders ? (
                 <PageSectionTitle>
-                  {groupLabel(group.id)} · {group.books.length}
+                  {groupLabel(group.id)} · {group.items.length}
                 </PageSectionTitle>
               ) : null}
               <LibraryGrid
-                books={group.books}
+                items={group.items.map(({ item }) => item)}
                 openableIds={openableIds}
                 flashId={flashId}
                 onOpenBook={onOpenBook}
@@ -218,6 +246,9 @@ export function LibraryPage({
                 onRename={setRenamingId}
                 onChangeCover={pickCoverFor}
                 onDelete={setDeletingId}
+                onOpenSeries={onOpenSeries}
+                onRenameSeries={setRenamingSeries}
+                onDeleteSeries={setDeletingSeries}
               />
             </section>
           ))
@@ -231,6 +262,17 @@ export function LibraryPage({
           }
           onSave={saveRename}
           onClose={() => setRenamingId(null)}
+        />
+      ) : null}
+      {renamingSeries ? (
+        <RenameDialog
+          open
+          initialTitle={renamingSeries}
+          onSave={(next) => {
+            onRenameSeries(renamingSeries, next);
+            setRenamingSeries(null);
+          }}
+          onClose={() => setRenamingSeries(null)}
         />
       ) : null}
       {detailsBook ? (
@@ -271,10 +313,37 @@ export function LibraryPage({
           </AlertDialogContent>
         </AlertDialog>
       ) : null}
+      {deletingSeries ? (
+        <AlertDialog
+          open
+          onOpenChange={(next) => !next && setDeletingSeries(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("library.delete.title")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("manga.deleteSeries.body", { title: deletingSeries })}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("library.delete.cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  onDeleteSeries(deletingSeries);
+                  setDeletingSeries(null);
+                }}
+              >
+                {t("library.delete.confirm")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
       <input
         ref={fileRef}
         type="file"
-        accept=".epub,.pdf,application/epub+zip,application/pdf"
+        accept=".epub,.pdf,.zip,.cbz,.mokuro,image/*,application/epub+zip,application/pdf"
+        multiple
         hidden
         onChange={onFileChange}
       />

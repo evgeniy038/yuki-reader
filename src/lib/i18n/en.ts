@@ -34,7 +34,7 @@ export const en = {
     },
     empty: {
       title: "Nothing here yet",
-      body: "Add your first book — EPUB or PDF, with the button or by dragging it onto the window",
+      body: "Add your first book — EPUB, PDF or manga (an archive or a folder of scans) — with the button or by dragging it onto the window",
     },
     rename: {
       title: "Book title",
@@ -167,10 +167,30 @@ export const en = {
     searchHint: "Start typing — matches will appear as a list",
     searchEmpty: "Nothing found",
     pdfError: "Couldn't open the pdf",
+    mangaError: "Couldn't open the manga",
     smaller: "smaller",
     larger: "larger",
   },
   drop: "Drop to open",
+  manga: {
+    volumeCount_one: "{{count, number}} volume",
+    volumeCount_few: "{{count, number}} volumes",
+    volumeCount_many: "{{count, number}} volumes",
+    volumeCount_other: "{{count, number}} volumes",
+    volume: "Vol {{index}}",
+    renameSeries: "Rename series",
+    addVolume: "Add volume",
+    moveToSeries: "Move to series…",
+    move: {
+      title: "Move volume to series",
+      newSeries: "New series…",
+      newSeriesPlaceholder: "Series name",
+      confirm: "Move",
+    },
+    deleteSeries: {
+      body: "“{{title}}” and all its volumes will be removed from the library along with their progress.",
+    },
+  },
   toast: {
     updateReady: "A new version is ready",
     update: "Update",

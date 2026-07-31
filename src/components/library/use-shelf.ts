@@ -3,13 +3,21 @@ import { useNavigate } from "react-router";
 import i18n from "@/lib/i18n";
 import { bookContentHash } from "@/core/book-hash";
 import { importBookFile } from "@/core/import-book";
-import { detectLanguage, type Book } from "@/core/library";
+import {
+  importMangaItems,
+  isMangaItem,
+  type ImportedMangaVolume,
+  type MangaInputItem,
+} from "@/core/import-manga";
+import { detectLanguage, seriesShelfId, type Book } from "@/core/library";
+import { normalizeSeriesKey } from "@/core/mokuro";
 import { deriveToc } from "@/core/reading";
 import type { Chapter, EpubResource, TocEntry } from "@/core/reading";
 import {
   deleteBook,
   loadAllBooks,
   putBook,
+  putMangaVolume,
   updateBookMeta,
   type BookRecord,
 } from "@/core/storage";
@@ -86,7 +94,7 @@ export function useShelf(demoMode: boolean) {
             // Records from before TOC parsing derive labels from chapters.
             toc:
               record.toc ??
-              (record.format === "pdf"
+              (record.format === "pdf" || record.format === "manga"
                 ? undefined
                 : deriveToc(record.chapters)),
             resources: record.resources ?? [],
@@ -104,6 +112,8 @@ export function useShelf(demoMode: boolean) {
             cover: record.cover,
             contentHash: record.contentHash,
             pageCount: record.pageCount,
+            series: record.series,
+            volumeIndex: record.volumeIndex,
             addedAt: record.addedAt,
             lastReadAt: record.lastReadAt,
           });
@@ -212,6 +222,181 @@ export function useShelf(demoMode: boolean) {
     }
   };
 
+  // Manga import: archives and image/sidecar drops become volumes. Each
+  // volume is a shelved book (format "manga") whose heavy payload — page
+  // scans — goes to the manga stores, not the book record. Series merge by
+  // normalized name; a volume number that is already taken (or missing)
+  // lands at the end of the series.
+  const importManga = async (
+    items: MangaInputItem[],
+    targetSeries?: string,
+  ) => {
+    try {
+      // Page scans are large — ask the browser not to evict our storage.
+      void navigator.storage?.persist?.();
+      const volumes = await importMangaItems(items);
+      const batchHashes = new Set<string>();
+      for (const volume of volumes) {
+        const duplicate =
+          batchHashes.has(volume.contentHash) ||
+          books.find((book) => book.contentHash === volume.contentHash);
+        if (duplicate) {
+          const existing =
+            typeof duplicate === "object" ? duplicate : undefined;
+          if (existing) {
+            setNotice(i18n.t("library.duplicate", { title: existing.title }));
+            setFlashId(
+              existing.series
+                ? seriesShelfId(existing.series)
+                : existing.id,
+            );
+          }
+          continue;
+        }
+        batchHashes.add(volume.contentHash);
+        addMangaVolume(volume, targetSeries);
+      }
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : i18n.t("library.openError"));
+    }
+  };
+
+  // Sync shelf state + storage writes for one imported volume. Kept out of
+  // setBooks updaters (they must stay pure) — the state read is fresh enough
+  // for an event-handler context.
+  const addMangaVolume = (
+    volume: ImportedMangaVolume,
+    targetSeries?: string,
+  ) => {
+    const series = targetSeries ?? volume.series;
+    const siblings = books.filter(
+      (book) =>
+        book.format === "manga" &&
+        book.series !== undefined &&
+        normalizeSeriesKey(book.series) === normalizeSeriesKey(series),
+    );
+    const used = new Set(siblings.map((book) => book.volumeIndex));
+    let volumeIndex = volume.volumeIndex;
+    if (volumeIndex === undefined || used.has(volumeIndex)) {
+      volumeIndex = Math.max(0, ...siblings.map((b) => b.volumeIndex ?? 0)) + 1;
+    }
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const title = volume.volumeName.replace(/_/g, " ");
+    const record: BookRecord = {
+      id,
+      title,
+      language: "ja",
+      format: "manga",
+      progress: 0,
+      chapters: [],
+      cover: volume.cover,
+      pageCount: volume.pages.length,
+      contentHash: volume.contentHash,
+      series,
+      volumeIndex,
+      addedAt: now,
+      lastReadAt: now,
+    };
+    dataRef.current.set(id, {
+      metadata: { title, language: "ja" },
+      chapters: [],
+      resources: [],
+      bookCss: "",
+      pageCount: volume.pages.length,
+    });
+    const book: Book = {
+      id,
+      title,
+      language: "ja",
+      format: "manga",
+      progress: 0,
+      cover: volume.cover,
+      contentHash: volume.contentHash,
+      pageCount: volume.pages.length,
+      series,
+      volumeIndex,
+      addedAt: now,
+      lastReadAt: now,
+    };
+    setBooks((prev) => [book, ...prev]);
+    void putBook(record);
+    void putMangaVolume({ id, pages: volume.pages }, volume.blobs);
+  };
+
+  /** Mixed drop/selection entry point: book files one way, manga the other. */
+  const importFiles = (items: MangaInputItem[]) => {
+    const bookFiles = items.filter(
+      (item) => !isMangaItem(item) || /\.(epub|pdf)$/i.test(item.file.name),
+    );
+    const mangaItems = items.filter(
+      (item) => isMangaItem(item) && !/\.(epub|pdf)$/i.test(item.file.name),
+    );
+    for (const item of bookFiles) void importFile(item.file);
+    if (mangaItems.length > 0) void importManga(mangaItems);
+  };
+
+  // Rename every volume's series label.
+  const renameSeries = (oldSeries: string, next: string) => {
+    const ids = books
+      .filter((book) => book.series === oldSeries)
+      .map((book) => book.id);
+    setBooks((prev) =>
+      prev.map((book) =>
+        book.series === oldSeries ? { ...book, series: next } : book,
+      ),
+    );
+    for (const id of ids) void updateBookMeta(id, { series: next });
+  };
+
+  // Move one volume to another series (existing or new): it lands at the
+  // end unless its own number is still free there.
+  const moveVolumeToSeries = (id: string, series: string) => {
+    const volume = books.find((book) => book.id === id);
+    if (!volume || volume.series === series) return;
+    const taken = new Set(
+      books
+        .filter((book) => book.series === series)
+        .map((book) => book.volumeIndex),
+    );
+    const volumeIndex =
+      volume.volumeIndex !== undefined && !taken.has(volume.volumeIndex)
+        ? volume.volumeIndex
+        : Math.max(0, ...[...taken].filter((n): n is number => n !== undefined)) + 1;
+    setBooks((prev) =>
+      prev.map((book) =>
+        book.id === id ? { ...book, series, volumeIndex } : book,
+      ),
+    );
+    void updateBookMeta(id, { series, volumeIndex });
+  };
+
+  // Persist a manual reorder: positions become 1..n in the given id order.
+  const setVolumeOrder = (orderedIds: string[]) => {
+    setBooks((prev) =>
+      prev.map((book) => {
+        const index = orderedIds.indexOf(book.id);
+        return index === -1 ? book : { ...book, volumeIndex: index + 1 };
+      }),
+    );
+    orderedIds.forEach((id, index) => {
+      void updateBookMeta(id, { volumeIndex: index + 1 });
+    });
+  };
+
+  // Delete a whole series: every volume, pages included (deleteBook cascades).
+  const removeSeries = (series: string) => {
+    const ids = books
+      .filter((book) => book.series === series)
+      .map((book) => book.id);
+    setBooks((prev) => prev.filter((book) => book.series !== series));
+    for (const id of ids) {
+      dataRef.current.delete(id);
+      void deleteBook(id);
+    }
+  };
+
   // Opening a book bumps it to the top of the recency sort.
   const openBook = (id: string) => {
     if (!dataRef.current.has(id)) return;
@@ -255,9 +440,15 @@ export function useShelf(demoMode: boolean) {
     flashId,
     dataRef,
     importFile,
+    importFiles,
+    importManga,
     openBook,
     removeBook,
+    removeSeries,
     renameBook,
+    renameSeries,
+    moveVolumeToSeries,
+    setVolumeOrder,
     changeCover,
   };
 }

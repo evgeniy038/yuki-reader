@@ -1,5 +1,7 @@
+import { normalizeSeriesKey } from "./mokuro";
+
 export type Language = "ja" | "en";
-export type BookFormat = "epub" | "pdf";
+export type BookFormat = "epub" | "pdf" | "manga";
 
 export interface Book {
   id: string;
@@ -13,8 +15,11 @@ export interface Book {
   cover?: string;
   /** Content fingerprint for duplicate-import rejection. */
   contentHash?: string;
-  /** Total pages (PDF only; EPUB length lives in chapters). */
+  /** Total pages (PDF and manga; EPUB length lives in chapters). */
   pageCount?: number;
+  /** Manga only: series display name + 1-based position inside it. */
+  series?: string;
+  volumeIndex?: number;
   addedAt: number;
   /** Last time the book was opened or read. Absent = never opened. */
   lastReadAt?: number;
@@ -68,23 +73,101 @@ export function sortBooks(books: Book[], sort: ShelfSort): Book[] {
   return sorted;
 }
 
-interface ShelfGroup {
+interface ShelfGroup<T> {
   /** Section id — the label comes from the locales (native names for ja/en,
       library.other for the rest). */
   id: "ja" | "en" | "other";
-  books: Book[];
+  items: T[];
 }
 
 // Shelf sections by language, in reading order: Japanese first, English
 // second, language-less books last. Empty sections are omitted; the caller
 // renders headers only when more than one group exists.
-export function groupByLanguage(books: Book[]): ShelfGroup[] {
-  const groups: ShelfGroup[] = [
-    { id: "ja", books: books.filter((b) => b.language === "ja") },
-    { id: "en", books: books.filter((b) => b.language === "en") },
-    { id: "other", books: books.filter((b) => b.language === undefined) },
+export function groupByLanguage<T extends { language?: Language }>(
+  items: T[],
+): ShelfGroup<T>[] {
+  const groups: ShelfGroup<T>[] = [
+    { id: "ja", items: items.filter((b) => b.language === "ja") },
+    { id: "en", items: items.filter((b) => b.language === "en") },
+    { id: "other", items: items.filter((b) => b.language === undefined) },
   ];
-  return groups.filter((group) => group.books.length > 0);
+  return groups.filter((group) => group.items.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Shelf items: manga volumes collapse into one SERIES tile (the reference
+// readers group by a uuid written at OCR time — real files all carry the same
+// default, so volumes scatter; we group by the derived series name instead).
+// Everything else stays a plain book tile.
+
+export type ShelfItem =
+  | { kind: "book"; book: Book }
+  | {
+      kind: "series";
+      /** Stable tile id ("series:<normalized name>") — flash target too. */
+      id: string;
+      /** Display name, shared by every volume. */
+      series: string;
+      cover?: string;
+      language?: Language;
+      /** Mean of the volumes' progress. */
+      progress: number;
+      volumeCount: number;
+      addedAt: number;
+      lastReadAt?: number;
+    };
+
+/** Pseudo-id of a series tile on the shelf — where duplicate flashes point. */
+export function seriesShelfId(series: string): string {
+  return `series:${normalizeSeriesKey(series)}`;
+}
+
+export function buildShelfItems(sortedBooks: Book[]): ShelfItem[] {
+  const items: ShelfItem[] = [];
+  const seriesIndex = new Map<string, number>();
+  // The series cover follows the earliest volume (by number) that has one.
+  const coverIndex = new Map<string, number>();
+  for (const book of sortedBooks) {
+    if (book.format !== "manga" || !book.series) {
+      items.push({ kind: "book", book });
+      continue;
+    }
+    const key = normalizeSeriesKey(book.series);
+    const at = seriesIndex.get(key);
+    if (at === undefined) {
+      seriesIndex.set(key, items.length);
+      if (book.cover && book.volumeIndex !== undefined) {
+        coverIndex.set(key, book.volumeIndex);
+      }
+      items.push({
+        kind: "series",
+        id: seriesShelfId(book.series),
+        series: book.series,
+        cover: book.cover,
+        language: book.language,
+        progress: book.progress,
+        volumeCount: 1,
+        addedAt: book.addedAt,
+        lastReadAt: book.lastReadAt,
+      });
+      continue;
+    }
+    const item = items[at];
+    if (item === undefined || item.kind !== "series") continue;
+    item.progress =
+      (item.progress * item.volumeCount + book.progress) / (item.volumeCount + 1);
+    item.volumeCount += 1;
+    const best = coverIndex.get(key);
+    if (book.cover && book.volumeIndex !== undefined && (best === undefined || book.volumeIndex < best)) {
+      coverIndex.set(key, book.volumeIndex);
+      item.cover = book.cover;
+    } else if (item.cover === undefined && book.cover) {
+      item.cover = book.cover;
+    }
+    item.addedAt = Math.max(item.addedAt, book.addedAt);
+    item.lastReadAt = Math.max(item.lastReadAt ?? 0, book.lastReadAt ?? 0) || undefined;
+  }
+  return items;
 }
 
 // ---------------------------------------------------------------------------

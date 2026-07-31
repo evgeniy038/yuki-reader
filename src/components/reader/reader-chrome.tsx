@@ -16,6 +16,7 @@ export function ReaderChrome({
   settings,
   onSettingsChange,
   showFontSettings = true,
+  showSearch = true,
   tocAvailable = false,
   panel = null,
   onPanelChange,
@@ -24,6 +25,8 @@ export function ReaderChrome({
   settings: ReadingSettings;
   onSettingsChange: (settings: ReadingSettings) => void;
   showFontSettings?: boolean;
+  /** Search button shows only where there's text to search. */
+  showSearch?: boolean;
   /** TOC button shows only when the book actually has an outline. */
   tocAvailable?: boolean;
   panel?: ReaderPanelMode;
@@ -111,17 +114,19 @@ export function ReaderChrome({
             <List />
           </Button>
         ) : null}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          shape="round"
-          onClick={() => onPanelChange?.(panel === "search" ? null : "search")}
-          title={t("reader.search")}
-          aria-label={t("reader.search")}
-          aria-pressed={panel === "search"}
-        >
-          <MagnifyingGlass />
-        </Button>
+        {showSearch ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            shape="round"
+            onClick={() => onPanelChange?.(panel === "search" ? null : "search")}
+            title={t("reader.search")}
+            aria-label={t("reader.search")}
+            aria-pressed={panel === "search"}
+          >
+            <MagnifyingGlass />
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon-sm"

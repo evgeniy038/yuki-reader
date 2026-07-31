@@ -121,12 +121,12 @@ shows instead of the empty state.
 ## Shelf
 
 **Shelf** — the display of all imported **books** inside sections. One book =
-one tile (cover + title + author + reading state). Book actions live in the
-tile's context menu (right-click): "Open", "Details", "Rename", "Change
-cover", "Delete".
+one tile (cover + title + author + reading state); a manga series collapses
+into one tile too (see "Manga"). Book actions live in the tile's context
+menu (right-click): "Open", "Details", "Rename", "Change cover", "Delete".
 
 **Book** — an imported file plus metadata: title, author, cover, **format**
-(epub | pdf), **language**, date added, last-read date, progress.
+(epub | pdf | manga), **language**, date added, last-read date, progress.
 Re-importing the same file is rejected — no duplicates on the shelf.
 
 ## Reading state
@@ -177,6 +177,36 @@ right); on narrow screens and phones — one page. So PDF has its own length
 measures: **pages** instead of "chapters" and "characters". PDF progress is
 a page number, not characters. Text on a PDF page stays selectable, but a
 page without a text layer (a scan) has nothing to select — that's normal.
+
+## Manga
+
+Manga is the third format: a **series** of **volumes**, each volume a shelved
+book (`format: "manga"`, language ja, measured in pages). Import accepts
+whatever scans come in — a zip/cbz archive, a folder of images, an optional
+`.mokuro` OCR sidecar next to them (in or beside the archive): only image
+entries are read, anything else (shortcuts, readme junk, `__MACOSX`) is
+skipped. Volumes group into a series by the name derived from the file or
+folder (`[Author] Title 第01巻`, `Name_v05`, `Name_3` — author brackets,
+volume markers, fullwidth digits, drive-export suffixes all fold); that is
+deliberately NOT the sidecar's uuid — real files all carry the OCR tool's
+default title, so uuid grouping scatters volumes across one-episode
+"series". The shelf shows one tile per series (the earliest volume's cover,
+volume count, mean progress); the tile opens the **series page**
+(`#/manga/<key>`) — the volume grid with per-volume covers, numbers, context
+actions (open, rename, move to another series, delete) and drag reorder.
+"Add volume" there imports straight into that series, whatever the files
+say.
+
+The manga reader mirrors the PDF one, but right-to-left: cover alone, then
+spreads with the EARLIER page on the right; left means forward (click zones,
+arrow keys, wheel). Pages come from the pages store as object URLs in a
+small window around the current page (a volume never sits in memory whole).
+With a sidecar, its text boxes overlay the scan in source-image pixels,
+scaled with the page: hidden until hovered, click pins a box open (and makes
+the lines selectable) without turning the page; smaller boxes stack above
+larger ones. Exiting the reader returns to the series page. In storage a
+volume's page scans live in their own store keyed `bookId/index` — a
+progress save never rewrites megabytes of images.
 
 ## Reading position
 

@@ -1,6 +1,7 @@
 import { openDB, type DBSchema } from "idb";
 import type { BookFormat, Language } from "./library";
 import type { Chapter, EpubResource, TocEntry } from "./reading";
+import type { MangaStoredPage } from "./import-manga";
 import {
   applyBookDelta,
   applyDelta,
@@ -31,14 +32,28 @@ export interface BookRecord {
   pageCount?: number;
   /** Content fingerprint for duplicate-import rejection. */
   contentHash?: string;
+  /** Manga only: the series this volume belongs to (display name). */
+  series?: string;
+  /** Manga only: 1-based position inside the series. */
+  volumeIndex?: number;
   addedAt: number;
   /** Last time the book was opened or read. Absent = never opened. */
   lastReadAt?: number;
 }
 
+/** Manga volume sidecar record: page metadata in reading order. The page
+    images themselves live in the pages store (`${id}/${index}` → Blob), so
+    progress saves never rewrite megabytes of scans. */
+export interface MangaRecord {
+  id: string;
+  pages: MangaStoredPage[];
+}
+
 interface YukiDB extends DBSchema {
   books: { key: string; value: BookRecord };
   stats: { key: string; value: DailyStats };
+  manga: { key: string; value: MangaRecord };
+  mangaPages: { key: string; value: Blob };
 }
 
 const DB_NAME = "yuki";
@@ -46,11 +61,13 @@ const BOOKS = "books";
 /** Pre-v4 store, gone from the schema: referenced untyped, only to drop it. */
 const LEGACY_DICTS = "dicts";
 const STATS = "stats";
+const MANGA = "manga";
+const MANGA_PAGES = "mangaPages";
 
 let dbPromise: ReturnType<typeof openDB<YukiDB>> | null = null;
 function open() {
   if (!dbPromise) {
-    dbPromise = openDB<YukiDB>(DB_NAME, 4, {
+    dbPromise = openDB<YukiDB>(DB_NAME, 5, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1 && !db.objectStoreNames.contains(BOOKS)) {
           db.createObjectStore(BOOKS, { keyPath: "id" });
@@ -65,6 +82,16 @@ function open() {
           (db.objectStoreNames as DOMStringList).contains(LEGACY_DICTS)
         ) {
           (db as unknown as IDBDatabase).deleteObjectStore(LEGACY_DICTS);
+        }
+        // v5: manga volumes — page metadata per book id, page blobs under
+        // composite `${bookId}/${index}` keys.
+        if (oldVersion < 5) {
+          if (!db.objectStoreNames.contains(MANGA)) {
+            db.createObjectStore(MANGA, { keyPath: "id" });
+          }
+          if (!db.objectStoreNames.contains(MANGA_PAGES)) {
+            db.createObjectStore(MANGA_PAGES);
+          }
         }
       },
     });
@@ -96,12 +123,23 @@ export async function saveProgress(id: string, progress: number): Promise<void> 
 export async function deleteBook(id: string): Promise<void> {
   const db = await open();
   await db.delete(BOOKS, id);
+  await deleteManga(id);
 }
 
 export async function updateBookMeta(
   id: string,
   patch: Partial<
-    Pick<BookRecord, "title" | "author" | "cover" | "contentHash" | "lastReadAt" | "format">
+    Pick<
+      BookRecord,
+      | "title"
+      | "author"
+      | "cover"
+      | "contentHash"
+      | "lastReadAt"
+      | "format"
+      | "series"
+      | "volumeIndex"
+    >
   >,
 ): Promise<void> {
   const db = await open();
@@ -110,6 +148,50 @@ export async function updateBookMeta(
     Object.assign(record, patch);
     await db.put(BOOKS, record);
   }
+}
+
+// --- Manga volumes ---------------------------------------------------------
+
+/** Persist a volume: metadata record plus every page blob, atomically. */
+export async function putMangaVolume(
+  record: MangaRecord,
+  blobs: Blob[],
+): Promise<void> {
+  const db = await open();
+  const tx = db.transaction([MANGA, MANGA_PAGES], "readwrite");
+  await tx.objectStore(MANGA).put(record);
+  const pages = tx.objectStore(MANGA_PAGES);
+  for (let i = 0; i < blobs.length; i++) {
+    await pages.put(blobs[i]!, `${record.id}/${i}`);
+  }
+  await tx.done;
+}
+
+export async function loadManga(id: string): Promise<MangaRecord | undefined> {
+  const db = await open();
+  return db.get(MANGA, id);
+}
+
+export async function loadMangaPageBlob(
+  id: string,
+  index: number,
+): Promise<Blob | undefined> {
+  const db = await open();
+  return db.get(MANGA_PAGES, `${id}/${index}`);
+}
+
+/** Drop a volume's metadata and every page blob (id is a book id). */
+export async function deleteManga(id: string): Promise<void> {
+  const db = await open();
+  const tx = db.transaction([MANGA, MANGA_PAGES], "readwrite");
+  await tx.objectStore(MANGA).delete(id);
+  const range = IDBKeyRange.bound(`${id}/`, `${id}/￿`);
+  let cursor = await tx.objectStore(MANGA_PAGES).openCursor(range);
+  while (cursor) {
+    await cursor.delete();
+    cursor = await cursor.continue();
+  }
+  await tx.done;
 }
 
 // --- Reading statistics ----------------------------------------------------

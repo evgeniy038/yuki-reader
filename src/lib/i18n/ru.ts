@@ -32,7 +32,7 @@ export const ru: Messages = {
     },
     empty: {
       title: "Пока пусто",
-      body: "Добавьте первую книгу — EPUB или PDF, через кнопку или перетаскиванием на окно",
+      body: "Добавьте первую книгу — EPUB, PDF или мангу (архив или папку со сканами) — через кнопку или перетаскиванием на окно",
     },
     rename: {
       title: "Название книги",
@@ -165,10 +165,30 @@ export const ru: Messages = {
     searchHint: "Начните вводить — совпадения появятся списком",
     searchEmpty: "Ничего не найдено",
     pdfError: "не удалось открыть pdf",
+    mangaError: "Не удалось открыть мангу",
     smaller: "меньше",
     larger: "больше",
   },
   drop: "Отпустите, чтобы открыть",
+  manga: {
+    volumeCount_one: "{{count, number}} том",
+    volumeCount_few: "{{count, number}} тома",
+    volumeCount_many: "{{count, number}} томов",
+    volumeCount_other: "{{count, number}} томов",
+    volume: "Том {{index}}",
+    renameSeries: "Переименовать серию",
+    addVolume: "Добавить том",
+    moveToSeries: "Перенести в серию…",
+    move: {
+      title: "Перенести том в серию",
+      newSeries: "Новая серия…",
+      newSeriesPlaceholder: "Название серии",
+      confirm: "Перенести",
+    },
+    deleteSeries: {
+      body: "«{{title}}» и все её тома будут удалены из библиотеки вместе с прогрессом.",
+    },
+  },
   toast: {
     updateReady: "Новая версия готова",
     update: "Обновить",

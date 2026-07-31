@@ -15,6 +15,7 @@
 | `YUKI_TEST_EPUB_FILTER2` | подстрока имени второй книги | library |
 | `YUKI_TEST_PDF_TEXT` | книжный PDF с текстовым слоем | pdf-smoke, reader-panel, perf-probe, pdf-probe |
 | `YUKI_TEST_PDF_SCAN` | PDF со сканированными страницами | pdf-smoke, perf-probe, pdf-probe |
+| `YUKI_TEST_MANGA_DIR` | папка с мангой (тома-папки с `.mokuro`, zip-архив в `kaguya/`) | manga-smoke |
 
 Ожидания `pdf-smoke` (число страниц, язык) завязаны на конкретные фикстуры —
 при смене файла поправить проверки в коде. `layout-smoke` и `position-smoke`
