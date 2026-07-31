@@ -4,15 +4,15 @@ import { useEffect, useRef } from "react"
 
 import { cn } from "@/lib/utils"
 
-// Button — один вид и одно ощущение для всех действий в приложении. Цвета
-// меняются за 125ms, нажатие — scale 0.97 на пружине (0.94 при force press
-// на трекпаде), solid чуть светлеет в нажатии. will-change-scale постоянный,
-// не по :active — слой должен существовать до нажатия, иначе первый кадр
-// пере-растеризуется и иконка дёргается. Primary — синий градиент с тенями
-// и обводкой-кольцом CTA; hover — brightness 105%, но не во время
-// нажатия, чтобы press-фильтр не дрался с яркостью. Loading не превращает
-// кнопку в серую: цвета варианта сохраняются, меняется только курсор;
-// серое состояние одно — disabled.
+// Button — one look and one feel for every action in the app. Colors change
+// in 125ms, press is scale 0.97 on a spring (0.94 on a trackpad force
+// press), solid lightens slightly when pressed. will-change-scale is
+// constant, not on :active — the layer must exist before the press,
+// otherwise the first frame re-rasterizes and the icon jerks. Primary — the
+// blue gradient with its shadow set and outline ring; hover is brightness
+// 105%, but not during a press, so the press filter doesn't fight the
+// brightness. Loading doesn't gray the button: variant colors stay, only
+// the cursor changes; the only gray state is disabled.
 const buttonVariants = cva(
   "group/button relative inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap btn-transition outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-97 will-change-scale data-[force-press=true]:scale-94 disabled:cursor-not-allowed data-[disabled]:border-transparent data-[disabled]:bg-none data-[disabled]:bg-hover-surface data-[disabled]:text-muted-content data-[disabled]:shadow-none data-[disabled]:text-shadow-none data-[loading]:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -53,8 +53,8 @@ const buttonVariants = cva(
   }
 )
 
-// Спиннер: дуга пересчитывает длину и темп каждый цикл — читается как
-// живой процесс, а не метроном.
+// Spinner: the arc recomputes its length and pace every cycle — it reads as
+// a living process, not a metronome.
 function ButtonSpinner({ className }: { className?: string }) {
   return (
     <span className={cn("inline-block size-3.5", className)} role="status">
@@ -100,8 +100,8 @@ function Button({
   ...props
 }: ButtonPrimitive.Props &
   VariantProps<typeof buttonVariants> & { loading?: boolean }) {
-  // Force press (Safari / трекпад с Force Touch): сильное нажатие дожимает
-  // scale до 0.94.
+  // Force press (Safari / Force Touch trackpad): a harder press drives the
+  // scale down to 0.94.
   const forceRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     const el = forceRef.current

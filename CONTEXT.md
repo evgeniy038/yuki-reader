@@ -1,239 +1,220 @@
-# ゆき — контекст домена
+# yuki — domain context
 
-Читалка японских новелл и английских книг — сайт.
-Этот файл — единый язык проекта: как мы называем вещи в коде, UI и разговоре.
-Детали реализации сюда не пишем — только смыслы.
+A reader for Japanese novels and English books — a website.
+This file is the project's shared language: how we name things in code, UI,
+and conversation. Implementation details don't belong here — meanings only.
 
-## Каркас (shell)
+## Shell
 
-Каждый экран — настоящий URL (react-router, HashRouter: сайт статический,
-на хостинге существует только index.html, а хэш-маршруты делают каждую
-страницу настоящим перезагружаемым URL без серверных правил): Библиотека `/#/`,
-Статистика `/#/stats`,
-Настройки `/#/settings`, открытая книга `/#/read/:id`. F5 возвращает ровно
-туда же — текущий раздел и открытая книга выводятся из location, а не
-хранятся в состоянии; неизвестный путь редиректит домой.
-Каркас однослойный: страница на серой подложке во весь экран, навигация —
-плавающая **пилюля** внизу по центру (`nav-pill.tsx`): три раздела
-(иконка над подписью, широкие кнопки) без зазоров, активный отмечен
-плашкой-индикатором, которая скользит между кнопками (morph за 150ms);
-скругления по лесенке — пилюля `rounded-xl`, индикатор и кнопки на шаг
-меньше. Ступени поверхности разводят состояния: наведение — на ступень ниже
-активной плашки (`muted-surface` против `hover-surface`), сливаться они не
-должны. Отдельного «Домой» нет — точка входа и продолжения чтения
-одна: **Библиотека** (её умолчательная сортировка «Последнее чтение» и так
-поднимает текущую книгу наверх). Ридер каркас не использует — он
-полноэкранный.
+Every screen is a real URL (react-router, HashRouter: the site is static —
+the host serves only index.html, and hash routes make each page a real,
+reloadable URL with no server rules): Library `/#/`, Statistics `/#/stats`,
+Settings `/#/settings`, an open book `/#/read/:id`. F5 lands exactly back —
+the current section and the open book derive from the location, not from
+state; an unknown path redirects home.
+The shell is one layer: a page on a gray backdrop, navigation a floating
+**pill** at the bottom center (`nav-pill.tsx`): three sections (icon over
+caption, wide buttons) with no gaps; the active one is marked by an
+indicator slab that slides between buttons (a 150ms morph); radii follow the
+ladder — the pill is `rounded-xl`, indicator and buttons one step down.
+Surface steps separate states: hover sits one step BELOW the active slab
+(`muted-surface` vs `hover-surface`) — the two must never merge. There is no
+separate "Home" — the single entry/resume point is the **Library** (its
+default "Last read" sort lifts the current book anyway). The reader doesn't
+use the shell — it's fullscreen.
 
-## Разделы
+## Sections
 
-Каждая страница собирается из `page-shell.tsx` — композиция на children в
-духе shadcn: `PageShell` (общий ритм: max-ширина, отступы), `PageHeader` —
-всегда строка высотой 32 (`min-h-8`), с actions или без, поэтому контент всех
-страниц начинается на одном и том же отступе от края карточки; `PageTitle`
-(font-medium) слева, `PageActions` справа — только действия, осмысленные именно
-в этом разделе (сортировка и «Добавить книгу» у Библиотеки); фильтры
-идут перед кнопкой. У секций внутри страницы действие живёт в заголовке
-секции. Подзаголовки секций — единый
-`PageSectionTitle`. Пустой раздел показывает **пустое состояние** — единый
-паттерн на всех страницах: по центру страницы иконка, заголовок, одна строка
-описания и акцентная кнопка действия.
+Every page is composed from `page-shell.tsx` — children composition in the
+shadcn spirit: `PageShell` (shared rhythm: max width, padding), `PageHeader`
+— always a 32px row (`min-h-8`), with or without actions, so the content of
+every page starts at the same offset from the card edge; `PageTitle`
+(font-medium) on the left, `PageActions` on the right — only actions that
+make sense in this section (sort and "Add book" for the Library); filters go
+before the button. A section inside a page keeps its action in the section
+header. Section subtitles share one `PageSectionTitle`. An empty section
+shows an **empty state** — one pattern across pages: centered icon, title,
+one line of description, and an accent action button.
 
-- **Библиотека** — раздел по умолчанию, весь каталог: заголовок со счётчиком,
-  сортировка и кнопка «Добавить книгу» в шапке, языковые секции. Поиска и
-  фильтров пока нет по решению — минимализм важнее. Импорт не открывает
-  книгу: пачка заливается разом, открытие — тапом по плитке.
-- **Статистика** — раздел привычки чтения (ширина и ритм — как у Настроек):
-  сводка дня (знаки, время, серия, всего), **heatmap** активности за полгода
-  (ячейки тянутся на всю ширину карточки; интенсивность — по активным
-  минутам дня, это единственная мера, общая для знаков EPUB и страниц PDF) и
-  **цель на день** — кольцо прогресса (ProgressRing) и два отсчёта: плоские
-  знаки или **процент книги** — книгу цели юзер выбирает сам селектом с
-  обложками в строке «8 % от …» (по умолчанию — текущее чтиво; выбор
-  запоминается), процент масштабируется от её объёма (знаков EPUB, страниц
-  PDF). Данные — по одной записи на локальный
-  день: пока открыт ридер, сессия копит прочитанное и активное время
-  (heartbeat: приложение видимо, последняя активность свежая). Знаки/страницы
-  засчитываются постранично: страница считается прочитанной после 3 секунд на
-  ней (та же задержка, что двигает закладку), каждая — один раз за сессию,
-  так что перелистывание назад никогда не накручивает и не отнимает. Сессия
-  короче 10 секунд активного времени — «заглянул в книгу»: в журнал не
-  попадает ничего. Каждый сброс сессии атрибутируется и книге: у книги копятся
-  собственные знаки/страницы и время, видимые в её диалоге «Подробнее»
-  (прочитано, время чтения, скорость). **Скорость чтения** — знаки в час
-  (для PDF — страницы в час); считается только от минуты активного времени
-  и живёт в сводке дня («Скорость сегодня») и в карточке книги.
-- **Настройки** — страница из **групп-карточек** в стиле macOS System
-  Settings (`settings-group.tsx`): маленький заголовок над скруглённой
-  карточкой (инсет заголовка = концу скругления карточки), карточка без
-  рамки — её поднимает легчайшая тень; строки внутри
-  карточки разделены hairline с инсетом от обоих краёв, действие группы
-  живёт в строке заголовка.
-  Группы: **Основные** (язык интерфейса — селект English/Русский),
-  **Чтение** (сначала живой **предпросмотр** — настоящий текст на
-  настройках пользователя, переключатель 日本語/English, японский вертикально;
-  весь предпросмотр — и шапка с фуриганой и языком, и текст — вложенная
-  панель с рамкой внутри карточки (SettingsBlock), фиксированной высоты, без
-  масок; hairline после панели не рисуется — она сама граница;
-  затем строки «label + контрол» одной высоты: шрифт, кегль, межстрочник,
-  поля страницы) и
-  **О Yuki** — версия сборки и история изменений, свёрнутые в самый низ
-  страницы; единственный источник записей — `CHANGELOG.md` (по-английски),
-  из него группа и собирается: версия — однострочник с коротким описанием,
-  полный текст раскрывается по тапу, лид-ины буллетов («Library: …»)
-  рисуются мини-заголовками (только вес и цвет, размер не меняется).
+- **Library** — the default section, the whole catalog: title with a counter,
+  sort and "Add book" in the header, language sections. No search or filters
+  by decision — minimalism wins. Import doesn't open the book: a batch lands
+  at once, opening happens from the tile.
+- **Statistics** — the reading-habit section (same width and rhythm as
+  Settings): today's summary (characters, time, streak, totals), a half-year
+  activity **heatmap** (cells stretch to the card width; intensity by active
+  minutes per day — the only measure shared by EPUB characters and PDF
+  pages), and the **daily goal** — a progress ring (ProgressRing) and two
+  count modes: flat characters or **percent of a book** — the goal book is
+  chosen by the user in a select with covers in the "8% of …" row (defaults
+  to the current read; the choice is remembered), and the percent scales with
+  that book's length (EPUB characters, PDF pages). Data is one record per
+  local day: while the reader is open, the session accumulates reading and
+  active time (heartbeat: app visible, last activity fresh). Characters/pages
+  are credited per page: a page counts as read after 3 seconds on it (the
+  same dwell that moves the bookmark), each once per session, so paging back
+  never inflates or subtracts. A session under 10 seconds of active time is
+  "peeked into a book": nothing reaches the journal. Every session reset is
+  also attributed to the book: each book accumulates its own
+  characters/pages and time, shown in its "Details" dialog (read, reading
+  time, speed). **Reading speed** — characters per hour (pages per hour for
+  PDF); counted from one minute of active time and lives in the day summary
+  ("Speed today") and in the book card.
+- **Settings** — a page of **group cards** (`settings-group.tsx`): a small
+  title above the rounded card (title inset = the card's corner end), the
+  card has no border — the lightest shadow lifts it; rows inside the card
+  are separated by hairlines inset from both edges, the group action lives
+  in the header row.
+  Groups: **General** (interface language — English/Русский select),
+  **Reading** (first a live **preview** — real text on the user's settings,
+  日本語/English switch, Japanese renders vertically; the whole preview —
+  the furigana/language header and the text — is a bordered inset pane
+  inside the card (SettingsBlock), fixed height, no masks; no hairline after
+  the pane — the pane itself is the boundary; then "label + control" rows of
+  one height: font, size, line height, page margins) and
+  **About yuki** — build version and changelog, collapsed at the very bottom
+  of the page; the only source of entries is `CHANGELOG.md` (in English) —
+  the group is built from it: a version is a one-liner with a short
+  description, the full text expands on tap, bullet lead-ins ("Library: …")
+  render as mini-headings (weight and color only, size unchanged).
 
-## Дизайн-язык
+## Design language
 
-Акцент — **primary-синий** (градиент
-oklch(69.1% 0.162 250.3) → oklch(60.5% 0.204 254.5): хрома растёт с
-глубиной, hue слегка дрейфует к фиолету; тени — по рецепту CTA
-целиком: внутренний белый блик, микротени, полупиксельная тень
-текста и обводка-кольцо oklch(64.6% 0.178 252.4) — по светлоте между
-стопами градиента):
-кнопки-действия и
-акцентные контролы (заливка
-слайдера, включённый свитч). Скругления — лесенка по токенам, не точечные
-классы: карточка 16 (`rounded-card`) → вложенная панель 12 (`rounded-pane`)
-→ контролы 8/6; вложенная поверхность всегда на шаг меньше родителя.
-Выбор между взаимоисключающими опциями (шрифт чтения и т.п.) — **переключалка**
-(segmented control): серый трек, выбранный сегмент поднимается белой
-карточкой, без акцентной заливки; карточка — один индикатор
-(`use-sliding-indicator`), скользит между сегментами transform-анимацией за
-150ms. Дискретное числовое значение меняется
-**степпером** (− значение +), непрерывное — **слайдером** (`ui/slider.tsx`:
-серый трек, заливка primary-градиентом, белый бегунок), бинарное — **свитчем**
-(`ui/switch.tsx`, тоггл в стиле macOS). Шрифт интерфейса — Inter (Variable,
-400 основной, 500 у
-заголовков; текст книг в ридере — отдельные книжные гарнитуры). Иконки —
-Phosphor (`@phosphor-icons/react`), вес `bold` задан глобально через
-`IconContext` в main.tsx, размер в интерфейсе — 16 (`icon-nav`).
-Всплывающие поверхности (меню, попапы, поповеры)
-появляются одинаково: короткий fade + лёгкий zoom от своего источника; при
-reduced-motion вся движущаяся анимация глушится глобально.
+Accent — **primary blue** (gradient
+oklch(69.1% 0.162 250.3) → oklch(60.5% 0.204 254.5): chroma grows with
+depth, hue drifts slightly toward violet; the shadow set: an inner white
+highlight, micro-shadows, a half-pixel text shadow, and an outline ring
+oklch(64.6% 0.178 252.4) sitting between the gradient stops by lightness):
+action buttons and accent controls (slider fill, engaged switch). Radii — a
+token ladder, not point classes: card 16 (`rounded-card`) → inset pane 12
+(`rounded-pane`) → controls 8/6; a nested surface is always one step smaller
+than its parent.
+Mutually exclusive options (reading font, etc.) use a **segmented control**:
+gray track, the chosen segment lifts as a white card, no accent fill; the
+card is ONE indicator (`use-sliding-indicator`) sliding between segments
+with a 150ms transform animation. A discrete numeric value uses a
+**stepper** (− value +), a continuous one a **slider** (`ui/slider.tsx`:
+gray track, primary-gradient fill, white thumb), a binary one a **switch**
+(`ui/switch.tsx`, macOS-style toggle). Interface font — Inter (Variable, 400
+for body, 500 for headings; book text in the reader uses separate book
+typefaces). Icons — Phosphor (`@phosphor-icons/react`), weight `bold` set
+globally via `IconContext` in main.tsx, interface size 16 (`icon-nav`).
+Floating surfaces (menus, popups, popovers) appear the same way: a short
+fade + a light zoom from their origin; under reduced-motion all moving
+animation is muted globally.
 
-**Кнопка одна** — `ui/button.tsx`, локальные стили кнопок запрещены, все
-действия идут через неё (варианты default/outline/secondary/ghost/destructive,
-размер sm — дефолт; `shape="round"` для иконочных в пилюлях). Default — тот
-самый primary: синий градиент с фирменными тенями CTA
-(внутренний белый блик + микротени + обводка-кольцо) и полупиксельной тенью
-текста.
-Ощущение кнопки:
-цвета меняются за 125ms, нажатие —
-scale 0.97 на пружине 389ms (`--ease-press`/`--duration-press`, force press до
-0.94), solid чуть светлеет в нажатии (`press-solid`). Loading не серит кнопку:
-сохраняются цвета варианта, спиннер раздвигает контент через margin-left;
-серое состояние одно — disabled. Пока полка грузится
-из хранилища, вместо empty state показывается лоадер `ui/dash-ring.tsx` (dash
-ring с морфящейся дугой).
+**One button** — `ui/button.tsx`; local button styles are banned, every
+action goes through it (variants default/outline/secondary/ghost/destructive,
+size sm is the default; `shape="round"` for icon buttons in pills). Default
+is the primary itself: the blue gradient with its signature shadow set
+(inner white highlight + micro-shadows + outline ring) and a half-pixel text
+shadow.
+Button feel: colors change in 125ms, press is scale 0.97 on a 389ms spring
+(`--ease-press`/`--duration-press`, force press down to 0.94), solid
+lightens slightly when pressed (`press-solid`). Loading doesn't gray the
+button: the variant colors stay, the spinner pushes content apart via
+margin-left; the only gray state is disabled. While the shelf loads from
+storage, the loader `ui/dash-ring.tsx` (a dash ring with a morphing arc)
+shows instead of the empty state.
 
-## Полка (shelf)
+## Shelf
 
-**Полка** — витрина всех импортированных **книг** внутри разделов. Одна книга =
-одна плитка (обложка + название + автор + состояние чтения). Действия над
-книгой — через контекстное меню плитки (ПКМ): «Открыть», «Подробнее»,
-«Переименовать», «Сменить обложку», «Удалить».
+**Shelf** — the display of all imported **books** inside sections. One book =
+one tile (cover + title + author + reading state). Book actions live in the
+tile's context menu (right-click): "Open", "Details", "Rename", "Change
+cover", "Delete".
 
-**Книга** — импортированный файл плюс метаданные: название, автор, обложка,
-**формат** (epub | pdf), **язык**, дата добавления, дата последнего чтения,
-прогресс. Повторный импорт того же файла отклоняется — дубликатам на полке не
-быть.
+**Book** — an imported file plus metadata: title, author, cover, **format**
+(epub | pdf), **language**, date added, last-read date, progress.
+Re-importing the same file is rejected — no duplicates on the shelf.
 
-## Состояние чтения (reading state)
+## Reading state
 
-Производное от прогресса, отдельным полем не хранится:
+Derived from progress, not stored as a field:
 
-- **новая** — прогресс 0 (плитка молчит, ничего не показываем);
-- **читаю** — 0 < прогресс < 100 % (плитка показывает целые проценты: «7 %»);
-- **прочитана** — прогресс ≥ 99,5 % (плитка: «Прочитано»).
+- **new** — progress 0 (the tile stays silent);
+- **reading** — 0 < progress < 100% (the tile shows whole percents: "7%");
+- **finished** — progress ≥ 99.5% (the tile: "Read").
 
-## Порядок на полке (shelf sort)
+## Shelf sort
 
-- **«Последнее чтение»** — умолчание: чем позже книгу открывали (или добавили,
-  если ни разу не открывали), тем выше она. Открытие книги поднимает её наверх.
-- **«Название»**, **«Автор»** — алфавитные.
-- **«Дата добавления»** — по дате импорта.
-- **«Прогресс»** — недочитанные выше.
+- **"Last read"** — the default: the later a book was opened (or added, if
+  never opened), the higher it sits. Opening a book lifts it to the top.
+- **"Title"**, **"Author"** — alphabetical.
+- **"Date added"** — by import date.
+- **"Progress"** — unfinished first.
 
-Выбор порядка запоминается между запусками.
+The chosen order is remembered between launches.
 
-## Язык книги (book language)
+## Book language
 
-**Язык** — японский или английский, определяется по содержимому при импорте
-(кана/кандзи → японский, латиница → английский). От языка зависят:
-writing-mode текстового ридера (вертикаль/горизонталь) и группировка полки.
-Когда на полке есть книги обоих языков, полка
-делится на секции: 日本語 — English.
+**Language** — Japanese or English, detected from content at import
+(kana/kanji → Japanese, latin → English). It drives: the text reader's
+writing mode (vertical/horizontal) and shelf grouping. When the shelf holds
+books of both languages, it splits into sections: 日本語 — English.
 
-## Язык интерфейса (ui language)
+## UI language
 
-Язык **интерфейса** — отдельная ось, к языку книг отношения не имеет:
-i18next (`src/lib/i18n/`), локали `en` (источник ключей, тип `Messages`) и
-`ru` (типизирована этим типом — пропуск/лишний ключ ловит tsc). Плюрали —
-i18next JSON v4 (`_one/_few/_many/_other`), числа внутри строк — через
-`{{count, number}}` (Intl активной локали). Дефолт — английский; детектор
-смотрит localStorage `yuki-lang`, затем язык браузера, fallback — `en`.
-Переключатель — первая группа настроек «Основные»; `<html lang>` синкается
-при смене. Все подписи интерфейса идут через `t()`, форматирование чисел,
-дат и длительностей — через `src/lib/format.ts` (Intl по активной локали).
+The **interface** language is a separate axis, unrelated to book language:
+i18next (`src/lib/i18n/`), locales `en` (source of keys, the `Messages` type)
+and `ru` (typed by it — a missed or extra key is caught by tsc). Plurals —
+i18next JSON v4 (`_one/_few/_many/_other`), numbers inside strings via
+`{{count, number}}` (active-locale Intl). Default — English; the detector
+checks localStorage `yuki-lang`, then the browser language, fallback `en`.
+The switch is the first settings group, "General"; `<html lang>` syncs on
+change. All UI labels go through `t()`; number, date and duration formatting
+through `src/lib/format.ts` (Intl per active locale).
 
-## Формат и страница (pdf)
+## Format and page (pdf)
 
-**Формат** книги — epub или pdf — определяет, как она читается. EPUB
-перекладывается в поток и режется на страницы ридером; PDF читается **как
-есть**: страница документа = страница ридера, макет автора (колонки, формулы,
-сканы) не трогаем. На широком экране PDF показывается **разворотом** — две
-страницы рядом, как у физической книги (обложка одна, дальше пары: чётная
-слева, нечётная справа); на узком экране и телефоне — по одной странице.
-Поэтому у PDF свои меры длины: вместо «глав» и «символов» — **страницы**.
-Прогресс PDF — номер страницы, а не символы. Текст на странице PDF остаётся
-выделяемым, но если у страницы нет текстового слоя
-(скан) — выделять нечего, и это норма.
+The book's **format** — epub or pdf — defines how it is read. EPUB reflows
+into a stream and is cut into pages by the reader; PDF is read **as is**:
+document page = reader page, the author's layout (columns, formulas, scans)
+is untouched. On a wide screen a PDF shows as a **spread** — two pages side
+by side, like a physical book (the cover alone, then pairs: even left, odd
+right); on narrow screens and phones — one page. So PDF has its own length
+measures: **pages** instead of "chapters" and "characters". PDF progress is
+a page number, not characters. Text on a PDF page stays selectable, but a
+page without a text layer (a scan) has nothing to select — that's normal.
 
-## Позиция чтения
+## Reading position
 
-Открытие книги продолжает с места, где остановились: позиция хранится как
-прогресс 0..1 и восстанавливается точно — для EPUB в символьный якорь, для
-PDF в номер страницы. Закладка двигается только **задержкой (dwell) 3
-секунды** на странице: быстрое перелистывание в любую сторону точку
-восстановления не сдвигает, выход из ридера позицию не досохраняет.
+Opening a book resumes where you stopped: the position is stored as 0..1
+progress and restored exactly — into a character anchor for EPUB, into a
+page number for PDF. The bookmark moves only by a 3-second **dwell** on a
+page: fast paging in either direction doesn't shift the restore point, and
+leaving the reader doesn't save the position.
 
-## Тема чтения (reading theme)
+## Reading theme
 
-**Тема** — фон страницы: Светлая, Сепия, Тёмная. Переключается в Настройках
-(строка «Фон») и прямо из ридера (поповер шестерёнки — он поэтому есть у
-обоих форматов). Действует на оба формата: в EPUB перекрашиваются фон и
-текст потока, в PDF страница — картинка печати, поэтому тонируется фильтром
-(тёмная — инверсия). Тема запоминается между запусками.
+**Theme** — the page background: Light, Sepia, Dark. Switched in Settings
+(the "Theme" row) and right from the reader (the gear popover — that's why
+both formats have it). Applies to both formats: in EPUB the stream's
+background and text repaint; a PDF page is a print image, so it's tinted by
+a filter (dark = inversion). The theme is remembered between launches.
 
-## Оглавление и поиск (reader panels)
+## Contents and search (reader panels)
 
-У ридера две выдвижные панели у левого края (кнопки в хроме ридера, Esc или
-клик мимо закрывает): **оглавление** и **поиск по книге**. Оглавление —
-главы книги с отметкой текущей: у EPUB из NCX/nav (пустые записи
-отбрасываются, без них — запасной вывод по началам глав), у PDF — из
-закладок документа (нет закладок — нет и кнопки). Позиция записи — номер
-страницы у PDF и доля книги в процентах у EPUB: страницы потока
-пересчитываются при каждом масштабе, поэтому устойчивая мера там — доля.
-Поиск идёт по всему тексту книги и показывает до 50 совпадений с контекстом
-и той же позицией. Тап по главе или совпадению переносит ровно на неё и
-закрывает панель — читать дальше.
+The reader has two slide-in panels at the left edge (buttons in the reader
+chrome, Esc or an outside click closes): **table of contents** and **in-book
+search**. The TOC lists chapters with the current one marked: from NCX/nav
+for EPUB (empty entries dropped; without them, a fallback derivation from
+chapter starts), from document bookmarks for PDF (no bookmarks — no button).
+An entry's position is a page number for PDF and a percent of the book for
+EPUB: stream pages recompute at every zoom, so the stable measure there is
+the share. Search runs over the whole book text and shows up to 50 matches
+with context and the same position. Tapping a chapter or a match jumps
+exactly to it and closes the panel — keep reading.
 
-## Словарь (dictionary)
+## Distribution
 
-**Убран из приложения** (v4 хранилища дропает их стор): раньше —
-импортированный набор статей и попап поверх слова в ридере. Если вернётся —
-вернётся переработанным; словарь пользователя живёт у него локально.
-
-## Дистрибуция
-
-Yuki — статический сайт (GitHub Pages), не приложение. Данные читателя
-(полка, прогресс, статистика) живут в IndexedDB браузера и деплои
-переживают — обновление сайта никогда не трогает библиотеку. После первого
-визита сайт целиком кэшируется service worker'ом и работает офлайн. Новая
-версия не перебивает чтение: обновлённый worker ждёт в фоне, а тихая
-карточка «Новая версия готова» предлагает обновиться сейчас или позже.
-Релиз — git-тег `v*`: Actions собирает сайт (базовый путь подставляется сам:
-корень для user-site, `/<repo>/` для project-site) и публикует на Pages.
-История изменений одна — `CHANGELOG.md` в корне; из него же собирается
-группа «О Yuki» в Настройках.
+Yuki is a static website, not an app. Reader data (shelf, progress, stats)
+lives in the browser's IndexedDB and survives deploys — a site update never
+touches the library. After the first visit the site is fully cached by a
+service worker and works offline. A new version doesn't interrupt reading:
+the updated worker waits in the background, and the quiet "New version
+ready" card offers to reload now — otherwise the next natural visit applies
+it. A release is a git tag `v*`: Actions builds the site (the base path is
+derived automatically: root for a user-site, `/<repo>/` for a project-site)
+and publishes to Pages. One changelog — `CHANGELOG.md` at the root; the
+"About yuki" group in Settings is built from it too.

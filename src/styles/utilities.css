@@ -19,9 +19,9 @@
   background-color: var(--ds-surface-scrim);
 }
 
-/* Primary CTA — снежно-синий градиент по рецепту CTA: не цвет-токен,
-   а image. Хрома растёт с глубиной, hue слегка дрейфует к фиолету
-   (250.3 → 254.5), светлота падает 69.1 → 60.5. */
+/* Primary CTA — a snowy-blue gradient: not a color token but an image.
+   Chroma grows with depth, hue drifts slightly toward violet
+   (250.3 → 254.5), lightness falls 69.1 → 60.5. */
 @utility bg-primary-gradient {
   background-image: linear-gradient(
     oklch(69.1% 0.162 250.3) 0%,
@@ -57,8 +57,9 @@
 
 /* ——— Button feel ——— */
 
-/* Постоянная промоция кнопки в собственный слой: scale едет на композиторе,
-   иначе первый кадр нажатия пере-растеризует кнопку и иконка дёргается. */
+/* Constant promotion of the button to its own layer: scale runs on the
+   compositor; otherwise the first press frame re-rasterizes the button and
+   the icon jerks. */
 @utility will-change-scale {
   will-change: scale;
 }
@@ -68,7 +69,7 @@
   background-color: color-mix(in oklab, var(--ds-surface-hover), oklch(0% 0 0) 3%);
 }
 
-/* Solid (тёмная заливка) чуть светлеет в нажатии. */
+/* Solid (dark fill) lightens slightly when pressed. */
 @utility press-solid {
   filter: brightness(110%) contrast(95%);
 }
@@ -84,7 +85,7 @@
 }
 
 /* Inner content of a button: margin-left animates the parent width without a
-   ResizeObserver — так лоадер плавно раздвигает кнопку. */
+   ResizeObserver — that's how the loader smoothly expands the button. */
 @utility btn-content {
   display: inline-flex;
   align-items: center;
@@ -93,7 +94,7 @@
 }
 
 /* Dynamic spinner: steady rotation + slower eased rotation + arc-length
-   morph, поэтому каждый цикл выглядит чуть иначе. */
+   morph, so every cycle looks slightly different. */
 @keyframes spin-linear {
   to {
     transform: rotate(1turn);

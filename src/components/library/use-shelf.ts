@@ -35,8 +35,8 @@ export interface OpenedData {
 // list, the payload map and the storage write stay in lockstep.
 export function useShelf(demoMode: boolean) {
   const [books, setBooks] = useState<Book[]>([]);
-  // Полка грузится из хранилища асинхронно — до резолва показываем лоадер,
-  // а не пустое состояние.
+  // The shelf loads from storage asynchronously — until it resolves we show
+  // the loader, not the empty state.
   const [shelfReady, setShelfReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
