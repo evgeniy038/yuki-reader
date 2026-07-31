@@ -30,12 +30,12 @@ export function SegmentedControl<T extends string>({
       ref={containerRef}
       role="radiogroup"
       aria-label={ariaLabel}
-      className="relative flex gap-0.5 rounded-xl bg-muted-surface p-1"
+      className="relative flex gap-0.5 rounded-lg bg-muted-surface p-1"
     >
       {pos ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute top-1 bottom-1 left-0 rounded-xl bg-raised shadow-card transition-transform"
+          className="pointer-events-none absolute top-1 bottom-1 left-0 rounded-md bg-raised shadow-card transition-transform"
           style={{ transform: `translateX(${pos.x}px)`, width: pos.w }}
         />
       ) : null}
@@ -50,7 +50,7 @@ export function SegmentedControl<T extends string>({
             data-indicator-target={segment.value}
             onClick={() => onChange(segment.value)}
             className={cn(
-              "relative flex-1 cursor-pointer rounded-xl px-2 py-1 text-sm whitespace-nowrap transition-colors",
+              "relative flex-1 cursor-pointer rounded-md px-2 py-1 text-sm whitespace-nowrap transition-colors",
               active ? "text-strong" : "text-default hover:text-strong",
             )}
           >
