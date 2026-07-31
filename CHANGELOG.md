@@ -3,6 +3,11 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.0.1] - 2026-07-31
+
+- Batch import: books land on the shelf instead of opening right away
+- Chrome polish: symmetric reader pill, quieter borders, softer dock shadow
+
 ## [1.0.0] - 2026-07-31
 
 First public release.
