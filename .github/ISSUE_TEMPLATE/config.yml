@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & help
+    url: https://github.com/evgeniy038/yuki-reader/discussions/categories/q-a
+    about: Not a bug — ask in Q&A instead
+  - name: Ideas & general chat
+    url: https://github.com/evgeniy038/yuki-reader/discussions
+    about: Loose thoughts, reading setups, anything else

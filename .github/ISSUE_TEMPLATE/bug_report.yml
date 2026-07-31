@@ -1,0 +1,29 @@
+name: Bug report
+description: Something broke or renders wrong
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: And what did you expect instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Book format
+      options:
+        - EPUB novel
+        - PDF book
+        - Not book-specific
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings → About yuki → Version
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag images in — they speak louder than words

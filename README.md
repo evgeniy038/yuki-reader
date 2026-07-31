@@ -8,8 +8,10 @@ library, progress and stats stay local in IndexedDB.
 - PDF: two-page spreads, page background follows the reading theme
 - Reading stats, automatic bookmarks, EN/RU interface
 
-![Statistics](screenshots/statistics.png)
-![Settings](screenshots/settings.png)
+## Feedback
+
+- Bug or broken rendering → [open an issue](https://github.com/evgeniy038/yuki-reader/issues/new/choose)
+- Question, idea, anything else → [Discussions](https://github.com/evgeniy038/yuki-reader/discussions)
 
 ## Develop
 

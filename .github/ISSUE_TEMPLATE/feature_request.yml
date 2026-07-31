@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea that would make yuki better
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What's missing?
+      description: Describe the idea — what should it do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter to you?
+      description: The use case helps prioritize
