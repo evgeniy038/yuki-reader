@@ -9,6 +9,7 @@
 import { spawn } from "node:child_process";
 import { chromium } from "playwright-core";
 import { requireEnv } from "./env.ts";
+import { openFreshTile } from "./import-open.ts";
 
 const TEXT_PDF = requireEnv("YUKI_TEST_PDF_TEXT");
 const SCAN_PDF = requireEnv("YUKI_TEST_PDF_SCAN");
@@ -142,12 +143,12 @@ async function main(): Promise<void> {
 
   // --- text-layer book ------------------------------------------------------
   await page.setInputFiles('input[accept*="pdf"]', TEXT_PDF);
-  await page.waitForSelector("[data-pdf-page] canvas", { timeout: 60_000 });
-  check(true, "the game: import opens the pdf reader");
+  await openFreshTile(page, "[data-pdf-page] canvas");
+  check(true, "text: tile opens the pdf reader");
   await settleOnPage(page, 1);
-  check((await currentPage(page)) === 1, "the game: opens on page 1");
-  check((await canvasCount(page)) === 1, "the game: cover shows alone");
-  check((await canvasInk(page, 1)) > 0.03, "the game: page 1 renders ink");
+  check((await currentPage(page)) === 1, "text: opens on page 1");
+  check((await canvasCount(page)) === 1, "text: cover shows alone");
+  check((await canvasInk(page, 1)) > 0.03, "text: page 1 renders ink");
   const fit = await page.evaluate(() => {
     const host = document.querySelector("[data-pdf-page]");
     if (!host) return { top: -9999, bottom: 99999, vh: 0 };
@@ -156,17 +157,17 @@ async function main(): Promise<void> {
   });
   check(
     fit.top >= -1 && fit.bottom <= fit.vh + 1,
-    "the game: whole page fits the viewport (no clipping)",
+    "text: whole page fits the viewport (no clipping)",
   );
 
   // Wide viewport → spreads: first flip lands on [2,3].
   await flip(page, 1);
   await settleOnPage(page, 2);
-  check((await currentPage(page)) === 2, "the game: first flip lands on page 2");
+  check((await currentPage(page)) === 2, "text: first flip lands on page 2");
   check(
     (await page.locator('[data-page-num="2"] canvas').count()) === 1 &&
       (await page.locator('[data-page-num="3"] canvas').count()) === 1,
-    "the game: spread shows pages 2 and 3 side by side",
+    "text: spread shows pages 2 and 3 side by side",
   );
   const spreadFit = await page.evaluate(() => {
     const host = document.querySelector("[data-pdf-page]");
@@ -176,33 +177,33 @@ async function main(): Promise<void> {
   });
   check(
     spreadFit.left >= -1 && spreadFit.right <= spreadFit.vw + 1,
-    "the game: the whole spread fits the viewport",
+    "text: the whole spread fits the viewport",
   );
 
   await flip(page, 4);
   await settleOnPage(page, 10);
-  check((await currentPage(page)) === 10, "the game: flips advance by spread (page 10)");
+  check((await currentPage(page)) === 10, "text: flips advance by spread (page 10)");
 
   // Front matter is sparse — jump deep into body text for the ink check.
   await flip(page, 10);
   await settleOnPage(page, 30);
-  check((await currentPage(page)) === 30, "the game: deep navigation reaches page 30");
-  check((await canvasInk(page, 30)) > 0.03, "the game: body page renders ink");
+  check((await currentPage(page)) === 30, "text: deep navigation reaches page 30");
+  check((await canvasInk(page, 30)) > 0.03, "text: body page renders ink");
 
   // The bookmark (and with it the tile's percent) commits after a 3s dwell.
   await page.waitForTimeout(3_500);
 
   await exitToShelf(page);
   const cardText = (await page.locator("[data-book-id]").textContent()) ?? "";
-  check(/%/.test(cardText), "the game: tile shows reading percent");
+  check(/%/.test(cardText), "text: tile shows reading percent");
   const coverSrc = await page.locator("[data-book-id] img").getAttribute("src");
-  check(coverSrc?.startsWith("data:image/jpeg") ?? false, "the game: cover rendered");
+  check(coverSrc?.startsWith("data:image/jpeg") ?? false, "text: cover rendered");
 
   // Reopen → restore the spread.
   await page.locator("[data-book-id]").click();
   await page.waitForSelector("[data-pdf-page] canvas", { timeout: 30_000 });
   await settleOnPage(page, 30);
-  check((await currentPage(page)) === 30, "the game: reopen restores page 30");
+  check((await currentPage(page)) === 30, "text: reopen restores page 30");
 
   // Narrow viewport (phone-ish) → single page; back to wide → spread again.
   await page.setViewportSize({ width: 520, height: 800 });
@@ -210,7 +211,7 @@ async function main(): Promise<void> {
     () => document.querySelectorAll("[data-pdf-page] canvas").length === 1,
     { timeout: 10_000 },
   );
-  check(true, "the game: narrow viewport shows a single page");
+  check(true, "text: narrow viewport shows a single page");
   const singleFit = await page.evaluate(() => {
     const host = document.querySelector("[data-pdf-page]");
     if (!host) return { top: -9999, bottom: 99999, vh: 0 };
@@ -219,14 +220,14 @@ async function main(): Promise<void> {
   });
   check(
     singleFit.top >= -1 && singleFit.bottom <= singleFit.vh + 1,
-    "the game: single page fits the narrow viewport",
+    "text: single page fits the narrow viewport",
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForFunction(
     () => document.querySelectorAll("[data-pdf-page] canvas").length === 2,
     { timeout: 10_000 },
   );
-  check(true, "the game: wide viewport restores the spread");
+  check(true, "text: wide viewport restores the spread");
 
   // Details dialog → "Pages 468".
   await exitToShelf(page);
@@ -236,18 +237,18 @@ async function main(): Promise<void> {
   const detailsText = (await page.locator("[role=dialog]").textContent()) ?? "";
   check(
     detailsText.includes("Pages") && detailsText.includes("468"),
-    "the game: details show 468 pages",
+    "text: details show 468 pages",
   );
-  check(detailsText.includes("English"), "the game: language sniffed as English");
+  check(detailsText.includes("English"), "text: language sniffed as English");
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
   await deleteViaMenu(page);
-  check((await page.locator("[data-book-id]").count()) === 0, "the game: deleted");
+  check((await page.locator("[data-book-id]").count()) === 0, "text: deleted");
 
   // --- mixed text/scanned pages --------------------------------------------
   await page.setInputFiles('input[accept*="pdf"]', SCAN_PDF);
-  await page.waitForSelector("[data-pdf-page] canvas", { timeout: 60_000 });
-  check(true, "scan: import opens the pdf reader");
+  await openFreshTile(page, "[data-pdf-page] canvas");
+  check(true, "scan: tile opens the pdf reader");
   await settleOnPage(page, 1);
   check((await canvasInk(page, 1)) > 0.03, "scan: page 1 renders ink");
 

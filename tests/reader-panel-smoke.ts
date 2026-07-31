@@ -13,6 +13,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import { requireEnv } from "./env.ts";
+import { openFreshTile } from "./import-open.ts";
 
 const NOVELS_DIR = requireEnv("YUKI_TEST_EPUB_DIR");
 const EPUB_FILTER = requireEnv("YUKI_TEST_EPUB_FILTER");
@@ -90,7 +91,7 @@ async function epubFlow(browser: import("playwright-core").Browser): Promise<voi
   const page = await context.newPage();
   await page.goto(BASE);
   await page.setInputFiles('input[accept*="epub"]', join(NOVELS_DIR, file));
-  await page.waitForSelector(".book-content", { timeout: 60_000 });
+  await openFreshTile(page, ".book-content");
   await page.waitForTimeout(1_200); // let the paginator measure + restore
 
   // Theme: dark recolors the reader surface (#1b1b1d → rgb(27, 27, 29)).
@@ -156,7 +157,7 @@ async function pdfFlow(browser: import("playwright-core").Browser): Promise<void
   const page = await context.newPage();
   await page.goto(BASE);
   await page.setInputFiles('input[accept*="pdf"]', PDF_PATH);
-  await page.waitForSelector("[data-pdf-page] canvas", { timeout: 60_000 });
+  await openFreshTile(page, "[data-pdf-page] canvas");
   await page.waitForTimeout(2_000); // the outline pass lands after the doc
 
   // Theme: dark applies a CSS filter to the page canvas (light has none).

@@ -1,14 +1,17 @@
 // Bookmark + peek-visit checker: drives the dwell model in headless Chrome.
-//   Context 1 (bookmark): import → flip 3 pages FAST → exit → reopen lands on
-//     page 1 (no 3s dwell anywhere → the bookmark never moved) → flip deep →
-//     dwell 3.5s → exit → reopen lands exactly on the dwelled page.
-//   Context 2 (peek visit): import → one flip → exit after ~2s → stats view
-//     shows zeros: sessions under the 10s warmup never reach the log.
+//   Context 1 (bookmark): import → open the tile → flip 3 pages FAST → exit →
+//     reopen lands on page 1 (no 3s dwell anywhere → the bookmark never
+//     moved) → flip deep → dwell 3.5s → exit → reopen lands exactly on the
+//     dwelled page.
+//   Context 2 (peek visit): import → open the tile → one flip → exit after
+//     ~2s → stats view shows zeros: sessions under the 10s warmup never
+//     reach the log.
 // Usage: pnpm tsx tests/bookmark-smoke.ts [title substring, or YUKI_TEST_EPUB_FILTER]
 
 import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { requireEnv } from "./env.ts";
+import { openFreshTile } from "./import-open.ts";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 
@@ -83,7 +86,7 @@ async function main(): Promise<void> {
     const page = await context.newPage();
     await page.goto(BASE);
     await page.setInputFiles('input[accept*="epub"]', epubPath);
-    await page.waitForSelector(".book-content", { timeout: 60_000 });
+    await openFreshTile(page, ".book-content");
     await page.waitForTimeout(600); // let the paginator measure
     // Fast flips: nothing is dwelled on (every gap is well under 3s), so the
     // bookmark must stay at the start of the book.
@@ -122,7 +125,7 @@ async function main(): Promise<void> {
     const page = await context.newPage();
     await page.goto(BASE);
     await page.setInputFiles('input[accept*="epub"]', epubPath);
-    await page.waitForSelector(".book-content", { timeout: 60_000 });
+    await openFreshTile(page, ".book-content");
     await page.waitForTimeout(500);
     await page.keyboard.press("ArrowLeft");
     await page.waitForTimeout(800); // ~2s inside: no dwell, no heartbeat tick

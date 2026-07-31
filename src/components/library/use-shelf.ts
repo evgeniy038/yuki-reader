@@ -201,8 +201,8 @@ export function useShelf(demoMode: boolean) {
         addedAt: now,
         lastReadAt: now,
       };
+      // No auto-open: batch imports land on the shelf, the tile opens the book.
       setBooks((prev) => [book, ...prev]);
-      navigate(`/read/${id}`);
       setError(null);
       void putBook(record);
     } catch (err) {

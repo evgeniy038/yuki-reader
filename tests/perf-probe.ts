@@ -2,10 +2,11 @@
 // (headless system Chrome, playwright-core) plus the pure EPUB parse in node.
 // Numbers per book, so optimizations are verified, not guessed.
 //   parseMs  — node-side parseEpub(bytes), median of 3 runs
-//   importMs — file input → router lands on /read/ (unzip/parse, cover, hash,
-//              language; the IndexedDB write is fire-and-forget by design)
-//   openMs   — /read/ → first settled reader paint (article laid out, fonts
-//              and images ready, page indicator live / PDF canvas on screen)
+//   importMs — file input → the fresh tile is on the shelf (unzip/parse,
+//              cover, hash, language; the IndexedDB write is fire-and-forget)
+//   openMs   — tile click → first settled reader paint (article laid out,
+//              fonts and images ready, page indicator live / PDF canvas on
+//              screen)
 // Dev server is spawned if absent. Usage: pnpm tsx tests/perf-probe.ts [filter]
 // (YUKI_BASE=http://localhost:1421 … to measure the production preview build).
 
@@ -87,9 +88,10 @@ async function main(): Promise<void> {
       await page.goto(BASE);
       const t0 = performance.now();
       await page.setInputFiles('input[accept*="epub"]', join(NOVELS_DIR, file));
-      await page.waitForURL(/#\/read\//, { timeout: 60_000 });
+      await page.waitForSelector("[data-book-id]", { timeout: 60_000 });
       const importMs = (performance.now() - t0).toFixed(0);
       const t1 = performance.now();
+      await page.locator("[data-book-id]").first().click();
       await waitForEpubPaint(page);
       const openMs = (performance.now() - t1).toFixed(0);
       rows.push(`${name}  parse=${parseMs}ms  import=${importMs}ms  open=${openMs}ms`);
@@ -108,9 +110,10 @@ async function main(): Promise<void> {
       await page.goto(BASE);
       const t0 = performance.now();
       await page.setInputFiles('input[accept*="pdf"]', pdfPath);
-      await page.waitForURL(/#\/read\//, { timeout: 60_000 });
+      await page.waitForSelector("[data-book-id]", { timeout: 60_000 });
       const importMs = (performance.now() - t0).toFixed(0);
       const t1 = performance.now();
+      await page.locator("[data-book-id]").first().click();
       await waitForPdfPaint(page);
       const openMs = (performance.now() - t1).toFixed(0);
       rows.push(`${name}  import=${importMs}ms  open=${openMs}ms`);

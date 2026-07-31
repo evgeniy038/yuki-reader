@@ -1,7 +1,7 @@
 // Routing checker: every screen is a real URL that survives a refresh.
-// Flow: direct URLs (/stats, /settings, unknown → home) → import opens
-// /read/:id → reload keeps the reader → exit returns to / → history.back
-// reopens the book → reload on /stats stays on stats.
+// Flow: direct URLs (/stats, /settings, unknown → home) → import stays on
+// the shelf → tile opens /read/:id → reload keeps the reader → exit returns
+// to / → history.back reopens the book → reload on /stats stays on stats.
 // Usage: pnpm tsx tests/routing-smoke.ts [title substring, or YUKI_TEST_EPUB_FILTER]
 
 import { spawn } from "node:child_process";
@@ -74,10 +74,13 @@ async function main(): Promise<void> {
     "unknown /read/:id redirects home",
   );
 
-  // 3. Import → the reader opens at its own URL.
+  // 3. Import lands on the shelf; the tile opens the reader at its own URL.
   await page.setInputFiles('input[accept*="epub"]', epubPath);
-  await page.waitForSelector(".book-content", { timeout: 60_000 });
-  check(page.url().includes("#/read/"), "import opens the reader at /read/:id");
+  await page.waitForSelector("[data-book-id]", { timeout: 60_000 });
+  check(!page.url().includes("#/read/"), "import stays on the shelf");
+  await page.locator("[data-book-id]").first().click();
+  await page.waitForSelector(".book-content", { timeout: 30_000 });
+  check(page.url().includes("#/read/"), "tile opens the reader at /read/:id");
   const readUrl = page.url();
 
   // 4. Refresh while reading: same URL, reader restored (through the loader).

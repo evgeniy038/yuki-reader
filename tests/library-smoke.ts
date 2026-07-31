@@ -1,10 +1,10 @@
 // Library-management checker: drives the real shelf UI in headless Chrome.
-// Flow: import → exit reader → re-import (duplicate rejected, card flashes)
-// → header add-book action → context menu: rename / cover / delete
-// (alert-dialog confirm) → reload (deletion persists) → re-import lands on
-// the shelf → two books: recency sort, reading state on the tile, details
-// dialog, library view: header count, sort select (+ persistence across
-// reload).
+// Flow: import (stays on the shelf) → open tile → exit reader → re-import
+// (duplicate rejected, card flashes) → header add-book action → context
+// menu: rename / cover / delete (alert-dialog confirm) → reload (deletion
+// persists) → re-import lands on the shelf → two books in one batch:
+// recency sort, reading state on the tile, details dialog, library view:
+// header count, sort select (+ persistence across reload).
 // Usage: pnpm tsx tests/library-smoke.ts [title substring] [second book] — or YUKI_TEST_EPUB_FILTER / YUKI_TEST_EPUB_FILTER2
 
 import { spawn } from "node:child_process";
@@ -76,10 +76,14 @@ async function main(): Promise<void> {
   const page = await context.newPage();
   await page.goto(BASE);
 
-  // 1. Import → the reader opens.
+  // 1. Import → the book lands on the shelf (no auto-open; batch-friendly),
+  // the tile opens the reader.
   await page.setInputFiles('input[accept*="epub"]', epubPath);
-  await page.waitForSelector(".book-content", { timeout: 60_000 });
-  check(true, "import opens the reader");
+  await page.waitForSelector("[data-book-id]", { timeout: 60_000 });
+  check((await page.locator(".book-content").count()) === 0, "import stays on the shelf");
+  await page.locator("[data-book-id]").first().click();
+  await page.waitForSelector(".book-content", { timeout: 30_000 });
+  check(true, "tile click opens the reader");
   await page.click('button[aria-label="Back to the shelf"]');
   await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
   check((await page.locator("[data-book-id]").count()) === 1, "one card on the shelf");
@@ -142,9 +146,7 @@ async function main(): Promise<void> {
 
   // 8. Re-import → the shelf shows the fresh import (default sort is recency).
   await page.setInputFiles('input[accept*="epub"]', epubPath);
-  await page.waitForSelector(".book-content", { timeout: 60_000 });
-  await page.click('button[aria-label="Back to the shelf"]');
-  await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
+  await page.waitForSelector("[data-book-id]", { timeout: 60_000 });
   check(
     ((await page.locator("[data-book-id]").textContent()) ?? "").includes(
       FILTER,
@@ -166,14 +168,13 @@ async function main(): Promise<void> {
     (await cardTexts()).findIndex((t) => t.includes(needle));
 
   await page.setInputFiles('input[accept*="epub"]', epubPath);
-  await page.waitForSelector(".book-content", { timeout: 60_000 });
-  await page.click('button[aria-label="Back to the shelf"]');
-  await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
+  await page.waitForSelector("[data-book-id]", { timeout: 60_000 });
   await page.setInputFiles('input[accept*="epub"]', join(NOVELS_DIR, file2));
-  await page.waitForSelector(".book-content", { timeout: 60_000 });
-  await page.click('button[aria-label="Back to the shelf"]');
-  await page.waitForTimeout(800);
-  check((await idxOf(FILTER2)) === 0 && (await idxOf(FILTER)) === 1, "recent: fresh import leads");
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-book-id]").length === 2,
+    { timeout: 60_000 },
+  );
+  check((await idxOf(FILTER2)) === 0 && (await idxOf(FILTER)) === 1, "recent: batch import leads with the freshest");
 
   // Open the older book → it becomes the most recent; a page turn → percent.
   await page.locator("[data-book-id]", { hasText: FILTER }).click();

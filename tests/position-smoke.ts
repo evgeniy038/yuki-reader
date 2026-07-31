@@ -13,6 +13,7 @@
 import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { requireEnv } from "./env.ts";
+import { openFreshTile } from "./import-open.ts";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 
@@ -222,6 +223,7 @@ async function main(): Promise<void> {
     try {
       await page.goto(BASE);
       await page.setInputFiles('input[accept*="epub"]', join(NOVELS_DIR, file));
+      await openFreshTile(page, ".book-content");
       allProblems.push(...(await checkBook(page, name, "ArrowLeft")));
       console.log(`checked ${name}`);
     } catch (err) {

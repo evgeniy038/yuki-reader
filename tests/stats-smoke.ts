@@ -8,6 +8,7 @@
 import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { requireEnv } from "./env.ts";
+import { openFreshTile } from "./import-open.ts";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 
@@ -73,11 +74,12 @@ async function main(): Promise<void> {
   const page = await context.newPage();
   await page.goto(BASE);
 
-  // 1. Real reading session: import → reader opens → turn 3 pages, dwelling
-  // 3.5s on each — a page's chars count only after the 3s dwell commits it.
+  // 1. Real reading session: import (stays on the shelf) → open the tile →
+  // turn 3 pages, dwelling 3.5s on each — a page's chars count only after
+  // the 3s dwell commits it.
   await page.setInputFiles('input[accept*="epub"]', epubPath);
-  await page.waitForSelector(".book-content", { timeout: 60_000 });
-  check(true, "import opens the reader");
+  await openFreshTile(page, ".book-content");
+  check(true, "import lands on the shelf, tile opens the reader");
   for (let i = 0; i < 3; i += 1) {
     await page.keyboard.press("ArrowLeft"); // vertical: ArrowLeft = next page
     await page.waitForTimeout(3_500);

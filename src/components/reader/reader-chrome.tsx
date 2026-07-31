@@ -82,7 +82,7 @@ export function ReaderChrome({
           scheduleHide();
         }}
         className={cn(
-          "fixed left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill border border-subtle bg-raised px-2 py-1 shadow-floating transition-[transform,opacity] duration-200",
+          "fixed left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill border border-subtle bg-raised p-1 shadow-floating transition-[transform,opacity] duration-200",
           visible
             ? "translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-3 opacity-0",
