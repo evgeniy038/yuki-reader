@@ -47,9 +47,10 @@ import { BookDetailsDialog } from "./book-details-dialog";
 import type { OpenedData } from "./use-shelf";
 
 // The library page: shelf groups with language sections, the sort picker and
-// the add button in the header, and every book-level dialog (rename, details,
-// delete) — those are library concerns, so they live here with their hidden
-// file inputs (book import, cover pick), not in the app shell.
+// the add button in the header (both hidden on the empty shelf — the empty
+// state carries the add action), and every book-level dialog (rename,
+// details, delete) — those are library concerns, so they live here with
+// their hidden file inputs (book import, cover pick), not in the app shell.
 export function LibraryPage({
   books,
   shelfReady,
@@ -154,33 +155,35 @@ export function LibraryPage({
         <PageTitle>
           {t("library.title")} · {books.length}
         </PageTitle>
-        <PageActions>
-          <Select
-            items={sorts}
-            value={sort}
-            onValueChange={(value) => {
-              if (value) setSort(value);
-            }}
-          >
-            <SelectTrigger
-              aria-label={t("library.sortAria")}
-              className="border-0 bg-transparent px-2 shadow-none transition-colors hover:bg-hover-surface"
+        {books.length > 0 ? (
+          <PageActions>
+            <Select
+              items={sorts}
+              value={sort}
+              onValueChange={(value) => {
+                if (value) setSort(value);
+              }}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent align="end">
-              {sorts.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" onClick={() => fileRef.current?.click()}>
-            <Plus />
-            {t("library.addBook")}
-          </Button>
-        </PageActions>
+              <SelectTrigger
+                aria-label={t("library.sortAria")}
+                className="border-0 bg-transparent px-2 shadow-none transition-colors hover:bg-hover-surface"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {sorts.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={() => fileRef.current?.click()}>
+              <Plus />
+              {t("library.addBook")}
+            </Button>
+          </PageActions>
+        ) : null}
       </PageHeader>
       <PageContent>
         {error ? (

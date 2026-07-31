@@ -30,8 +30,9 @@ shadcn spirit: `PageShell` (shared rhythm: max width, padding), `PageHeader`
 — always a 32px row (`min-h-8`), with or without actions, so the content of
 every page starts at the same offset from the card edge; `PageTitle`
 (font-medium) on the left, `PageActions` on the right — only actions that
-make sense in this section (sort and "Add book" for the Library); filters go
-before the button. A section inside a page keeps its action in the section
+make sense in this section (sort and "Add book" for the Library — both
+hidden on the empty shelf, where the empty state carries the add action);
+filters go before the button. A section inside a page keeps its action in the section
 header. Section subtitles share one `PageSectionTitle`. An empty section
 shows an **empty state** — one pattern across pages: centered icon, title,
 one line of description, and an accent action button.

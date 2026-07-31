@@ -1,4 +1,4 @@
-import { Books } from "@phosphor-icons/react";
+import { Books, Plus } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,7 @@ export function LibraryEmpty({ onAdd }: { onAdd: () => void }) {
         </EmptyHeader>
         <EmptyContent>
           <Button onClick={onAdd}>
-            <Books />
+            <Plus />
             {t("library.addBook")}
           </Button>
         </EmptyContent>
