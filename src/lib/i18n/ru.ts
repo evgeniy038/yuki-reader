@@ -172,6 +172,5 @@ export const ru: Messages = {
   toast: {
     updateReady: "Новая версия готова",
     update: "Обновить",
-    later: "Позже",
   },
 };

@@ -174,7 +174,6 @@ export const en = {
   toast: {
     updateReady: "A new version is ready",
     update: "Update",
-    later: "Later",
   },
 };
 
