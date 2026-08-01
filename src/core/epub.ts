@@ -67,8 +67,16 @@ function text(value: unknown): string | undefined {
 }
 
 function normalize(path: string): string {
+  // OPF hrefs are URI references, while ZIP entries use decoded file names.
+  // Keep malformed escapes untouched instead of rejecting the whole book.
+  let decoded = path;
+  try {
+    decoded = decodeURI(path);
+  } catch {
+    decoded = path;
+  }
   const parts: string[] = [];
-  for (const segment of path.split("/")) {
+  for (const segment of decoded.split("/")) {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") parts.pop();
     else parts.push(segment);
