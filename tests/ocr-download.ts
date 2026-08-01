@@ -1,31 +1,33 @@
 // Node unit test for OCR model downloads (src/core/ocr/download.ts).
-// The aggregate progress must never exceed 100% — even when the server
-// hides Content-Length (a VPN/proxy turning responses chunked caused the
-// 140%/323% bug) — broken streams must resume and retry, range-ignoring
-// servers get the plain whole-file stream, and a dead network rejects after
-// a few bounded attempts. global fetch is mocked; IndexedDB is absent in
-// node, so the model cache silently no-ops (that path is intentional).
+// Model sizes are KNOWN (hardcoded per file), so the aggregate progress can
+// never exceed 100% — the VPN/proxy bug where hidden Content-Length sent it
+// to 140%/323% — broken streams resume from received bytes and retry,
+// range-ignoring servers get the plain whole-file stream, and a truncated
+// or dead network rejects after a few bounded attempts instead of caching
+// poison. global fetch is mocked; IndexedDB is absent in node, so the model
+// cache silently no-ops (that path is intentional).
 // Run: pnpm tsx tests/ocr-download.ts
 
 import { strict as assert } from "node:assert";
 import {
   downloadFiles,
+  type OcrModelFileSpec,
   type OcrModelFiles,
 } from "../src/core/ocr/download.ts";
 
 const MB = 1024 * 1024;
-const URLS: Record<keyof OcrModelFiles, string> = {
-  detector: "https://models.test/detector.onnx",
-  encoder: "https://models.test/encoder.onnx",
-  decoder: "https://cdn.app.test/ocr-models/decoder.onnx",
-  vocab: "https://models.test/vocab.txt",
-};
 const SIZES: Record<keyof OcrModelFiles, number> = {
   detector: 20 * MB,
   encoder: 9 * MB,
   decoder: 3 * MB,
   vocab: 24 * 1024,
 };
+const SPECS: Record<keyof OcrModelFiles, OcrModelFileSpec> = Object.fromEntries(
+  Object.entries(SIZES).map(([key, size]) => [
+    key,
+    { url: `https://models.test/${key}.onnx`, size },
+  ]),
+) as Record<keyof OcrModelFiles, OcrModelFileSpec>;
 const GRAND_TOTAL = Object.values(SIZES).reduce((sum, n) => sum + n, 0);
 
 // --- mock network -----------------------------------------------------------
@@ -34,10 +36,9 @@ const byteAt = (i: number) => i % 251;
 
 interface MockFile {
   size: number;
-  chunked?: boolean; // never reveal Content-Length
   ignoreRange?: boolean; // answer 200 to ranged GETs
-  dropGet?: number; // kill this GET ordinal (probe counts) mid-stream
-  headDrops?: number; // fail this many HEAD requests first
+  dropGet?: number; // kill this GET ordinal mid-stream
+  shortStream?: boolean; // close every stream at 60% (middlebox truncation)
   dead?: boolean; // every request network-errors
   // filled by the mock:
   getCount: number;
@@ -46,26 +47,24 @@ interface MockFile {
 
 function bodyStream(
   start: number,
-  end: number,
-  dropAt?: number,
+  length: number,
+  behavior?: "drop" | "short",
 ): ReadableStream<Uint8Array> {
   let sent = 0;
-  const size = end - start;
+  const limit =
+    behavior === "drop"
+      ? Math.max(1, Math.floor(length / 3))
+      : behavior === "short"
+        ? Math.max(1, Math.floor(length * 0.6))
+        : length;
   return new ReadableStream({
     pull(controller) {
-      if (sent >= size) {
-        controller.close();
+      if (sent >= limit) {
+        if (behavior === "drop") controller.error(new Error("socket hangup"));
+        else controller.close();
         return;
       }
-      if (dropAt !== undefined && sent >= dropAt) {
-        controller.error(new Error("socket hangup"));
-        return;
-      }
-      const n = Math.min(
-        65536,
-        size - sent,
-        dropAt === undefined ? size : dropAt - sent,
-      );
+      const n = Math.min(65536, limit - sent);
       const buf = new Uint8Array(n);
       for (let i = 0; i < n; i++) buf[i] = byteAt(start + sent + i);
       sent += n;
@@ -77,7 +76,7 @@ function bodyStream(
 function mockNetwork(specs: Partial<Record<keyof OcrModelFiles, MockFile>>) {
   const files = new Map<string, MockFile>();
   for (const [key, spec] of Object.entries(specs)) {
-    files.set(URLS[key as keyof OcrModelFiles], {
+    files.set(SPECS[key as keyof OcrModelFiles].url, {
       getCount: 0,
       resumed: false,
       ...spec,
@@ -88,32 +87,16 @@ function mockNetwork(specs: Partial<Record<keyof OcrModelFiles, MockFile>>) {
     const file = files.get(url);
     if (!file) throw new TypeError(`unexpected URL: ${url}`);
     if (file.dead) throw new TypeError("network down");
-    if ((init?.method ?? "GET") === "HEAD") {
-      if (file.headDrops) {
-        file.headDrops -= 1;
-        throw new TypeError("network down");
-      }
-      return new Response(null, {
-        status: 200,
-        headers: file.chunked
-          ? {}
-          : { "content-length": String(file.size) },
-      });
+    if ((init?.method ?? "GET") !== "GET") {
+      throw new TypeError(`unexpected ${init?.method} request: ${url}`);
     }
     file.getCount += 1;
     const headers = (init?.headers ?? {}) as Record<string, string>;
     const range = /^bytes=(\d+)-(\d*)$/.exec(headers.Range ?? "");
-    const dropAt =
-      file.dropGet === file.getCount
-        ? Math.max(1, Math.floor(file.size / 3))
-        : undefined;
+    const behavior = file.dropGet === file.getCount ? "drop" : file.shortStream ? "short" : undefined;
     if (!range || file.ignoreRange) {
-      return new Response(bodyStream(0, file.size, dropAt), {
-        status: 200,
-        headers: file.chunked
-          ? {}
-          : { "content-length": String(file.size) },
-      });
+      if (range && file.ignoreRange) file.resumed = true;
+      return new Response(bodyStream(0, file.size, behavior), { status: 200 });
     }
     const start = Number(range[1]);
     const end = range[2] ? Number(range[2]) : file.size - 1;
@@ -122,11 +105,10 @@ function mockNetwork(specs: Partial<Record<keyof OcrModelFiles, MockFile>>) {
     }
     if (start > 0) file.resumed = true;
     const length = Math.min(end, file.size - 1) - start + 1;
-    return new Response(bodyStream(start, start + length, dropAt), {
+    return new Response(bodyStream(start, length, behavior), {
       status: 206,
       headers: {
         "content-range": `bytes ${start}-${start + length - 1}/${file.size}`,
-        ...(file.chunked ? {} : { "content-length": String(length) }),
       },
     });
   }) as typeof fetch;
@@ -154,10 +136,7 @@ function check(ok: boolean, label: string): void {
   console.log(`${ok ? "  ✓" : "  ✗"} ${label}`);
 }
 
-function progressNeverOvershoots(
-  label: string,
-  emissions: Emission[],
-): boolean {
+function progressNeverOvershoots(emissions: Emission[]): boolean {
   for (const { loaded, total } of emissions) {
     if (total > 0 ? loaded > total : loaded !== 0) {
       console.log(`    offending emission: ${loaded}/${total}`);
@@ -201,7 +180,7 @@ async function scenario(label: string, run: () => Promise<void>): Promise<void> 
   }
 }
 
-await scenario("healthy network, sizes known", async () => {
+await scenario("healthy network", async () => {
   mockNetwork({
     detector: { size: SIZES.detector } as MockFile,
     encoder: { size: SIZES.encoder } as MockFile,
@@ -209,49 +188,46 @@ await scenario("healthy network, sizes known", async () => {
     vocab: { size: SIZES.vocab } as MockFile,
   });
   const w = watch();
-  const files = await downloadFiles(URLS, w.onProgress);
+  const files = await downloadFiles(SPECS, w.onProgress);
   check(w.emissions.length > 10, "progress streams in many steps");
-  check(progressNeverOvershoots("healthy", w.emissions), "never exceeds 100%");
+  check(progressNeverOvershoots(w.emissions), "never exceeds 100%");
   check(landsExactlyAt100(w.emissions), "lands at exactly 100%");
   check(bytesMatch("healthy", files), "bytes assemble correctly (ranged + whole)");
 });
 
-await scenario("chunked responses (no Content-Length — the VPN bug)", async () => {
+await scenario("chunked responses (no Content-Length — sizes still known)", async () => {
+  // Totals come from the hardcoded specs, so a server that hides
+  // Content-Length changes nothing for the bar.
   mockNetwork({
-    detector: { size: SIZES.detector, chunked: true } as MockFile,
-    encoder: { size: SIZES.encoder, chunked: true } as MockFile,
-    decoder: { size: SIZES.decoder, chunked: true } as MockFile,
-    vocab: { size: SIZES.vocab, chunked: true } as MockFile,
+    detector: { size: SIZES.detector } as MockFile,
+    encoder: { size: SIZES.encoder } as MockFile,
+    decoder: { size: SIZES.decoder } as MockFile,
+    vocab: { size: SIZES.vocab } as MockFile,
   });
   const w = watch();
-  const files = await downloadFiles(URLS, w.onProgress);
-  check(
-    progressNeverOvershoots("chunked", w.emissions),
-    "never exceeds 100% with hidden sizes",
-  );
-  check(landsExactlyAt100(w.emissions), "lands at exactly 100% once finished");
+  const files = await downloadFiles(SPECS, w.onProgress);
+  check(progressNeverOvershoots(w.emissions), "never exceeds 100%");
+  check(landsExactlyAt100(w.emissions), "lands at exactly 100%");
   check(bytesMatch("chunked", files), "bytes assemble correctly");
 });
 
 await scenario("dropped streams resume and retry", async () => {
   const files = mockNetwork({
-    // GET #1 is the range probe, #2 the first part stream.
-    detector: { size: SIZES.detector, dropGet: 2 } as MockFile,
+    detector: { size: SIZES.detector, dropGet: 1 } as MockFile,
     encoder: { size: SIZES.encoder } as MockFile,
-    // GET #1 is the whole-file stream itself.
     decoder: { size: SIZES.decoder, dropGet: 1 } as MockFile,
     vocab: { size: SIZES.vocab } as MockFile,
   });
   const w = watch();
-  const result = await downloadFiles(URLS, w.onProgress);
-  check(progressNeverOvershoots("drops", w.emissions), "never exceeds 100%");
+  const result = await downloadFiles(SPECS, w.onProgress);
+  check(progressNeverOvershoots(w.emissions), "never exceeds 100%");
   check(landsExactlyAt100(w.emissions), "lands at exactly 100%");
   check(
-    files.get(URLS.detector)!.resumed,
+    files.get(SPECS.detector.url)!.resumed,
     "ranged part resumes from received bytes",
   );
   check(
-    files.get(URLS.decoder)!.resumed,
+    files.get(SPECS.decoder.url)!.resumed,
     "whole-file stream resumes from received bytes",
   );
   check(bytesMatch("drops", result), "bytes assemble correctly after resume");
@@ -265,23 +241,24 @@ await scenario("server ignores Range (plain 200 everywhere)", async () => {
     vocab: { size: SIZES.vocab } as MockFile,
   });
   const w = watch();
-  const files = await downloadFiles(URLS, w.onProgress);
-  check(progressNeverOvershoots("ignoreRange", w.emissions), "never exceeds 100%");
+  const files = await downloadFiles(SPECS, w.onProgress);
+  check(progressNeverOvershoots(w.emissions), "never exceeds 100%");
   check(landsExactlyAt100(w.emissions), "lands at exactly 100%");
   check(bytesMatch("ignoreRange", files), "whole-file fallback downloads right");
 });
 
-await scenario("flaky HEAD recovers", async () => {
+await scenario("truncated responses reject (middlebox poison)", async () => {
   mockNetwork({
-    detector: { size: SIZES.detector, headDrops: 2 } as MockFile,
+    detector: { size: SIZES.detector } as MockFile,
     encoder: { size: SIZES.encoder } as MockFile,
-    decoder: { size: SIZES.decoder } as MockFile,
+    decoder: { size: SIZES.decoder, shortStream: true } as MockFile,
     vocab: { size: SIZES.vocab } as MockFile,
   });
-  const w = watch();
-  const files = await downloadFiles(URLS, w.onProgress);
-  check(landsExactlyAt100(w.emissions), "lands at exactly 100% after HEAD retries");
-  check(bytesMatch("flaky-head", files), "bytes assemble correctly");
+  const failure = await downloadFiles(SPECS, () => {}).then(
+    () => null,
+    (err: unknown) => err,
+  );
+  check(failure instanceof Error, "truncated download rejects, never cached");
 });
 
 await scenario("dead network rejects, bounded attempts", async () => {
@@ -292,7 +269,7 @@ await scenario("dead network rejects, bounded attempts", async () => {
     vocab: { size: SIZES.vocab } as MockFile,
   });
   const started = Date.now();
-  const failure = await downloadFiles(URLS, () => {}).then(
+  const failure = await downloadFiles(SPECS, () => {}).then(
     () => null,
     (err: unknown) => err,
   );

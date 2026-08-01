@@ -106,8 +106,8 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     // Cross-origin isolation unlocks SharedArrayBuffer → multi-threaded wasm
-    // in the OCR workers. Everything served is same-origin or CORS-enabled
-    // (HF model CDN), so require-corp breaks nothing here. A production host
+    // in the OCR workers. Everything served is same-origin, so require-corp
+    // breaks nothing here. A production host
     // MUST send the same headers for threaded OCR; without them the runtime
     // just falls back to one thread per worker.
     headers: {

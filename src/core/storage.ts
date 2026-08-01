@@ -62,7 +62,7 @@ export interface MangaOcrRecord {
   partial?: boolean;
 }
 
-/** Cached OCR model file (downloaded from Hugging Face once, reused forever). */
+/** Cached OCR model file (downloaded once, reused forever). */
 export interface OcrModelRecord {
   url: string;
   bytes: Uint8Array;

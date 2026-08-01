@@ -226,9 +226,9 @@ Every axis is batched, so one run advances a whole 4-crop batch in lockstep
 token-exact vs solo decode). Merged decode is ~2.6x faster than full-prefix
 at identical CER (the full-prefix fallback is gone — the merged file is the
 only shipped decoder); the file (~30MB) ships same-origin from
-`public/ocr-models/` (Hugging Face has no
-merged variant, and GitHub release assets send no CORS headers — measured —
-so a browser cannot fetch them at all). The recognition encoder picks its
+`public/ocr-models/` — like every OCR model file now: Hugging Face, where
+the weights originate, is unreachable without a VPN in some regions (and it
+has no merged variant anyway). The recognition encoder picks its
 weights by execution provider (`detectPreferredEp`, cached in localStorage
 `yuki-ocr-ep`): wasm → int8 (fastest CPU GEMM), WebGPU → q4f16 (MatMulNBits
 is the only quantization with a native GPU kernel — measured ~12x faster
@@ -237,7 +237,7 @@ gpuweb#5292). A WebGPU session-build failure falls back to wasm (the q4f16
 MatMulNBits ops run on CPU too). The detector follows the same EP split:
 WebGPU → an in-house fp16 build (~85MB, converted in-house from ogkalu's
 fp32 export, shipped same-origin) measured ~68ms/page — 19x faster than the
-43MB int8 HF build on wasm (~1.3s/page) — at the same boxes (int8 weights on
+43MB int8 build on wasm (~1.3s/page) — at the same boxes (int8 weights on
 WebGPU instead are 2.7x SLOWER than on wasm: their kernels fall back to
 CPU). The decoder always stays on wasm.
 All sessions and tensors inside a worker come from ONE onnxruntime-web build
@@ -262,7 +262,7 @@ frame resources, else session init hangs with no error. The main thread is
 the scheduler: it owns the FIFO queue (hovered blocks jump it, everything
 else waits its turn), downloads the model files once — big ones over
 parallel HTTP ranges, then forever from IndexedDB — and hands each worker
-its own copy of the bytes (~130MB per worker). Per-page results land in
+its own copy of the bytes (~165MB per worker). Per-page results land in
 `mangaOcr` (keyed `bookId/pageIndex`, with an engine version that forces a
 re-run when the pipeline changes). Every sidecar-less volume goes through
 the same pipeline: DETECT writes skeleton blocks for every page (final

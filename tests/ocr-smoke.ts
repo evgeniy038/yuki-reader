@@ -1,7 +1,7 @@
 // In-app OCR checker: a raw manga archive (no .mokuro sidecar) goes in, the
 // background OCR worker must produce real text boxes on the page. Covers the
-// whole pipeline end-to-end in headless Chrome: model download (~130MB from
-// Hugging Face, first run per fresh profile) → IndexedDB model cache →
+// whole pipeline end-to-end in headless Chrome: model download (~130MB
+// same-origin, first run per fresh profile) → IndexedDB model cache →
 // detection → recognition → live overlay in the reader → persistence across
 // a reload (the second open reads blocks from IndexedDB, no re-OCR).
 // Fixture root: YUKI_TEST_MANGA_DIR, expects <dir>/kaguya/*.zip (raw scans).
