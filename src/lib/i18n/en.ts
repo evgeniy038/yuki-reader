@@ -177,6 +177,7 @@ export const en = {
   ocr: {
     models: "Downloading OCR models… {{percent}}%",
     modelsRow: "OCR models",
+    modelsHint: "One-time download",
     error: "OCR failed: {{message}}",
     title: "Processing",
     volumes_one: "{{count, number}} volume",

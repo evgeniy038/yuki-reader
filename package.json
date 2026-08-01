@@ -1,6 +1,6 @@
 {
   "name": "yuki",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": true,
   "type": "module",
   "description": "yuki — a quiet reading library",
@@ -25,6 +25,7 @@
     "test:layout": "tsx tests/layout-smoke.ts",
     "test:position": "tsx tests/position-smoke.ts",
     "test:library": "tsx tests/library-smoke.ts",
+    "test:ocr-download": "tsx tests/ocr-download.ts",
     "test": "pnpm test:epub",
     "preinstall": "npx only-allow pnpm"
   },

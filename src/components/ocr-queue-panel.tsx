@@ -95,7 +95,10 @@ export function OcrQueuePanel({
   const downloading = status.models !== null;
   const modelPercent =
     downloading && status.models!.total > 0
-      ? Math.round((status.models!.loaded / status.models!.total) * 100)
+      ? Math.min(
+          100,
+          Math.round((status.models!.loaded / status.models!.total) * 100),
+        )
       : null;
   const totalPercent =
     active.length > 0
@@ -237,7 +240,7 @@ export function OcrQueuePanel({
           </div>
           <div className="max-h-96 overflow-y-auto px-4 pb-3.5">
             {downloading ? (
-              <div className="py-1.5">
+              <div className="flex flex-col gap-2 py-1.5">
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="truncate text-xs text-muted-content">
                     {t("ocr.modelsRow")}
@@ -247,6 +250,9 @@ export function OcrQueuePanel({
                   </p>
                 </div>
                 <Bar value={(modelPercent ?? 0) / 100} />
+                <p className="text-[11px] leading-tight text-muted-content/70">
+                  {t("ocr.modelsHint")}
+                </p>
               </div>
             ) : null}
             {active.map((entry, index) => {

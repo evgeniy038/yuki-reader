@@ -175,6 +175,7 @@ export const ru: Messages = {
   ocr: {
     models: "Загрузка моделей OCR… {{percent}}%",
     modelsRow: "Модели OCR",
+    modelsHint: "Скачивается один раз",
     error: "Ошибка OCR: {{message}}",
     title: "Обработка",
     volumes_one: "{{count, number}} том",

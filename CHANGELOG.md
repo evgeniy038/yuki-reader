@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.2.3] - 2026-08-01
+
+- The one-time OCR model download now tells the truth and takes care of itself: the progress bar can never run past 100% again, a dropped connection quietly picks up where it left off instead of giving up — and the panel says it upfront that this hefty download happens only once
+
 ## [1.2.2] - 2026-08-01
 
 - Manga reader: zooming out no longer re-centers the page or drags it sideways — the point under the cursor stays put in both directions, panning is free of bounds, and only a page turn resets the view
