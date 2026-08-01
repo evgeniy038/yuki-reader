@@ -172,6 +172,23 @@ export const ru: Messages = {
     larger: "больше",
   },
   drop: "Отпустите, чтобы открыть",
+  ocr: {
+    models: "Загрузка моделей OCR… {{percent}}%",
+    modelsRow: "Модели OCR",
+    error: "Ошибка OCR: {{message}}",
+    title: "Обработка",
+    volumes_one: "{{count, number}} том",
+    volumes_few: "{{count, number}} тома",
+    volumes_many: "{{count, number}} томов",
+    volumes_other: "{{count, number}} томов",
+    stage: {
+      detect: "Сканирование страниц",
+      recognize: "Распознавание текста",
+    },
+    expand: "Показать детали",
+    collapse: "Скрыть детали",
+    allDone: "Всё готово",
+  },
   manga: {
     volumeCount_one: "{{count, number}} том",
     volumeCount_few: "{{count, number}} тома",

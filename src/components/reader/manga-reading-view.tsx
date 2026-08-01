@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { loadManga, loadMangaPageBlob, type MangaRecord } from "@/core/storage";
+import type { MokuroBlock } from "@/core/mokuro";
+import { enqueueDetect, onOcrPage, recognizeBlockNow } from "@/core/ocr/ocr";
+import {
+  loadManga,
+  loadMangaOcr,
+  loadMangaPageBlob,
+  type MangaRecord,
+} from "@/core/storage";
 import { useLatest } from "@/lib/use-latest";
 import { usePagingInput } from "./use-paging-input";
+import { useZoomPan } from "./use-zoom-pan";
 import { PageIndicator } from "./page-indicator";
 import { MangaOcrOverlay } from "./manga-ocr-overlay";
 
@@ -70,13 +77,20 @@ export function MangaReadingView({
   const [record, setRecord] = useState<MangaRecord | null>(null);
   const [failed, setFailed] = useState(false);
   const [page, setPage] = useState(1);
+  // In-app OCR blocks for pages that came without a sidecar (0-based index).
+  const [ocrBlocks, setOcrBlocks] = useState<Map<number, MokuroBlock[]>>(
+    new Map(),
+  );
   const [view, setView] = useState<{ key: string; pages: ViewPage[] } | null>(null);
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   // Zoom + pan over the fitted page set: the wheel zooms toward the cursor,
   // a drag pans while zoomed in. Both reset on every page turn.
-  const [zoomPan, setZoomPan] = useState({ zoom: 1, x: 0, y: 0 });
-  const dragRef = useRef<{ px: number; py: number; moved: boolean } | null>(null);
-  const suppressClickRef = useRef(false);
+  const {
+    zoomPan,
+    zoomed,
+    reset: resetZoomPan,
+    handlers: zoomPanHandlers,
+  } = useZoomPan({ targetRef: outerRef, enabled: record !== null });
   const pageRef = useRef(1);
   const spreadRef = useRef(false);
   const numPagesRef = useRef(1);
@@ -126,6 +140,40 @@ export function MangaReadingView({
       cache.clear();
     };
   }, [bookId]);
+
+  // In-app OCR for sidecar-less pages (lazy): attach what's already computed,
+  // queue detect-only skeletons for the rest as a safety net (the import and
+  // the resume pass normally beat the reader to it), and attach fresh results
+  // live as the worker finishes pages. Recognition itself is the background
+  // march (ocr.ts) plus hover — nothing here re-prioritizes the queue.
+  useEffect(() => {
+    if (!record) return;
+    let alive = true;
+    const missing = record.pages.flatMap((meta, index) =>
+      meta.blocks && meta.blocks.length > 0 ? [] : [index],
+    );
+    void loadMangaOcr(bookId).then((map) => {
+      // Merge, never replace: live page events may have landed after the
+      // storage snapshot was taken — they are newer and must win.
+      if (alive && map.size > 0) {
+        const blocksMap = new Map(
+          [...map].map(([index, rec]) => [index, rec.blocks]),
+        );
+        setOcrBlocks((prev) => new Map([...blocksMap, ...prev]));
+      }
+    });
+    if (missing.length > 0) {
+      enqueueDetect(bookId, missing);
+    }
+    const unsubscribe = onOcrPage((doneBookId, pageIndex, blocks) => {
+      if (doneBookId !== bookId) return;
+      setOcrBlocks((prev) => new Map(prev).set(pageIndex, blocks));
+    });
+    return () => {
+      alive = false;
+      unsubscribe();
+    };
+  }, [record, bookId]);
 
   // Track the stage size: the spread/single decision and the fit scale.
   useEffect(() => {
@@ -237,7 +285,7 @@ export function MangaReadingView({
     if (target === pageRef.current) return;
     pageRef.current = target;
     setPage(target);
-    setZoomPan({ zoom: 1, x: 0, y: 0 });
+    resetZoomPan();
   };
 
   usePagingInput({
@@ -247,74 +295,6 @@ export function MangaReadingView({
     wheel: false,
     onStep: (dir) => goTo(pageRef.current + stepFor(dir)),
   });
-
-  // The wheel zooms toward the cursor (the point under it stays put);
-  // panning clamps loosely to the zoomed content.
-  useEffect(() => {
-    const outer = outerRef.current;
-    if (!outer || !record) return;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const rect = outer.getBoundingClientRect();
-      const px = event.clientX - (rect.left + rect.width / 2);
-      const py = event.clientY - (rect.top + rect.height / 2);
-      setZoomPan((current) => {
-        const factor = Math.exp(-event.deltaY * 0.002);
-        const next = Math.min(5, Math.max(1, current.zoom * factor));
-        if (next === 1) return { zoom: 1, x: 0, y: 0 };
-        const k = next / current.zoom;
-        return {
-          zoom: next,
-          x: px - (px - current.x) * k,
-          y: py - (py - current.y) * k,
-        };
-      });
-    };
-    outer.addEventListener("wheel", onWheel, { passive: false });
-    return () => outer.removeEventListener("wheel", onWheel);
-  }, [record]);
-
-  const clampPan = (zoom: number, x: number, y: number) => {
-    const outer = outerRef.current;
-    if (!outer) return { x, y };
-    const limitX = Math.max(0, (outer.clientWidth * zoom) / 2 - 80);
-    const limitY = Math.max(0, (outer.clientHeight * zoom) / 2 - 80);
-    return {
-      x: Math.min(limitX, Math.max(-limitX, x)),
-      y: Math.min(limitY, Math.max(-limitY, y)),
-    };
-  };
-
-  const onDragStart = (event: PointerEvent<HTMLDivElement>) => {
-    if (zoomPan.zoom <= 1 || event.button !== 0) return;
-    // Don't hijack OCR box interactions.
-    if ((event.target as HTMLElement).closest("[data-ocr-block]")) return;
-    dragRef.current = { px: event.clientX, py: event.clientY, moved: false };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-  const onDragMove = (event: PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const dx = event.clientX - drag.px;
-    const dy = event.clientY - drag.py;
-    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
-    drag.moved = true;
-    drag.px = event.clientX;
-    drag.py = event.clientY;
-    setZoomPan((current) => ({
-      ...current,
-      ...clampPan(current.zoom, current.x + dx, current.y + dy),
-    }));
-  };
-  const onDragEnd = () => {
-    if (dragRef.current?.moved) {
-      suppressClickRef.current = true;
-      window.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 0);
-    }
-    dragRef.current = null;
-  };
 
   if (failed) {
     return (
@@ -329,21 +309,15 @@ export function MangaReadingView({
   return (
     <div
       ref={outerRef}
-      className={`grid h-full w-full place-items-center overflow-hidden ${
-        zoomPan.zoom > 1 ? "cursor-grab active:cursor-grabbing" : ""
+      className={`grid h-full w-full select-none place-items-center overflow-hidden ${
+        zoomed ? "cursor-grab active:cursor-grabbing" : ""
       }`}
       style={{ background: "var(--reading-bg, var(--ds-surface-canvas))" }}
       data-manga-page={view?.pages[0]?.num ?? ""}
-      onPointerDown={onDragStart}
-      onPointerMove={onDragMove}
-      onPointerUp={onDragEnd}
-      onPointerCancel={onDragEnd}
-      onClickCapture={(event) => {
-        if (suppressClickRef.current) {
-          event.stopPropagation();
-          event.preventDefault();
-        }
-      }}
+      // No native drags on the stage, ever: an accidental press-and-move would
+      // otherwise drag the page image (or a stray selection) as a ghost.
+      onDragStart={(event) => event.preventDefault()}
+      {...zoomPanHandlers}
     >
       {view ? (
         <div
@@ -354,6 +328,11 @@ export function MangaReadingView({
         >
           {view.pages.map((viewPage) => {
             const meta = record?.pages[viewPage.num - 1];
+            // The sidecar always wins; in-app OCR fills the pages without one.
+            const fromSidecar = !!(meta?.blocks && meta.blocks.length > 0);
+            const blocks = fromSidecar
+              ? meta.blocks
+              : ocrBlocks.get(viewPage.num - 1);
             return (
               <div
                 key={viewPage.num}
@@ -369,12 +348,16 @@ export function MangaReadingView({
                   className="absolute inset-0 size-full"
                   draggable={false}
                 />
-                {meta?.blocks && meta.blocks.length > 0 ? (
+                {blocks && blocks.length > 0 ? (
                   <MangaOcrOverlay
-                    blocks={meta.blocks}
+                    blocks={blocks}
                     width={viewPage.width}
                     height={viewPage.height}
                     scale={scale}
+                    reestimateFontSize={!fromSidecar}
+                    onRevealBlock={(blockIndex) =>
+                      recognizeBlockNow(bookId, viewPage.num - 1, blockIndex)
+                    }
                   />
                 ) : null}
               </div>

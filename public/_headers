@@ -1,0 +1,7 @@
+# Cross-origin isolation unlocks SharedArrayBuffer → multi-threaded wasm in
+# the OCR workers. Honored by Cloudflare Pages and Netlify; GitHub Pages
+# ignores this file (OCR there just stays single-threaded).
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin

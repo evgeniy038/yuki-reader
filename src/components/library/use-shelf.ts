@@ -11,6 +11,7 @@ import {
 } from "@/core/import-manga";
 import { detectLanguage, seriesShelfId, type Book } from "@/core/library";
 import { normalizeSeriesKey } from "@/core/mokuro";
+import { cancelOcr, trackMangaOcr } from "@/core/ocr/ocr";
 import { deriveToc } from "@/core/reading";
 import type { Chapter, EpubResource, TocEntry } from "@/core/reading";
 import {
@@ -322,7 +323,13 @@ export function useShelf(demoMode: boolean) {
     };
     setBooks((prev) => [book, ...prev]);
     void putBook(record);
-    void putMangaVolume({ id, pages: volume.pages }, volume.blobs);
+    void putMangaVolume({ id, pages: volume.pages }, volume.blobs).then(() => {
+      // Pages without a sidecar go through in-app OCR (the worker needs the
+      // page blobs in place first — hence after the put resolves): detect
+      // boxes for the whole volume, then the background recognition march.
+      // The volume stays gated on the shelf until the detect stage is done.
+      void trackMangaOcr(id);
+    });
   };
 
   /** Mixed drop/selection entry point: book files one way, manga the other. */
@@ -427,6 +434,7 @@ export function useShelf(demoMode: boolean) {
     setBooks((prev) => prev.filter((book) => book.series !== series));
     for (const id of ids) {
       dataRef.current.delete(id);
+      cancelOcr(id);
       void deleteBook(id);
     }
   };
@@ -445,6 +453,7 @@ export function useShelf(demoMode: boolean) {
   const removeBook = (id: string) => {
     setBooks((prev) => prev.filter((book) => book.id !== id));
     dataRef.current.delete(id);
+    cancelOcr(id);
     void deleteBook(id);
   };
 

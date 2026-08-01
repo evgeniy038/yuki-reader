@@ -8,10 +8,12 @@ import { cn } from "@/lib/utils"
 // in 125ms, press is scale 0.97 on a spring (0.94 on a trackpad force
 // press), solid lightens slightly when pressed. will-change-scale is
 // constant, not on :active — the layer must exist before the press,
-// otherwise the first frame re-rasterizes and the icon jerks. Primary — the
-// blue gradient with its shadow set and outline ring; hover is brightness
-// 105%, but not during a press, so the press filter doesn't fight the
-// brightness. Loading doesn't gray the button: variant colors stay, only
+// otherwise the first frame re-rasterizes and the icon jerks. Every filled
+// variant is borderless: its edge is a 1px shadow ring painted OUTSIDE the
+// box (primary keeps the signature blue ring, quiet variants a neutral
+// one), so primary/outline/secondary/destructive all paint the exact same
+// footprint. Hover is brightness 105%, but not during a press, so the press
+// filter doesn't fight the brightness. Loading doesn't gray the button: variant colors stay, only
 // the cursor changes; the only gray state is disabled.
 const buttonVariants = cva(
   "group/button relative inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap btn-transition outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-97 will-change-scale data-[force-press=true]:scale-94 disabled:cursor-not-allowed data-[disabled]:border-transparent data-[disabled]:bg-none data-[disabled]:bg-hover-surface data-[disabled]:text-muted-content data-[disabled]:shadow-none data-[disabled]:text-shadow-none data-[loading]:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -21,13 +23,13 @@ const buttonVariants = cva(
         default:
           "border-0 bg-primary-gradient text-primary-foreground shadow-primary text-shadow-primary hover:not-active:brightness-105 active:press-solid",
         outline:
-          "border-subtle bg-raised shadow-card hover:bg-muted-surface active:bg-hover-surface aria-expanded:bg-muted-surface",
+          "border-0 bg-raised shadow-outline hover:bg-muted-surface active:bg-hover-surface aria-expanded:bg-muted-surface",
         secondary:
-          "bg-muted-surface text-strong hover:bg-hover-surface active:bg-active-surface aria-expanded:bg-hover-surface",
+          "border-0 bg-muted-surface text-strong shadow-secondary hover:bg-hover-surface active:bg-active-surface aria-expanded:bg-hover-surface",
         ghost:
           "text-default hover:bg-hover-surface hover:text-strong active:bg-active-surface aria-expanded:bg-hover-surface aria-expanded:text-strong aria-pressed:bg-hover-surface aria-pressed:text-strong",
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/15 active:bg-destructive/20",
+          "border-0 bg-destructive/10 text-destructive shadow-destructive hover:bg-destructive/15 active:bg-destructive/20",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

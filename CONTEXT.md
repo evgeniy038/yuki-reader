@@ -212,6 +212,101 @@ larger ones. Exiting the reader returns to the series page. In storage a
 volume's page scans live in their own store keyed `bookId/index` — a
 progress save never rewrites megabytes of images.
 
+Scans WITHOUT a sidecar get OCR'd by the app itself (`src/core/ocr/`): the
+ogkalu comic-text-and-bubble-detector (always the FULL build — measured 2x
+better CER than the 11MB "-s" variant; the exact weights follow the
+execution provider, see below) and manga-ocr (224²
+crops, greedy char-WordPiece decode). The decoder is an in-house KV-cache
+merged export (BERT decoder + past key values, `use_cache_branch` — optimum's
+CLI refuses to build past for bert, so it is two manual `torch.onnx.export`
+graphs fused by `merge_decoders`, then int8: Constants and weight Transposes
+must be folded into initializers first or quantize_dynamic sees nothing).
+Every axis is batched, so one run advances a whole 4-crop batch in lockstep
+(rows all start at START together — always rectangular; validated
+token-exact vs solo decode). Merged decode is ~2.6x faster than full-prefix
+at identical CER (the full-prefix fallback is gone — the merged file is the
+only shipped decoder); the file (~30MB) ships same-origin from
+`public/ocr-models/` (Hugging Face has no
+merged variant, and GitHub release assets send no CORS headers — measured —
+so a browser cannot fetch them at all). The recognition encoder picks its
+weights by execution provider (`detectPreferredEp`, cached in localStorage
+`yuki-ocr-ep`): wasm → int8 (fastest CPU GEMM), WebGPU → q4f16 (MatMulNBits
+is the only quantization with a native GPU kernel — measured ~12x faster
+than int8-on-wasm per block, while int8/fp16 on WebGPU are SLOWER than wasm,
+gpuweb#5292). A WebGPU session-build failure falls back to wasm (the q4f16
+MatMulNBits ops run on CPU too). The detector follows the same EP split:
+WebGPU → an in-house fp16 build (~85MB, converted in-house from ogkalu's
+fp32 export, shipped same-origin) measured ~68ms/page — 19x faster than the
+43MB int8 HF build on wasm (~1.3s/page) — at the same boxes (int8 weights on
+WebGPU instead are 2.7x SLOWER than on wasm: their kernels fall back to
+CPU). The decoder always stays on wasm.
+All sessions and tensors inside a worker come from ONE onnxruntime-web build
+(`src/core/ocr/ort-runtime.ts` facade) — mixing Tensor objects across the
+wasm/webgpu builds is unsupported. Sessions are created strictly
+sequentially (ORT rejects concurrent creates outright) and inference runs
+are strictly serialized per worker — measured: two sessions running
+concurrently in one runtime instance crash OrtRun ("__next_prime
+overflow"), and the renderer never recovers. The
+execution topology adapts to the host: when cross-origin isolated (the dev
+server and any host sending COOP/COEP — `public/_headers` covers CF
+Pages/Netlify; GitHub Pages can't), ONE worker runs with half the cores as
+wasm threads — measured optimum on an M3 Pro for the wasm EP: encoder
+~148ms/block vs ~830 single-threaded, ~16.5 pages/min vs ~9 (extra workers
+only fight over the memory bus; threads past the P-core count stall on
+E-core barriers). Without SharedArrayBuffer the runtime clamps to one
+thread, and a small pool of single-threaded workers (3 on 8+ cores, else 2)
+is the fallback. The dev
+server must send COEP on the ORT glue itself — the threaded runtime spawns
+its pthread workers from that URL and worker scripts are COEP-checked as
+frame resources, else session init hangs with no error. The main thread is
+the scheduler: it owns the FIFO queue (hovered blocks jump it, everything
+else waits its turn), downloads the model files once — big ones over
+parallel HTTP ranges, then forever from IndexedDB — and hands each worker
+its own copy of the bytes (~130MB per worker). Per-page results land in
+`mangaOcr` (keyed `bookId/pageIndex`, with an engine version that forces a
+re-run when the pipeline changes). Every sidecar-less volume goes through
+the same pipeline: DETECT writes skeleton blocks for every page (final
+boxes, empty lines — ~10x cheaper), then the recognition MARCH works
+through the remaining pages in order at the back of the queue whenever a
+worker is free, so a volume finishes on its own in a few minutes (~60-70
+pages/min measured on an M3 Pro with WebGPU; blocks go through the encoder
+AND the int8 decoder in 4-crop lockstep batches — the shipped merged
+decoder has a dynamic batch dim, validated token-exact vs solo decode;
+decoder batching is speed-neutral because the per-step cost is GEMM-bound,
+not run overhead — but it collapses the whole decode to one code path; an
+fp16 WebGPU decoder build was measured and rejected: 2-3x slower per step
+than int8 on wasm, the per-step GEMMs are too skinny for GPU dispatch)
+without ever blocking the reader. Hovering a skeleton block recognizes just that crop
+ahead of everything (the box shows an ellipsis only until the text lands,
+sub-second on a free worker). The sidecar always wins. Progress is tracked
+per volume from STORAGE, never from queue length (`trackMangaOcr` counts
+sidecar-less pages vs `loadMangaOcrFlags`): the queue panel at the bottom
+right (`ocr-queue-panel.tsx`) lists every unfinished volume — the first one
+featured with cover and progress bar, the queue below, finished volumes
+leaving with a check — and folds into a summary pill with a blur collapse
+(expanded on the shelf, collapsed over the reader; hidden when idle). A
+volume stays GATED on the series page (frosted cover, spinner, no entry)
+until its detect stage completes; recognition runs while you read. After a
+reload `resumeMangaOcr` re-registers every unfinished volume from storage
+and the march continues where it stopped. Deleting a volume cancels its
+queue and cascades the OCR store. `?ocrPool=N`, `?ocrThreads=M` and `?ocrDebug=1` (per-stage
+page timings) exist for probes. The greedy decoder carries a runaway guard:
+on non-text texture the model loops (300 dots, ははは…, 第条第条… — fp32
+weights loop on the same pages, so it is structural), and the loop is cut at
+15 same tokens or a 2..4-token cycle of 12+, keeping 3 tokens/one cycle.
+
+Accuracy is measured, not guessed: `tests/ocr-quality.ts` reruns the shipped
+pipeline in Node over whole volumes and scores it against `.mokuro`
+references and vision-verified golden files (`tests/golden/`), with a
+`--gate` mode (recall/CER/runaway thresholds, exit 1). Full-volume A/B on
+kaguya-01: fp32 recognition buys ~2.5pp CER for 4× the bytes (rejected);
+the full 43MB detector halves CER vs the shipped 11MB one (0.077 vs 0.157)
+at ~2× extra false-positive blocks — and feeding mokuro's boxes to our
+encoder fixes «英検»-class misreads, i.e. box quality, not the recognizer,
+is the bottleneck. Line-level (mokuro-style per-line) OCR is the known next
+lever for dense small text (profile pages, colophons).
+
+
 ## Reading position
 
 Opening a book resumes where you stopped: the position is stored as 0..1

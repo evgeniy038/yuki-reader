@@ -70,6 +70,29 @@ async function imageCount(page: Page): Promise<number> {
   return page.locator("[data-manga-page] img").count();
 }
 
+// The rendered text of the first text-bearing block stays inside its box —
+// the shrink-to-fit must leave no overflow in any direction (vertical text
+// overflows leftward, so measure the text's Range rect, not scrollWidth).
+async function textFitsBox(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const block = [...document.querySelectorAll("[data-ocr-block]")].find(
+      (candidate) => candidate.querySelector("p"),
+    );
+    const inner = block?.querySelector("div");
+    if (!block || !inner) return false;
+    const range = document.createRange();
+    range.selectNodeContents(inner);
+    const text = range.getBoundingClientRect();
+    const box = block.getBoundingClientRect();
+    return (
+      text.left - box.left >= -2 &&
+      text.top - box.top >= -2 &&
+      box.right - text.right >= -2 &&
+      box.bottom - text.bottom >= -2
+    );
+  });
+}
+
 // Wait until the reader shows the requested first page — blob loads are async.
 async function settleOnPage(page: Page, expected: number): Promise<void> {
   await page.waitForFunction(
@@ -194,6 +217,7 @@ async function main(): Promise<void> {
     pinnedOpacity === "1" && (await currentPage(page)) === 1,
     "ocr: click pins the box without flipping the page",
   );
+  check(await textFitsBox(page), "ocr: revealed text fits its box");
 
   // RTL navigation: ArrowLeft goes FORWARD, to the [2,3] spread on wide
   // screens — the earlier page sits on the right.
@@ -299,7 +323,10 @@ async function main(): Promise<void> {
     );
     await kaguyaTile.click();
     await page.waitForTimeout(500);
-    await page.locator("[data-book-id]").first().click();
+    // A fresh archive volume is gated (aria-disabled) until the detect pass
+    // covers every page — this click waits the gate out (the first run also
+    // downloads the OCR models; ~5 min for a 200-page volume).
+    await page.locator("[data-book-id]").first().click({ timeout: 600_000 });
     await page.waitForSelector("[data-manga-page] img", { timeout: 60_000 });
     await settleOnPage(page, 1);
     const zipRendered = await page.evaluate(() => {
@@ -307,10 +334,31 @@ async function main(): Promise<void> {
       return img ? img.complete && img.naturalWidth > 0 : false;
     });
     check(zipRendered, "zip: scan page renders (junk entries skipped)");
-    check(
-      (await page.locator("[data-ocr-block]").count()) === 0,
-      "zip: no sidecar, no overlay",
-    );
+    // No sidecar in the archive: the in-app OCR worker fills the gap (the
+    // first run includes the model download — hence the long wait).
+    const ocrCame = await page
+      .waitForSelector("[data-ocr-block]", { timeout: 300_000 })
+      .then(() => true, () => false);
+    check(ocrCame, "zip: in-app OCR overlays the sidecar-less page");
+    // Lazy OCR: blocks may appear as detect-only skeletons; hovering one
+    // recognizes just that crop (or the background march got there first).
+    if (ocrCame) {
+      await page.locator("[data-ocr-block]").first().hover();
+      const hoverFilled = await page
+        .waitForFunction(
+          () => {
+            const el = document.querySelector("[data-ocr-block] p");
+            return !!el && !!el.textContent && el.textContent.trim().length > 0;
+          },
+          undefined,
+          { timeout: 120_000 },
+        )
+        .then(() => true, () => false);
+      check(hoverFilled, "zip: hover reveals recognized text");
+      if (hoverFilled) {
+        check(await textFitsBox(page), "zip: recognized text fits its box");
+      }
+    }
     await exitToShelf(page);
 
     // Duplicate import: rejected with a notice, no new tile.

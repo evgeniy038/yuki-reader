@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { MokuroBlock } from "@/core/mokuro";
+import { fontSizeFor } from "@/core/ocr/font-size";
+import { OcrBlockBox } from "./ocr-block-box";
 
 // OCR overlay for one manga page: the text boxes from the sidecar, laid over
 // the scan in SOURCE-IMAGE pixel coordinates — the inner layer is natural-size
@@ -8,11 +10,22 @@ import type { MokuroBlock } from "@/core/mokuro";
 // readable); a click pins a box open (and stops the page-turn click), which
 // also makes its lines selectable. Smaller boxes stack above larger ones
 // (z by descending area) so inner bubbles win over their containers.
+//
+// Hover is JS state, not CSS :hover: only the topmost box under the cursor
+// opens, and a box can never stick open — the state dies with the overlay on
+// every page turn. Leave clears only its own box, so crossing between
+// overlapping boxes can't clobber the fresh hover.
+//
+// Lazy OCR: a block with empty lines is a detect-only skeleton — hovering it
+// fires onRevealBlock so the worker recognizes just this crop, and the box
+// shows an ellipsis until the text lands (the reader swaps the blocks in).
 export function MangaOcrOverlay({
   blocks,
   width,
   height,
   scale,
+  reestimateFontSize = false,
+  onRevealBlock,
 }: {
   blocks: MokuroBlock[];
   /** Natural image size the box coordinates refer to. */
@@ -20,8 +33,15 @@ export function MangaOcrOverlay({
   height: number;
   /** Displayed-pixels per source-pixel. */
   scale: number;
+  /** In-app OCR blocks only: recompute the font estimate at render time, so
+      boxes cached by older engines pick up the current estimator. Sidecar
+      blocks keep their exact font size. */
+  reestimateFontSize?: boolean;
+  /** Hover on a not-yet-recognized skeleton block. */
+  onRevealBlock?: (blockIndex: number) => void;
 }) {
   const [pinned, setPinned] = useState<number | null>(null);
+  const [hovered, setHovered] = useState<number | null>(null);
   // Biggest first in the DOM, so stacking order = ascending area.
   const order = blocks
     .map((block, index) => ({ block, index }))
@@ -41,42 +61,29 @@ export function MangaOcrOverlay({
       >
         {order.map(({ block, index }, stack) => {
           const [x1, y1, x2, y2] = block.box;
-          const open = pinned === index;
+          const fontSize = reestimateFontSize
+            ? fontSizeFor(x2 - x1, y2 - y1, block.lines.join("").length)
+            : block.font_size;
           return (
-            // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-            <div
+            <OcrBlockBox
               key={index}
-              data-ocr-block=""
-              className="group/ocr absolute cursor-text overflow-hidden"
-              style={{
-                left: x1,
-                top: y1,
-                width: Math.max(1, x2 - x1),
-                height: Math.max(1, y2 - y1),
-                zIndex: 10 + stack,
-                fontSize: block.font_size,
-                lineHeight: 1.1,
-                writingMode: block.vertical ? "vertical-rl" : undefined,
+              block={block}
+              index={index}
+              zIndex={10 + stack}
+              fontSize={fontSize}
+              open={pinned === index || hovered === index}
+              onEnter={(i) => {
+                setHovered(i);
+                if (block.lines.length === 0) onRevealBlock?.(i);
               }}
-              onClick={(event) => {
-                event.stopPropagation();
-                setPinned((current) => (current === index ? null : index));
+              onLeave={(i) =>
+                setHovered((current) => (current === i ? null : current))
+              }
+              onToggle={(i) => {
+                if (block.lines.length === 0) onRevealBlock?.(i);
+                setPinned((current) => (current === i ? null : i));
               }}
-            >
-              <div
-                className={`size-full transition-opacity duration-100 ${
-                  open
-                    ? "bg-white/95 text-black opacity-100"
-                    : "text-transparent opacity-0 group-hover/ocr:bg-white/95 group-hover/ocr:text-black group-hover/ocr:opacity-100"
-                }`}
-              >
-                {block.lines.map((line, lineIndex) => (
-                  <p key={lineIndex} className="m-0">
-                    {line}
-                  </p>
-                ))}
-              </div>
-            </div>
+            />
           );
         })}
       </div>

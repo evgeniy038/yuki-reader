@@ -174,6 +174,23 @@ export const en = {
     larger: "larger",
   },
   drop: "Drop to open",
+  ocr: {
+    models: "Downloading OCR models… {{percent}}%",
+    modelsRow: "OCR models",
+    error: "OCR failed: {{message}}",
+    title: "Processing",
+    volumes_one: "{{count, number}} volume",
+    volumes_few: "{{count, number}} volumes",
+    volumes_many: "{{count, number}} volumes",
+    volumes_other: "{{count, number}} volumes",
+    stage: {
+      detect: "Scanning pages",
+      recognize: "Recognizing text",
+    },
+    expand: "Show details",
+    collapse: "Hide details",
+    allDone: "All done",
+  },
   manga: {
     volumeCount_one: "{{count, number}} volume",
     volumeCount_few: "{{count, number}} volumes",

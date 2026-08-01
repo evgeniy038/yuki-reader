@@ -10,6 +10,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { DashRing } from "@/components/ui/dash-ring";
 import { BookCover } from "./book-cover";
 
 // A book on the shelf: cover, title, author, reading state (percent while
@@ -18,9 +19,12 @@ import { BookCover } from "./book-cover";
 // the cover with a shadow, press settles the tile.
 // `subtitle` overrides the author line (manga volumes show "Vol N" there);
 // `menuExtra` inserts extra context-menu items before the destructive zone.
+// `busy` (manga volumes mid-detect) frosts the cover with a spinner — the
+// volume can't be opened until its pages have OCR boxes.
 export function BookTile({
   book,
   flash = false,
+  busy = false,
   subtitle,
   menuExtra,
   onOpen,
@@ -31,6 +35,7 @@ export function BookTile({
 }: {
   book: Book;
   flash?: boolean;
+  busy?: boolean;
   subtitle?: string;
   menuExtra?: ReactNode;
   onOpen?: () => void;
@@ -51,11 +56,19 @@ export function BookTile({
   const content = (
     <>
       <div
-        className={`rounded-media transition-shadow group-hover:shadow-floating ${
+        className={`relative rounded-media transition-shadow group-hover:shadow-floating ${
           flash ? "animate-pulse ring-2" : ""
         }`}
       >
         <BookCover book={book} />
+        {busy ? (
+          <div
+            data-ocr-gated=""
+            className="absolute inset-0 grid place-items-center rounded-media bg-black/45 backdrop-blur-[2px]"
+          >
+            <DashRing className="size-6 text-white" />
+          </div>
+        ) : null}
       </div>
       <p className="mt-3 truncate text-sm text-strong" title={book.title}>
         {book.title}
@@ -64,7 +77,7 @@ export function BookTile({
         {sub}
       </p>
       <p className="mt-0.5 truncate text-xs text-muted-content tabular-nums">
-        {stateLabel || " "}
+        {busy ? t("ocr.stage.detect") : stateLabel || " "}
       </p>
     </>
   );
@@ -85,7 +98,10 @@ export function BookTile({
           <button
             type="button"
             onClick={onOpen}
-            className="group flex w-full cursor-pointer flex-col text-left transition-transform active:scale-98"
+            aria-disabled={busy || undefined}
+            className={`group flex w-full flex-col text-left transition-transform ${
+              busy ? "cursor-default" : "cursor-pointer active:scale-98"
+            }`}
             data-book-id={book.id}
           />
         }

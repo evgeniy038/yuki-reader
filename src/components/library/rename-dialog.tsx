@@ -62,7 +62,7 @@ export function RenameDialog({
             onChange={(event) => setValue(event.target.value)}
           />
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="secondary" onClick={onClose}>
               {t("library.delete.cancel")}
             </Button>
             <Button type="submit">{t("library.rename.save")}</Button>

@@ -1,0 +1,813 @@
+{
+  "series": "steinsgate",
+  "volume": "01",
+  "source": "vision transcription (no .mokuro reference exists for this volume)",
+  "note": "boxes are null — to be filled by matching against an OCR run (tests/ocr-quality.ts --vol steinsgate). Blocks are in reading order per page.",
+  "pages": [
+    {
+      "page": 3,
+      "img": "22002_00_002.jpg",
+      "blocks": [
+        {
+          "box": null,
+          "text": "この作品はフィクションです",
+          "src": "vision (no box: undetected)"
+        },
+        {
+          "box": null,
+          "text": "実在の人物・団体・事件などには、いっさい関係ありません。",
+          "src": "vision (no box: undetected)"
+        }
+      ]
+    },
+    {
+      "page": 20,
+      "img": "22002_00_019.jpg",
+      "blocks": [
+        {
+          "box": [
+            216,
+            187,
+            291,
+            402
+          ],
+          "text": "……は?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1169,
+            150,
+            1226,
+            360
+          ],
+          "text": "………",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1207,
+            577,
+            1305,
+            670
+          ],
+          "text": "何",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            881,
+            651,
+            977,
+            794
+          ],
+          "text": "誰?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1207,
+            577,
+            1305,
+            670
+          ],
+          "text": "何!?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1151,
+            931,
+            1316,
+            1389
+          ],
+          "text": "実体が!!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            89,
+            929,
+            263,
+            1322
+          ],
+          "text": "ある!!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            357,
+            985,
+            416,
+            1116
+          ],
+          "text": "ひっ…!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1263,
+            1574,
+            1344,
+            1893
+          ],
+          "text": "どういうことだ",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1169,
+            150,
+            1226,
+            360
+          ],
+          "text": "!?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            874,
+            1644,
+            990,
+            1888
+          ],
+          "text": "幽霊ではないのか!?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            667,
+            1617,
+            829,
+            1797
+          ],
+          "text": "おのれは警察に突き出されたいのか!?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            127,
+            1609,
+            259,
+            1929
+          ],
+          "text": "俺はっ…確かに見たのだ!!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        }
+      ]
+    },
+    {
+      "page": 51,
+      "img": "22002_00_050.jpg",
+      "blocks": [
+        {
+          "box": [
+            1214,
+            208,
+            1315,
+            383
+          ],
+          "text": "あとそれも!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1019,
+            255,
+            1204,
+            489
+          ],
+          "text": "私のマイスプーンなんだから返して!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            724,
+            193,
+            931,
+            474
+          ],
+          "text": "どこにも名前など書いとらんではないかァ〜〜〜",
+          "src": "vision (box from steinsgate-q8-s, cer=0.136)"
+        },
+        {
+          "box": [
+            691,
+            708,
+            842,
+            985
+          ],
+          "text": "うるさい!勝手に使わないでっ!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            556,
+            191,
+            658,
+            496
+          ],
+          "text": "その言葉聞き捨てならん!",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            350,
+            226,
+            536,
+            529
+          ],
+          "text": "貴様こそラボのフォークを勝手に使っているだろう!?",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            128,
+            198,
+            282,
+            546
+          ],
+          "text": "マイフォーク持ってないんだから仕方ないでしょっ",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1183,
+            1056,
+            1314,
+            1465
+          ],
+          "text": "えぇぇ〜いやかましいっ!!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.182)"
+        },
+        {
+          "box": [
+            1000,
+            1076,
+            1176,
+            1468
+          ],
+          "text": "心の狭い奴めッ貴様に譲り合いの精神はないのかッ!?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            691,
+            1086,
+            844,
+            1494
+          ],
+          "text": "マッドサイエンティストがなに平和なこと言ってんのよっ!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            509,
+            1236,
+            625,
+            1435
+          ],
+          "text": "いいから返しっ…",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            381,
+            1472,
+            446,
+            1648
+          ],
+          "text": "おっ…",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        }
+      ]
+    },
+    {
+      "page": 80,
+      "img": "22002_00_079.jpg",
+      "blocks": [
+        {
+          "box": [
+            1210,
+            144,
+            1315,
+            388
+          ],
+          "text": "まゆりを助けるために",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            812,
+            302,
+            922,
+            509
+          ],
+          "text": "岡部は必死だった",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            703,
+            146,
+            765,
+            350
+          ],
+          "text": "当たり前だ",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            595,
+            254,
+            698,
+            522
+          ],
+          "text": "それだけ彼女が...まゆりが",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            151,
+            171,
+            321,
+            484
+          ],
+          "text": "岡部にとって幼馴染であり大切な存在だから",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            1067,
+            662,
+            1198,
+            912
+          ],
+          "text": "私は…どうだろうか",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            815,
+            601,
+            903,
+            819
+          ],
+          "text": "アメリカからやってきて",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            729,
+            779,
+            828,
+            954
+          ],
+          "text": "突然の出会いで",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            161,
+            628,
+            358,
+            878
+          ],
+          "text": "まともに話をするようになってからまだ2週間",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            1269,
+            1071,
+            1351,
+            1319
+          ],
+          "text": "もし私が...",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            703,
+            1265,
+            898,
+            1604
+          ],
+          "text": "まゆりのように未来で死ぬことがあったら岡部は...",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            658,
+            1668,
+            773,
+            1974
+          ],
+          "text": "こんなふうに必死になって私を",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            128,
+            1135,
+            266,
+            1466
+          ],
+          "text": "助けてくれたりするんだろうか",
+          "src": "vision (column of split bubble)"
+        }
+      ]
+    },
+    {
+      "page": 100,
+      "img": "22002_00_099.jpg",
+      "blocks": [
+        {
+          "box": [
+            1228,
+            142,
+            1363,
+            308
+          ],
+          "text": "でも...あの日",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            1046,
+            252,
+            1219,
+            427
+          ],
+          "text": "私の11歳の誕生日:",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            165,
+            130,
+            343,
+            419
+          ],
+          "text": "珍しいわねスカートなんて",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1204,
+            526,
+            1345,
+            801
+          ],
+          "text": "お誕生日だからってめかしこんじゃって…ふふっ…",
+          "src": "vision (box from steinsgate-q8-s, cer=0.143)"
+        },
+        {
+          "box": [
+            909,
+            838,
+            1034,
+            1071
+          ],
+          "text": "それだけじゃないわ",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            135,
+            1411,
+            268,
+            1672
+          ],
+          "text": "うんっ",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1187,
+            1132,
+            1345,
+            1390
+          ],
+          "text": "パパに見てもらいたいものができたのっ",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            911,
+            1622,
+            1079,
+            1970
+          ],
+          "text": "忙しいんだからあんまり邪魔しちゃダメよ?",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        }
+      ]
+    },
+    {
+      "page": 130,
+      "img": "22002_00_129.jpg",
+      "blocks": [
+        {
+          "box": [
+            20,
+            1922,
+            708,
+            2159
+          ],
+          "text": "0.571046",
+          "src": "vision (box from steinsgate-q8-s, cer=0.143)"
+        }
+      ]
+    },
+    {
+      "page": 160,
+      "img": "22002_00_159.jpg",
+      "blocks": [
+        {
+          "box": [
+            1231,
+            184,
+            1354,
+            454
+          ],
+          "text": "厨二はいいから早く聞かせて!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            771,
+            185,
+            877,
+            451
+          ],
+          "text": "もーっわかったニャン",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            403,
+            112,
+            696,
+            436
+          ],
+          "text": "パパはレトロPCやレトロ家電の収集マニアなのニャ",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1168,
+            552,
+            1291,
+            800
+          ],
+          "text": "んしょっこれで聞くのニャン",
+          "src": "vision (box fragment from steinsgate-q8-s)"
+        },
+        {
+          "box": [
+            745,
+            534,
+            867,
+            756
+          ],
+          "text": "見るからに古そうね…",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            173,
+            1140,
+            338,
+            1359
+          ],
+          "text": "準備完了ニャ",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": null,
+          "text": "パチンッ",
+          "src": "vision (no box: undetected)"
+        },
+        {
+          "box": null,
+          "text": "ガシャ…",
+          "src": "vision (no box: undetected)"
+        },
+        {
+          "box": [
+            1169,
+            1553,
+            1339,
+            1873
+          ],
+          "text": "覚悟はいいかニャクリスティーニャン",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1002,
+            1696,
+            1150,
+            2022
+          ],
+          "text": "これを聞いたらもう後戻りは…",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            174,
+            1566,
+            327,
+            1912
+          ],
+          "text": "そういうのはもういいから…",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        }
+      ]
+    },
+    {
+      "page": 190,
+      "img": "22002_00_189.jpg",
+      "blocks": [
+        {
+          "box": [
+            1266,
+            169,
+            1352,
+            342
+          ],
+          "text": "知ってるわこれ...",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            1135,
+            194,
+            1252,
+            402
+          ],
+          "text": "幸せを呼ぶお守り!",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            844,
+            302,
+            968,
+            521
+          ],
+          "text": "さすがは私の娘だ!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            643,
+            140,
+            798,
+            459
+          ],
+          "text": "ヨーロッパでは幸せをすくうという意味で",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            158,
+            240,
+            303,
+            505
+          ],
+          "text": "縁起物と言われている",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            1222,
+            588,
+            1349,
+            812
+          ],
+          "text": "嬉しい!…でも",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            1013,
+            649,
+            1205,
+            970
+          ],
+          "text": "スプーンだけじゃごはん食べづらいな…",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            531,
+            657,
+            816,
+            1020
+          ],
+          "text": "来年はおそろいのフォークを",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            145,
+            814,
+            509,
+            1210
+          ],
+          "text": "お前にプレゼントしてやろう紅莉栖!",
+          "src": "vision (column of split bubble)"
+        },
+        {
+          "box": [
+            1098,
+            1654,
+            1293,
+            1936
+          ],
+          "text": "はっはっは!それもそうだな",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            948,
+            1782,
+            1074,
+            2023
+          ],
+          "text": "…よし!",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        }
+      ]
+    },
+    {
+      "page": 210,
+      "img": "22002_00_209.jpg",
+      "blocks": [
+        {
+          "box": [
+            14,
+            1932,
+            702,
+            2159
+          ],
+          "text": "0.571046",
+          "src": "vision (box from steinsgate-q8-s, cer=0.143)"
+        }
+      ]
+    },
+    {
+      "page": 224,
+      "img": "22002_00_223.jpg",
+      "blocks": [
+        {
+          "box": [
+            420,
+            45,
+            677,
+            1240
+          ],
+          "text": "ムネアツ展開。",
+          "src": "vision (box from steinsgate-q8-s, cer=0.000)"
+        },
+        {
+          "box": [
+            37,
+            1263,
+            659,
+            1353
+          ],
+          "text": "科学アドベンチャーシリーズ好評連載中!!",
+          "src": "vision (box fragment from steinsgate-q8-s)"
+        },
+        {
+          "box": null,
+          "text": "Robotics;Notes REVIVAL LEGACY 原作:5pb. 漫画:シヒラ竜也",
+          "src": "vision (no box: undetected)"
+        },
+        {
+          "box": null,
+          "text": "Steins;Gate 哀心迷図のバベル 原作:5pb.×ニトロプラス 漫画:成家慎一郎",
+          "src": "vision (no box: undetected)"
+        },
+        {
+          "box": null,
+          "text": "毎月19日発売",
+          "src": "vision (no box: undetected)"
+        },
+        {
+          "box": null,
+          "text": "ウルトラジャンプ",
+          "src": "vision (no box: undetected)"
+        },
+        {
+          "box": null,
+          "text": "公式サイト http://ultra.shueisha.co.jp/ 集英社",
+          "src": "vision (no box: undetected)"
+        }
+      ]
+    }
+  ]
+}

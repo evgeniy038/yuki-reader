@@ -42,6 +42,7 @@ import {
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { BookTile } from "./book-tile";
 import { RenameDialog } from "./rename-dialog";
+import { useOcrBooks } from "@/components/use-ocr-books";
 import {
   PageActions,
   PageContent,
@@ -137,6 +138,19 @@ export function MangaPage({
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragIndexRef = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Volumes in the detect stage have no OCR boxes yet — they're gated on the
+  // shelf (frosted cover, no entry) until every page is scanned.
+  const ocrBooks = useOcrBooks();
+  const gatedIds = useMemo(
+    () =>
+      new Set(
+        ocrBooks
+          .filter((entry) => entry.stage === "detect")
+          .map((entry) => entry.bookId),
+      ),
+    [ocrBooks],
+  );
 
   // The last volume left (or a bad URL): nothing to show here.
   useEffect(() => {
@@ -264,6 +278,7 @@ export function MangaPage({
             >
               <BookTile
                 book={volume}
+                busy={gatedIds.has(volume.id)}
                 subtitle={
                   volume.volumeIndex !== undefined
                     ? t("manga.volume", { index: volume.volumeIndex })
@@ -281,7 +296,9 @@ export function MangaPage({
                     {t("manga.moveToSeries")}
                   </ContextMenuItem>
                 }
-                onOpen={() => onOpenBook(volume.id)}
+                onOpen={() => {
+                  if (!gatedIds.has(volume.id)) onOpenBook(volume.id);
+                }}
                 onRename={() => setRenamingId(volume.id)}
                 onDelete={() => setDeletingId(volume.id)}
               />
@@ -366,7 +383,7 @@ export function MangaPage({
               <DialogFooter>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="secondary"
                   onClick={() => setMovingId(null)}
                 >
                   {t("library.delete.cancel")}
@@ -465,7 +482,7 @@ export function MangaPage({
               <DialogFooter>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="secondary"
                   onClick={() => setMovingSeries(false)}
                 >
                   {t("library.delete.cancel")}

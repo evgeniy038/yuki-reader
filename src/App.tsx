@@ -19,9 +19,11 @@ import {
   type ReadingSettings,
 } from "@/core/reading-settings";
 import { saveProgress } from "@/core/storage";
+import { resumeMangaOcr } from "@/core/ocr/ocr";
 import { LibraryPage } from "@/components/library/library-page";
 import { MangaPage } from "@/components/library/manga-page";
 import { NavPill, type AppView } from "@/components/library/nav-pill";
+import { OcrQueuePanel } from "@/components/ocr-queue-panel";
 import { SettingsPage } from "@/components/library/settings-page";
 import { StatsView } from "@/components/library/stats-view";
 import { useShelf } from "@/components/library/use-shelf";
@@ -100,6 +102,12 @@ export default function App() {
 
   const { dragging, handlers: dropHandlers } = useFileDrop(shelf.importFiles);
 
+  // After a reload the OCR queue is gone but the results are not — rebuild
+  // the march for every unfinished volume from storage.
+  useEffect(() => {
+    resumeMangaOcr();
+  }, []);
+
   const getBookData = useCallback(
     (id: string) => shelf.dataRef.current.get(id),
     [shelf.dataRef],
@@ -150,21 +158,24 @@ export default function App() {
 
   if (openedBook && openedData) {
     return (
-      <ReaderScreen
-        book={openedBook}
-        data={openedData}
-        settings={readingSettings}
-        onSettingsChange={setReadingSettings}
-        onProgress={updateProgress}
-        onExit={() =>
-          // A manga volume exits to its series, not all the way to the shelf.
-          openedBook.format === "manga" && openedBook.series
-            ? navigate(
-                `/manga/${encodeURIComponent(normalizeSeriesKey(openedBook.series))}`,
-              )
-            : navigate("/")
-        }
-      />
+      <>
+        <ReaderScreen
+          book={openedBook}
+          data={openedData}
+          settings={readingSettings}
+          onSettingsChange={setReadingSettings}
+          onProgress={updateProgress}
+          onExit={() =>
+            // A manga volume exits to its series, not all the way to the shelf.
+            openedBook.format === "manga" && openedBook.series
+              ? navigate(
+                  `/manga/${encodeURIComponent(normalizeSeriesKey(openedBook.series))}`,
+                )
+              : navigate("/")
+          }
+        />
+        <OcrQueuePanel books={shelf.books} defaultCollapsed />
+      </>
     );
   }
 
@@ -257,6 +268,7 @@ export default function App() {
         view={view}
         onViewChange={(next) => navigate(next === "library" ? "/" : `/${next}`)}
       />
+      <OcrQueuePanel books={shelf.books} />
       {dragging ? (
         <div className="fixed inset-0 z-40 grid place-items-center bg-scrim animate-in fade-in-0 duration-100">
           <p className="rounded-card bg-raised px-6 py-3 text-sm text-strong animate-in fade-in-0 zoom-in-95 duration-100">

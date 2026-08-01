@@ -78,14 +78,23 @@
     0 1px 3px oklch(0% 0 0 / 0.1), 0 1px 2px -1px oklch(0% 0 0 / 0.1);
 
   /* Primary CTA: light blue ladder (gradient in utilities.css); the shadow
-     set — inner white highlight, the signature blue edge and a micro-drop;
-     the edge sits INSIDE the box (inset), so the button's visual footprint
-     matches the outline/ghost variants exactly. Text carries a half-pixel
-     shadow for readability on the gradient. */
+     set — inner white highlight, micro-shadows and the signature outline
+     ring; the ring sits between the gradient stops by lightness
+     (69.1 → 64.6 → 60.5). Text carries a half-pixel shadow for readability
+     on the gradient. The ring paints OUTSIDE the box — and every other
+     filled button variant carries its own 1px outer ring (below), so all
+     variants paint the exact same footprint. */
   --shadow-primary:
-    inset 0 1px 1px rgb(255 255 255 / 0.18),
-    inset 0 0 0 1px oklch(64.6% 0.178 252.4),
-    0 1px 2px rgb(0 0 0 / 0.08);
+    inset 0 0 1px 1px rgb(255 255 255 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.08),
+    0 2px 2px rgb(0 0 0 / 0.04), 0 0 0 1px oklch(64.6% 0.178 252.4);
+  /* Quiet variants: the same 1px outer edge in the neutral border tone
+     (destructive tints its own). The edge is the variant's only border —
+     the variants are borderless and the fill reaches the box edge. */
+  --shadow-outline:
+    0 0 0 1px var(--ds-border-subtle), 0 1px 2px oklch(0% 0 0 / 0.05);
+  --shadow-secondary: 0 0 0 1px var(--ds-border-subtle);
+  --shadow-destructive:
+    0 0 0 1px color-mix(in oklab, var(--color-destructive) 20%, transparent);
   --text-shadow-primary: 0 0.5px oklch(23% 0.075 255 / 0.33);
 
   /* shadcn (base-vega) token aliases — official component classes resolve to

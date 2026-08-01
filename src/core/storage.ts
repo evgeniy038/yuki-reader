@@ -1,5 +1,6 @@
 import { openDB, type DBSchema } from "idb";
 import type { BookFormat, Language } from "./library";
+import type { MokuroBlock } from "./mokuro";
 import type { Chapter, EpubResource, TocEntry } from "./reading";
 import type { MangaStoredPage } from "./import-manga";
 import {
@@ -49,11 +50,31 @@ export interface MangaRecord {
   pages: MangaStoredPage[];
 }
 
+/** In-app OCR result for one manga page (the app-generated counterpart of a
+    .mokuro sidecar page). Keyed `${bookId}/${pageIndex}` like the page blobs. */
+export interface MangaOcrRecord {
+  blocks: MokuroBlock[];
+  /** Pipeline version — a bump re-runs OCR for pages stored by an older one. */
+  engine: number;
+  /** Detect-only skeletons (lazy OCR): boxes/vertical/font_size are final,
+      lines are empty until recognized — on hover, in the reading window, or
+      by the background catch-up pass. */
+  partial?: boolean;
+}
+
+/** Cached OCR model file (downloaded from Hugging Face once, reused forever). */
+export interface OcrModelRecord {
+  url: string;
+  bytes: Uint8Array;
+}
+
 interface YukiDB extends DBSchema {
   books: { key: string; value: BookRecord };
   stats: { key: string; value: DailyStats };
   manga: { key: string; value: MangaRecord };
   mangaPages: { key: string; value: Blob };
+  mangaOcr: { key: string; value: MangaOcrRecord };
+  ocrModels: { key: string; value: OcrModelRecord };
 }
 
 const DB_NAME = "yuki";
@@ -63,11 +84,13 @@ const LEGACY_DICTS = "dicts";
 const STATS = "stats";
 const MANGA = "manga";
 const MANGA_PAGES = "mangaPages";
+const MANGA_OCR = "mangaOcr";
+const OCR_MODELS = "ocrModels";
 
 let dbPromise: ReturnType<typeof openDB<YukiDB>> | null = null;
 function open() {
   if (!dbPromise) {
-    dbPromise = openDB<YukiDB>(DB_NAME, 5, {
+    dbPromise = openDB<YukiDB>(DB_NAME, 6, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1 && !db.objectStoreNames.contains(BOOKS)) {
           db.createObjectStore(BOOKS, { keyPath: "id" });
@@ -91,6 +114,16 @@ function open() {
           }
           if (!db.objectStoreNames.contains(MANGA_PAGES)) {
             db.createObjectStore(MANGA_PAGES);
+          }
+        }
+        // v6: in-app manga OCR — per-page results (`${bookId}/${pageIndex}`)
+        // and the downloaded model files (keyed by their URL).
+        if (oldVersion < 6) {
+          if (!db.objectStoreNames.contains(MANGA_OCR)) {
+            db.createObjectStore(MANGA_OCR);
+          }
+          if (!db.objectStoreNames.contains(OCR_MODELS)) {
+            db.createObjectStore(OCR_MODELS, { keyPath: "url" });
           }
         }
       },
@@ -180,18 +213,107 @@ export async function loadMangaPageBlob(
   return db.get(MANGA_PAGES, `${id}/${index}`);
 }
 
-/** Drop a volume's metadata and every page blob (id is a book id). */
+/** Drop a volume's metadata, every page blob and its OCR results (id is a
+    book id). */
 export async function deleteManga(id: string): Promise<void> {
   const db = await open();
-  const tx = db.transaction([MANGA, MANGA_PAGES], "readwrite");
+  const tx = db.transaction([MANGA, MANGA_PAGES, MANGA_OCR], "readwrite");
   await tx.objectStore(MANGA).delete(id);
   const range = IDBKeyRange.bound(`${id}/`, `${id}/￿`);
-  let cursor = await tx.objectStore(MANGA_PAGES).openCursor(range);
-  while (cursor) {
-    await cursor.delete();
-    cursor = await cursor.continue();
+  for (const storeName of [MANGA_PAGES, MANGA_OCR] as const) {
+    let cursor = await tx.objectStore(storeName).openCursor(range);
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
+    }
   }
   await tx.done;
+}
+
+// --- In-app manga OCR --------------------------------------------------------
+
+/** Current OCR pipeline version. Results stored with an older engine are
+    treated as missing and re-run. 2 = decoder runaway guard, 3 = lazy OCR
+    (detect-only skeleton records + KV-cache merged decoder), 4 = full 43MB
+    detector (measured 2x better CER). */
+export const OCR_ENGINE = 4;
+
+export async function putMangaOcr(
+  bookId: string,
+  pageIndex: number,
+  blocks: MokuroBlock[],
+  partial = false,
+): Promise<void> {
+  const db = await open();
+  await db.put(
+    MANGA_OCR,
+    { blocks, engine: OCR_ENGINE, ...(partial ? { partial: true } : {}) },
+    `${bookId}/${pageIndex}`,
+  );
+}
+
+/** One page's OCR record (blocks + partial flag), or undefined when not
+    computed yet (or stale). */
+export async function loadMangaOcrPage(
+  bookId: string,
+  pageIndex: number,
+): Promise<MangaOcrRecord | undefined> {
+  const db = await open();
+  const record = await db.get(MANGA_OCR, `${bookId}/${pageIndex}`);
+  return record?.engine === OCR_ENGINE ? record : undefined;
+}
+
+/** All OCR'd pages of a volume: page index → record (blocks + partial flag). */
+export async function loadMangaOcr(
+  bookId: string,
+): Promise<Map<number, MangaOcrRecord>> {
+  const db = await open();
+  const range = IDBKeyRange.bound(`${bookId}/`, `${bookId}/￿`);
+  const [keys, records] = await Promise.all([
+    db.getAllKeys(MANGA_OCR, range),
+    db.getAll(MANGA_OCR, range),
+  ]);
+  const out = new Map<number, MangaOcrRecord>();
+  keys.forEach((key, i) => {
+    const record = records[i];
+    if (record?.engine !== OCR_ENGINE) return;
+    const index = Number(key.slice(key.lastIndexOf("/") + 1));
+    if (Number.isFinite(index)) out.set(index, record);
+  });
+  return out;
+}
+
+/** OCR progress flags for a volume, without the block payloads: page index →
+    fully recognized. This is what the queue panel counts — cheap to re-read
+    after every completed page, so the UI always shows storage truth. */
+export async function loadMangaOcrFlags(
+  bookId: string,
+): Promise<Map<number, boolean>> {
+  const db = await open();
+  const range = IDBKeyRange.bound(`${bookId}/`, `${bookId}/￿`);
+  const [keys, records] = await Promise.all([
+    db.getAllKeys(MANGA_OCR, range),
+    db.getAll(MANGA_OCR, range),
+  ]);
+  const out = new Map<number, boolean>();
+  keys.forEach((key, i) => {
+    const record = records[i];
+    if (record?.engine !== OCR_ENGINE) return;
+    const index = Number(key.slice(key.lastIndexOf("/") + 1));
+    if (Number.isFinite(index)) out.set(index, !record.partial);
+  });
+  return out;
+}
+
+/** Cached OCR model file; undefined when not downloaded yet. */
+export async function loadOcrModel(url: string): Promise<Uint8Array | undefined> {
+  const db = await open();
+  return (await db.get(OCR_MODELS, url))?.bytes;
+}
+
+export async function putOcrModel(url: string, bytes: Uint8Array): Promise<void> {
+  const db = await open();
+  await db.put(OCR_MODELS, { url, bytes });
 }
 
 // --- Reading statistics ----------------------------------------------------
