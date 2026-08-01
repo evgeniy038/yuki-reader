@@ -26,9 +26,13 @@ import {
 // on line boundaries — glyphs are never sliced at page edges, at any zoom.
 //   Vertical (ja): writing-mode vertical-rl; column boxes are one viewport
 // tall and stack downward along the inline axis → paging is scrollTop.
-//   Horizontal: column boxes are one viewport wide → paging is scrollLeft.
+//   Horizontal: column boxes are one page wide and stack rightward → paging
+// is scrollLeft. The page is a single column; on a wide window it becomes a
+// two-page SPREAD (two columns, each capped at a book-like measure), like
+// the PDF reader — never a full-bleed wall of text.
 // Page step = viewport + gap. Every page aligns because the last column box
-// has no trailing gap, so max scroll = (pages - 1) × step exactly.
+// has no trailing gap, so max scroll = (pages - 1) × step exactly — a spread
+// pads an odd column tail with one blank column to keep that invariant.
 // Margins live OUTSIDE the page box (the scroll box is inset from the screen);
 // padding goes only across the page axis (padding-block), never along it —
 // padding along the fragmented axis would break the column pitch.
@@ -38,6 +42,13 @@ import {
 // progress, the bookmark and stats keep their meaning without a global layout.
 
 const GAP = 40;
+
+/** Horizontal line measure limits, in em of the reading font size. 26em is
+    the narrowest column that still reads well (a spread needs at least that
+    per page); 40em is the widest — about the vertical page's natural line
+    length, ~80 latin chars. */
+const MEASURE_MIN_EM = 26;
+const MEASURE_MAX_EM = 40;
 
 /** Where to land after a section (re)render or re-measure. */
 type Landing =
@@ -71,8 +82,65 @@ function sectionIsBlank(article: HTMLElement): boolean {
   ).some((el) => {
     const rect = el.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) return true;
-    return el instanceof HTMLImageElement && !el.complete && !!el.currentSrc;
+    // The declared src is the truth: currentSrc is still empty right after
+    // the innerHTML swap, before the fetch has even started.
+    return (
+      el instanceof HTMLImageElement &&
+      !el.complete &&
+      !!(el.currentSrc || el.getAttribute("src"))
+    );
   });
+}
+
+// Visually-hidden accessibility strips (calibre: a 0.128%-wide overflow:hidden
+// div holding alt text for screen readers) paginate as px-wide MONOLITHS
+// taller than the page: overflow makes them unfragmentable, so they overflow
+// below the column box, inflate the section's scroll size and add phantom
+// pages. A px-wide element clipped by overflow can display nothing by
+// construction — hide it outright. Runs before ReadingStats so the strip's
+// text never reaches the char→page mapping. One layout pass, mutations
+// batched after it (no interleaved reflows).
+const STRIP_REPLACED = new Set([
+  "IMG",
+  "VIDEO",
+  "CANVAS",
+  "IFRAME",
+  "OBJECT",
+  "EMBED",
+  "INPUT",
+]);
+function hideClippedStrips(article: HTMLElement): void {
+  const hide: HTMLElement[] = [];
+  for (const el of article.querySelectorAll("*")) {
+    if (!(el instanceof HTMLElement) || STRIP_REPLACED.has(el.tagName)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 4 || rect.height < 1) continue;
+    const { overflowX, overflowY } = getComputedStyle(el);
+    const clipped = (overflowX === "hidden" || overflowX === "clip") &&
+      (overflowY === "hidden" || overflowY === "clip");
+    if (clipped) hide.push(el);
+  }
+  for (const el of hide) el.style.display = "none";
+}
+
+// The section's trailing edge spacing (calibre wrappers carry padding-bottom,
+// which fragmentation does NOT truncate at column breaks — unlike margins):
+// when it doesn't fit the last content column it spills into a phantom blank
+// column, and spread parity then pads ANOTHER one. Space after the final
+// content has no in-flow meaning — zero it along the last-visible-child chain
+// (hidden strips skipped), inline so book CSS can't reassert it.
+function trimTrailingSpace(article: HTMLElement): void {
+  let el: Element | null = article;
+  for (;;) {
+    let child: Element | null = el.lastElementChild;
+    while (child && getComputedStyle(child).display === "none")
+      child = child.previousElementSibling;
+    if (!child || !(child instanceof HTMLElement) || STRIP_REPLACED.has(child.tagName))
+      return;
+    child.style.paddingBlockEnd = "0";
+    child.style.marginBlockEnd = "0";
+    el = child;
+  }
 }
 
 export function ReadingView({
@@ -111,6 +179,8 @@ export function ReadingView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
+  /** Trailing blank-column element for spread parity (see measure). */
+  const spacerRef = useRef<HTMLDivElement | null>(null);
   const onProgressRef = useLatest(onProgress);
   const verticalRef = useLatest(vertical);
   const stepRef = useRef(0);
@@ -254,13 +324,33 @@ export function ReadingView({
       const aw = outerEl.clientWidth;
       const ah = outerEl.clientHeight;
       const isVertical = verticalRef.current;
-      // Page margins live OUTSIDE the page box: the scroll box is
-      // inset from the screen, column boxes fill it exactly, so the pitch
-      // along the fragmented axis stays intact. Vertical head/foot margins
-      // come from this inset; side margins from padding-block (horizontal
-      // gets top/bottom from padding-block instead).
-      const w = aw;
+      // The spread tail spacer is re-decided on every pass — start hidden so
+      // the measurement below reflects real content.
+      const spacer = spacerRef.current;
+      if (spacer) spacer.style.display = "";
+      // Page margins live OUTSIDE the page box: the scroll box is inset from
+      // the screen along the fragmented axis (m-auto centers it) and padded
+      // across it (padding-block) — padding along the fragmented axis would
+      // break the column pitch. Vertical head/foot margins come from the
+      // inset, side margins from padding-block; horizontal is mirrored —
+      // top/bottom from padding-block, sides from the inset.
+      // On a wide window the horizontal page becomes a two-page SPREAD: two
+      // columns of a book-like measure (like the PDF reader), centered with
+      // margins at least pageMargin wide. Below the spread threshold — one
+      // centered column, never wider than a readable measure, never narrower
+      // than the window minus margins.
       const h = isVertical ? ah - 2 * pageMargin : ah;
+      let w = aw;
+      let column = 0;
+      let spread = false;
+      if (!isVertical) {
+        const half = (aw - 2 * pageMargin - GAP) / 2;
+        spread = half >= MEASURE_MIN_EM * fontSize;
+        column = spread
+          ? Math.min(half, MEASURE_MAX_EM * fontSize)
+          : Math.min(aw - 2 * pageMargin, MEASURE_MAX_EM * fontSize);
+        w = spread ? 2 * column + GAP : column;
+      }
       if (!w || !h || w <= 0 || h <= 0) return;
       scrollEl.style.width = `${w}px`;
       scrollEl.style.height = `${h}px`;
@@ -271,7 +361,13 @@ export function ReadingView({
       contentEl.style.columnFill = "auto";
       contentEl.style.paddingBlock = `${pageMargin}px`;
       contentEl.style.paddingInline = "0";
-      contentEl.style.setProperty("--reading-page-height", `${h}px`);
+      // Illustration limit = the column CONTENT height: vertical's inset is
+      // already subtracted above, horizontal's padding-block eats into its
+      // box — a full-page image sized to the box would overflow the column.
+      contentEl.style.setProperty(
+        "--reading-page-height",
+        `${isVertical ? h : h - 2 * pageMargin}px`,
+      );
 
       if (isVertical) {
         // vertical-rl: one column-count makes column boxes stack downward
@@ -284,9 +380,21 @@ export function ReadingView({
         contentEl.style.width = "";
         contentEl.style.height = `${h}px`;
         contentEl.style.columnCount = "";
-        contentEl.style.columnWidth = `${w}px`;
+        contentEl.style.columnWidth = `${column}px`;
       }
       void contentEl.offsetHeight; // reflow
+
+      // A spread paginates exactly only into an even number of columns: an
+      // odd tail would clamp the last spread one column short and repeat a
+      // page. Pad it with a blank trailing column (the spacer starts a fresh
+      // column by CSS), keeping max scroll = (pages - 1) × step.
+      if (spread && spacer) {
+        const cols = Math.round((scrollEl.scrollWidth + GAP) / (column + GAP));
+        if (cols % 2 === 1) {
+          spacer.style.display = "block";
+          void contentEl.offsetHeight; // reflow: the spacer column joins scrollWidth
+        }
+      }
 
       const viewport = isVertical ? h : w;
       const scrollSize = isVertical ? scrollEl.scrollHeight : scrollEl.scrollWidth;
@@ -346,6 +454,20 @@ export function ReadingView({
       const clamped = Math.max(0, Math.min(current.sections.length - 1, index));
       if (currentSectionRef.current !== clamped) {
         article.innerHTML = current.sections[clamped]!.html;
+        hideClippedStrips(article);
+        // Trailing phantom columns are a horizontal-book problem (calibre
+        // wrappers); the vertical path paginates as authored — untouched.
+        if (!verticalRef.current) trimTrailingSpace(article);
+        // The spread tail spacer lives at the flow's end; measure() flips it
+        // on when the section ends on an odd column (spread parity).
+        let spacer = spacerRef.current;
+        if (!spacer) {
+          spacer = document.createElement("div");
+          spacer.className = "page-spacer";
+          spacer.setAttribute("aria-hidden", "true");
+          spacerRef.current = spacer;
+        }
+        article.appendChild(spacer);
         statsRef.current = new ReadingStats(article);
         currentSectionRef.current = clamped;
       }

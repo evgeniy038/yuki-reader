@@ -53,7 +53,9 @@
 }
 
 /* Block integrity: never slice a paragraph, image, or divider across a
-   column/page break; constrain illustrations to the page box. */
+   column/page break; constrain illustrations to the column CONTENT box
+   (--reading-page-height, set by ReadingView — it already excludes the page
+   padding, so a full-page image fits its column exactly). */
 .reading .book-content :where(p) {
   break-inside: avoid;
 }
@@ -85,6 +87,17 @@
 .reading .book-content :where(h3) {
   break-inside: avoid;
   break-after: avoid;
+}
+
+/* Spread tail pad: a two-page spread paginates exactly only with an even
+   column count, so ReadingView flips this on when a section ends on an odd
+   column — one blank trailing column keeps the page pitch exact. It starts
+   a fresh column and carries no content. */
+.reading .book-content .page-spacer {
+  display: none;
+  break-before: column;
+  width: 100%;
+  height: 1px;
 }
 
 /* PDF pages: the page renders on a canvas (exact fidelity — layouts,

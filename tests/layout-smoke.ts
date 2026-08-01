@@ -34,6 +34,8 @@ interface Report {
   vertical: boolean;
   viewport: number;
   scrollSize: number;
+  /** Cross-axis overflow past the page box (unfragmentable monolith leak). */
+  crossOverflow: number;
   pitch: number;
   pages: number;
   pitchRemainder: number;
@@ -167,6 +169,9 @@ const collectReport = (): Report | { error: string } => {
     vertical,
     viewport,
     scrollSize,
+    crossOverflow: vertical
+      ? scrollEl.scrollWidth - scrollEl.clientWidth
+      : scrollEl.scrollHeight - scrollEl.clientHeight,
     pitch,
     pages,
     pitchRemainder,
@@ -242,16 +247,34 @@ async function waitForSettledGeometry(page: Page): Promise<boolean> {
       if (!article || !contentEl || !scrollEl || !outerEl) return false;
       const vertical = getComputedStyle(contentEl).writingMode.includes("vertical");
       const viewport = vertical ? scrollEl.clientHeight : scrollEl.clientWidth;
+      const fontSize = parseFloat(getComputedStyle(contentEl).fontSize) || 18;
       // Guard against pre-measure staleness: the scroll box must already have
-      // been resized to the CURRENT outer box (vertical page box = outer − 2·40).
-      const expected = vertical ? outerEl.clientHeight - 80 : outerEl.clientWidth;
-      if (Math.abs(viewport - expected) > 1) return false;
+      // been resized to the CURRENT outer box. Page-box contract (mirrors
+      // ReadingView.measure, constants duplicated: margins 2×40, gap 40,
+      // measure 26–40em): vertical page box = outer − head/foot margins;
+      // horizontal = one centered column, or a two-column spread when each
+      // page keeps ≥ 26em.
+      let expectedViewport: number;
+      let expectedColumn: number;
+      if (vertical) {
+        expectedViewport = outerEl.clientHeight - 80;
+        expectedColumn = expectedViewport;
+      } else {
+        const half = (outerEl.clientWidth - 80 - 40) / 2;
+        if (half >= 26 * fontSize) {
+          expectedColumn = Math.min(half, 40 * fontSize);
+          expectedViewport = 2 * expectedColumn + 40;
+        } else {
+          expectedColumn = Math.min(outerEl.clientWidth - 80, 40 * fontSize);
+          expectedViewport = expectedColumn;
+        }
+      }
+      if (Math.abs(viewport - expectedViewport) > 1) return false;
       const scrollSize = vertical ? scrollEl.scrollHeight : scrollEl.scrollWidth;
       const columnW = parseFloat(getComputedStyle(contentEl).columnWidth);
       if (!viewport || !scrollSize || Number.isNaN(columnW)) return false;
       // Sub-glyph trailing overflow (kinsoku ink at the flow end) is tolerated
       // by the report too — don't block settling on it.
-      const fontSize = parseFloat(getComputedStyle(contentEl).fontSize) || 18;
       if ((scrollSize + 40) % (viewport + 40) > fontSize) return false;
       // The React page-count indicator re-renders a tick after measure() —
       // require it to agree with the geometry before collecting a report.
@@ -259,7 +282,7 @@ async function waitForSettledGeometry(page: Page): Promise<boolean> {
         document.querySelector("[data-page-indicator]")?.getAttribute("data-pages"),
       );
       const pages = Math.max(1, Math.round((scrollSize + 40) / (viewport + 40)));
-      return Math.abs(columnW - viewport) < 1 && indicated === pages;
+      return Math.abs(columnW - expectedColumn) < 1 && indicated === pages;
     });
     if (settled) return true;
     await page.waitForTimeout(100);
@@ -287,6 +310,13 @@ function reportProblems(name: string, report: Report): string[] {
   if (report.pitchRemainder > report.fontSize)
     problems.push(
       `pitch not exact: (scrollSize+gap) % pitch = ${report.pitchRemainder} (scrollSize=${report.scrollSize}, pitch=${report.pitch})`,
+    );
+  // Nothing may stick out of the page box across the paging axis: that is an
+  // unfragmentable monolith overflowing its column (it also breaks the
+  // section's page count and gets clipped on screen).
+  if (Math.abs(report.crossOverflow) > 1)
+    problems.push(
+      `content overflows the page box cross-axis by ${report.crossOverflow}px (unbreakable monolith?)`,
     );
   if (report.indicatorPages && report.indicatorPages !== report.pages)
     problems.push(`indicator says ${report.indicatorPages} pages, geometry says ${report.pages}`);

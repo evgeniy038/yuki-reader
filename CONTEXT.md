@@ -169,7 +169,9 @@ through `src/lib/format.ts` (Intl per active locale).
 ## Format and page (pdf)
 
 The book's **format** — epub or pdf — defines how it is read. EPUB reflows
-into a stream and is cut into pages by the reader; PDF is read **as is**:
+into a stream and is cut into pages by the reader — one centered column on a
+narrow screen, a two-page **spread** on a wide one, like the PDF view (the
+Japanese stream stays vertical, one page at a time); PDF is read **as is**:
 document page = reader page, the author's layout (columns, formulas, scans)
 is untouched. On a wide screen a PDF shows as a **spread** — two pages side
 by side, like a physical book (the cover alone, then pairs: even left, odd
