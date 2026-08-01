@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.2.4] - 2026-08-01
+
+- The OCR models now travel with the app itself — no VPN needed anywhere anymore: the one-time download simply works, its progress bar is honest from the very first byte, and a damaged download quietly heals itself instead of breaking recognition
+
 ## [1.2.3] - 2026-08-01
 
 - The one-time OCR model download now tells the truth and takes care of itself: the progress bar can never run past 100% again, a dropped connection quietly picks up where it left off instead of giving up — and the panel says it upfront that this hefty download happens only once
