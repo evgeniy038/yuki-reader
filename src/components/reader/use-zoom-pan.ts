@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent, RefObject } from "react";
 
-// Zoom + pan for the manga stage: the wheel zooms toward the cursor (the
-// point under it stays put), a drag pans while zoomed in, both clamp loosely
-// to the zoomed content. Page turns call `reset`. The wheel listener is
-// native (passive: false) so the page never scrolls.
+// Zoom + pan for the manga stage: the wheel zooms toward the cursor in both
+// directions — the point under it never moves, so no sideways drift and no
+// re-centering on zoom-out (the page simply keeps whatever offset the anchor
+// math leaves). A drag pans while zoomed in. No bounds, no snap to center;
+// the user owns the page position, page turns call `reset`. The wheel
+// listener is native (passive: false) so the page never scrolls.
 const MAX_ZOOM = 5;
 // Wheel delta → zoom factor: exp(-deltaY * SPEED). 0.01 ≈ a full 1→5 zoom
 // range in ~160px of wheel travel — punchy but still controllable.
@@ -37,7 +39,7 @@ export function useZoomPan({
       setZoomPan((current) => {
         const factor = Math.exp(-event.deltaY * ZOOM_SPEED);
         const next = Math.min(MAX_ZOOM, Math.max(1, current.zoom * factor));
-        if (next === 1) return { zoom: 1, x: 0, y: 0 };
+        // Both directions: the point under the cursor stays stationary.
         const k = next / current.zoom;
         return {
           zoom: next,
@@ -49,17 +51,6 @@ export function useZoomPan({
     target.addEventListener("wheel", onWheel, { passive: false });
     return () => target.removeEventListener("wheel", onWheel);
   }, [targetRef, enabled]);
-
-  const clampPan = (zoom: number, x: number, y: number) => {
-    const target = targetRef.current;
-    if (!target) return { x, y };
-    const limitX = Math.max(0, (target.clientWidth * zoom) / 2 - 80);
-    const limitY = Math.max(0, (target.clientHeight * zoom) / 2 - 80);
-    return {
-      x: Math.min(limitX, Math.max(-limitX, x)),
-      y: Math.min(limitY, Math.max(-limitY, y)),
-    };
-  };
 
   const endDrag = () => {
     if (dragRef.current?.moved) {
@@ -90,7 +81,8 @@ export function useZoomPan({
       drag.py = event.clientY;
       setZoomPan((current) => ({
         ...current,
-        ...clampPan(current.zoom, current.x + dx, current.y + dy),
+        x: current.x + dx,
+        y: current.y + dy,
       }));
     },
     onPointerUp: endDrag,

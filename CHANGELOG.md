@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.2.2] - 2026-08-01
+
+- Manga reader: zooming out no longer re-centers the page or drags it sideways — the point under the cursor stays put in both directions, panning is free of bounds, and only a page turn resets the view
+
 ## [1.2.1] - 2026-08-01
 
 - Manga: a whole new shelf format — volumes group into numbered series with reordering and per-volume progress, and the reader flips right-to-left, cover alone then two-page spreads, like a real tankōbon

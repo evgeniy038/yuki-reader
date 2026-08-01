@@ -258,6 +258,20 @@ async function main(): Promise<void> {
         .transform ?? "",
   );
   check(panned !== zoomed && panned.includes("translate"), "zoom: drag pans");
+  // Zoom-out must not drift back to center: the pan the user set survives
+  // (clamped), even at fit zoom.
+  await page.mouse.wheel(0, 600);
+  await page.waitForTimeout(300);
+  const zoomedOut = await page.evaluate(
+    () =>
+      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+        .transform ?? "",
+  );
+  check(
+    /translate\(-?\d+px, -?\d+px\)/.test(zoomedOut) &&
+      !zoomedOut.startsWith("translate(0px, 0px)"),
+    "zoom: zoom-out keeps the pan (no re-centering)",
+  );
   await page.keyboard.press("ArrowLeft");
   await settleOnPage(page, 2);
   const reset = await page.evaluate(
