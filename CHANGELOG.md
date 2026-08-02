@@ -3,6 +3,12 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.2.9] - 2026-08-02
+
+- Full screen: the control pill parks below the system menu bar — all buttons respond again
+- Contents and Search open as floating cards level with the control pill
+- Scrolling inside a side panel scrolls the panel, not the book behind it
+
 ## [1.2.8] - 2026-08-02
 
 - Updates now arrive in minutes, not the better part of an hour — the app's home moved to faster, VPN-free hosting
