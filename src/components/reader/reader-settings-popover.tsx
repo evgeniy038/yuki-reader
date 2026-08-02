@@ -8,6 +8,7 @@ import {
   type ReadingSettings,
 } from "@/core/reading-settings";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Stepper } from "@/components/ui/stepper";
 import { Switch } from "@/components/ui/switch";
@@ -23,6 +24,7 @@ export function ReaderSettingsPopover({
   showMangaSettings = false,
   mangaFirstPageAsCover = true,
   onMangaFirstPageAsCoverChange,
+  fullscreen = false,
   onClose,
 }: {
   settings: ReadingSettings;
@@ -31,6 +33,9 @@ export function ReaderSettingsPopover({
   showMangaSettings?: boolean;
   mangaFirstPageAsCover?: boolean;
   onMangaFirstPageAsCoverChange?: (checked: boolean) => void;
+  /** In fullscreen the chrome pill parks lower (system owns the top strip) —
+      the popover follows it down instead of overlapping. */
+  fullscreen?: boolean;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -49,9 +54,14 @@ export function ReaderSettingsPopover({
         type="button"
         aria-label={t("reader.closeSettings")}
         onClick={onClose}
-        className="pointer-events-auto fixed inset-0 z-30"
+        className="pointer-events-auto absolute inset-0 z-30"
       />
-      <div className="pointer-events-auto fixed left-1/2 top-16 z-40 flex w-64 origin-top -translate-x-1/2 animate-in flex-col gap-3 rounded-card border border-subtle bg-raised p-3 shadow-floating fade-in-0 zoom-in-95 duration-100">
+      <div
+        className={cn(
+          "pointer-events-auto absolute left-1/2 z-40 flex w-64 origin-top -translate-x-1/2 animate-in flex-col gap-3 rounded-card border border-subtle bg-raised p-3 shadow-floating fade-in-0 zoom-in-95 duration-100",
+          fullscreen ? "top-24" : "top-16",
+        )}
+      >
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-content">{t("settings.theme")}</span>
           <SegmentedControl

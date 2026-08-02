@@ -70,6 +70,10 @@ export function usePagingInput({
 
     const onWheel = (event: WheelEvent) => {
       if (!wheelRef.current) return;
+      // The side panels and the page indicator handle their own scrolling —
+      // a wheel gesture inside them must not page the book behind them.
+      const el = event.target as Element | null;
+      if (el?.closest("[data-reader-panel], [data-page-indicator]")) return;
       event.preventDefault();
       const now = Date.now();
       if (now - lastWheelRef.current < WHEEL_GUARD_MS) return;

@@ -30,3 +30,6 @@ Thumbs.db
 
 # private working notes, never published
 /private-docs/
+
+# local browser state
+artifacts/local/browser/

@@ -3,12 +3,16 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEscapeKey } from "@/lib/use-escape-key";
+import { useFullscreen } from "@/lib/use-fullscreen";
 
 // Reader side panels: table of contents and in-book search. One presentational
 // shell shared by both reader views — the views own the data (EPUB char
 // offsets / PDF pages) and the jump; the panel just renders and reports taps.
-// The drawer sits at the left edge over the text; an invisible backdrop
-// swallows outside clicks (they would otherwise flip pages).
+// The panel is a FLOATING CARD (like the control pill): parked at the pill's
+// height with margins all around, never edge-to-edge — so in fullscreen the
+// header and its close button stay below the system menu bar. Everything is
+// absolute inside the reader root; an invisible backdrop swallows outside
+// clicks (they would otherwise flip pages).
 
 interface TocItem {
   label: string;
@@ -57,6 +61,7 @@ function PanelShell({
 }) {
   useEscapeKey(onClose);
   const { t } = useTranslation();
+  const fullscreen = useFullscreen();
 
   return (
     <>
@@ -64,11 +69,14 @@ function PanelShell({
         type="button"
         aria-label={t("reader.closePanel")}
         onClick={onClose}
-        className="fixed inset-0 z-30 cursor-default"
+        className="absolute inset-0 z-30 cursor-default"
       />
       <div
         data-reader-panel={panel}
-        className="fixed bottom-0 left-0 top-0 z-40 flex w-72 animate-in flex-col border-r border-subtle bg-raised shadow-floating slide-in-from-left duration-150"
+        className={cn(
+          "absolute bottom-3 left-3 z-40 flex w-72 animate-in flex-col overflow-hidden rounded-card border border-subtle bg-raised shadow-floating slide-in-from-left duration-150",
+          fullscreen ? "top-11" : "top-3",
+        )}
       >
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-subtle pl-4 pr-2">
           <span className="text-sm font-medium text-strong">{title}</span>

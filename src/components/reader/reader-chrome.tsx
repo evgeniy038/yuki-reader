@@ -3,6 +3,7 @@ import { CaretDown, CaretLeft, CornersOut, Gear, List, MagnifyingGlass } from "@
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useFullscreen } from "@/lib/use-fullscreen";
 import type { ReadingSettings } from "@/core/reading-settings";
 import type { ReaderPanelMode } from "./reader-panel";
 import { ReaderSettingsPopover } from "./reader-settings-popover";
@@ -12,6 +13,15 @@ import { ReaderSettingsPopover } from "./reader-settings-popover";
 // Holds exit / panels / settings / fullscreen. The settings popover is a
 // separate component — controlled via settingsOpen when passed, otherwise the
 // chrome owns the flag (an open popover pins the pill visible).
+// Everything here is ABSOLUTE inside the reader root (relative, exactly
+// viewport-sized): no fixed-position layers in the chrome at all.
+// FULLSCREEN: the top strip of the screen belongs to the system — the macOS
+// menu bar (~33px, and Chrome's own exit control) drops over the page's top
+// while the cursor is up there, and hits in that strip go to the system, not
+// the page. So in fullscreen the pill parks just BELOW the bar (44px) and the
+// reveal zone starts under it — the cursor never has to touch the top edge.
+// The pull handle stays at the very top: when the bar is down it's covered
+// (invisible, untargetable anyway); the rest of the time it works.
 export function ReaderChrome({
   onExit,
   settings,
@@ -51,10 +61,18 @@ export function ReaderChrome({
   const hovering = useRef(false);
   const settingsOpenRef = useRef(false);
   const hideTimer = useRef<number | undefined>(undefined);
+  // In fullscreen the top strip is the system's (see the header comment):
+  // the pill drops below it and reveals from a lower zone.
+  const fullscreen = useFullscreen();
+  const fullscreenRef = useRef(false);
 
   useEffect(() => {
     settingsOpenRef.current = settingsOpen;
   }, [settingsOpen]);
+
+  useEffect(() => {
+    fullscreenRef.current = fullscreen;
+  }, [fullscreen]);
 
   const show = () => {
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
@@ -70,7 +88,10 @@ export function ReaderChrome({
   useEffect(() => {
     const initial = window.setTimeout(() => scheduleHide(), 1800);
     const onMove = (event: MouseEvent) => {
-      if (event.clientY < 64) show();
+      // Fullscreen: reveal from a 120px zone hugging the parked pill — the
+      // cursor never has to enter the system-owned top strip.
+      const revealY = fullscreenRef.current ? 120 : 64;
+      if (event.clientY < revealY) show();
       else scheduleHide();
     };
     window.addEventListener("mousemove", onMove);
@@ -98,7 +119,7 @@ export function ReaderChrome({
   };
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-50 isolate">
+    <>
       <button
         type="button"
         onMouseEnter={show}
@@ -107,7 +128,7 @@ export function ReaderChrome({
         title={t("reader.showControls")}
         tabIndex={visible ? -1 : 0}
         className={cn(
-          "fixed left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-pointer items-center justify-center rounded-b-md border border-t-0 border-subtle bg-raised px-2.5 pb-0.5 text-muted-content shadow-floating transition-opacity duration-200 hover:text-strong",
+          "absolute left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-pointer items-center justify-center rounded-b-md border border-t-0 border-subtle bg-raised px-2.5 pb-0.5 text-muted-content shadow-floating transition-opacity duration-200 hover:text-strong",
           visible
             ? "pointer-events-none opacity-0"
             : "pointer-events-auto opacity-100",
@@ -126,7 +147,8 @@ export function ReaderChrome({
           scheduleHide();
         }}
         className={cn(
-          "fixed left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill border border-subtle bg-raised p-1 shadow-floating transition-[transform,opacity] duration-200",
+          "absolute left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill border border-subtle bg-raised p-1 shadow-floating transition-[transform,opacity] duration-200",
+          fullscreen ? "top-11" : "top-3",
           visible
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-3 opacity-0",
@@ -199,9 +221,10 @@ export function ReaderChrome({
           showMangaSettings={showMangaSettings}
           mangaFirstPageAsCover={mangaFirstPageAsCover}
           onMangaFirstPageAsCoverChange={onMangaFirstPageAsCoverChange}
+          fullscreen={fullscreen}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

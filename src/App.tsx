@@ -140,6 +140,7 @@ export default function App() {
       chapters: [{ id: "c1", html }],
       resources: [],
       bookCss: "",
+      toc: [{ label: vertical ? "デモの章" : "Demo chapter", chapterId: "c1" }],
     });
     shelf.setBooks([
       {
