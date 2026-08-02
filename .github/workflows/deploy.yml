@@ -27,12 +27,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # User/organization site (<owner>.github.io) lives at the domain root;
-      # a project site lives at /<repo>/ and the app must be built with it.
+      # A custom domain (public/CNAME) and a user/organization site
+      # (<owner>.github.io) live at the domain root; a project site lives at
+      # /<repo>/ and the app must be built with it.
       - id: base
         run: |
           repo="${GITHUB_REPOSITORY#*/}"
-          if [ "$repo" = "${GITHUB_REPOSITORY_OWNER}.github.io" ]; then
+          if [ -f public/CNAME ] || [ "$repo" = "${GITHUB_REPOSITORY_OWNER}.github.io" ]; then
             echo "path=/" >> "$GITHUB_OUTPUT"
           else
             echo "path=/$repo/" >> "$GITHUB_OUTPUT"
