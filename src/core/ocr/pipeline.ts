@@ -235,6 +235,13 @@ function cropRect(
     ignored. The encoder output is always [B,197,768], so cross-attention
     needs no mask. Exported and validated in-house: batched output is
     token-exact vs solo decode (/tmp/mocr-validate-batch.py).
+    Selective fetch: step 0 fetches every output (encoder KV included);
+    every later step fetches only logits + the four decoder presents — the
+    encoder cross-attention KV is constant while `hidden` is, so the
+    step-0 encoder tensors are fed back unchanged. Dead tensors (per-step
+    inputs, logits, displaced KV) are disposed right after each awaited
+    run; everything still owned is drained in finally. `hidden` belongs to
+    the caller and is never disposed here.
     Returns the cleaned text per row — "" when the crop reads as empty. */
 async function decodeBlocks(
   models: OcrModels,
@@ -246,7 +253,7 @@ async function decodeBlocks(
   const ids: number[][] = Array.from({ length: batch }, () => [START_TOKEN]);
   const done = new Array<boolean>(batch).fill(false);
   let remaining = batch;
-  let past: Record<string, Tensor> = {};
+  const past: Record<string, Tensor> = {};
   for (let l = 0; l < KV_LAYERS; l++)
     for (const kind of ["decoder", "encoder"])
       for (const kv of ["key", "value"])
@@ -255,59 +262,88 @@ async function decodeBlocks(
           new Float32Array(0),
           [batch, KV_HEADS, 0, KV_DIM],
         );
+  const laterFetch = [
+    "logits",
+    ...models.decoder.outputNames.filter((name) =>
+      /^present\.\d+\.decoder\./.test(name),
+    ),
+  ];
   let useBranch = false;
-  for (let step = 0; step < MAX_TOKENS && remaining > 0; step++) {
-    const tokens = new BigInt64Array(batch);
-    for (let j = 0; j < batch; j++) {
-      const row = ids[j]!;
-      tokens[j] = BigInt(
-        !useBranch ? START_TOKEN : done[j] ? EOS_TOKEN : row[row.length - 1]!,
-      );
-    }
-    const feeds: Record<string, Tensor> = {
-      input_ids: new ort.Tensor("int64", tokens, [batch, 1]),
-      encoder_hidden_states: hidden,
-      attention_mask: new ort.Tensor(
+  try {
+    for (let step = 0; step < MAX_TOKENS && remaining > 0; step++) {
+      const tokens = new BigInt64Array(batch);
+      for (let j = 0; j < batch; j++) {
+        const row = ids[j]!;
+        tokens[j] = BigInt(
+          !useBranch ? START_TOKEN : done[j] ? EOS_TOKEN : row[row.length - 1]!,
+        );
+      }
+      const inputIds = new ort.Tensor("int64", tokens, [batch, 1]);
+      const mask = new ort.Tensor(
         "int64",
         new BigInt64Array(batch * (step + 1)).fill(1n),
         [batch, step + 1],
-      ),
-      use_cache_branch: new ort.Tensor(
+      );
+      const branch = new ort.Tensor(
         "bool",
         new Uint8Array([useBranch ? 1 : 0]),
         [1],
-      ),
-    };
-    Object.assign(feeds, past);
-    const decOut = await models.decoder.run(feeds);
-    for (const name of models.decoder.outputNames)
-      if (name.startsWith("present."))
-        past[name.replace("present", "past_key_values")] = decOut[name]!;
-    const logits = decOut.logits!;
-    // Trap 3: the vocab stride comes from the tensor, not vocab.txt. Logits
-    // are [B, 1, vocab] — row j is one flat slice.
-    const stride = logits.dims[2]!;
-    const ldata = logits.data as Float32Array;
-    for (let j = 0; j < batch; j++) {
-      if (done[j]) continue;
-      const row = ldata.subarray(j * stride, (j + 1) * stride);
-      let best = 0;
-      for (let i = 1; i < row.length; i++) if (row[i]! > row[best]!) best = i;
-      if (best === EOS_TOKEN) {
-        done[j] = true;
-        remaining--;
-        continue;
+      );
+      const feeds: Record<string, Tensor> = {
+        input_ids: inputIds,
+        encoder_hidden_states: hidden,
+        attention_mask: mask,
+        use_cache_branch: branch,
+      };
+      Object.assign(feeds, past);
+      let decOut;
+      try {
+        decOut = useBranch
+          ? await models.decoder.run(feeds, laterFetch)
+          : await models.decoder.run(feeds);
+      } finally {
+        inputIds.dispose();
+        mask.dispose();
+        branch.dispose();
       }
-      const rowIds = ids[j]!;
-      rowIds.push(best);
-      const cut = runawayTruncateLen(rowIds);
-      if (cut !== null) {
-        rowIds.length = cut;
-        done[j] = true;
-        remaining--;
+      // Only the fetched presents come back; the displaced KV (step-0
+      // empties, then the previous step's decoder KV) is dead. Encoder KV
+      // is never re-fetched after step 0, so it stays live until finally.
+      for (const name of Object.keys(decOut)) {
+        if (!name.startsWith("present.")) continue;
+        const pastName = name.replace("present", "past_key_values");
+        past[pastName]!.dispose();
+        past[pastName] = decOut[name]!;
       }
+      const logits = decOut.logits!;
+      // Trap 3: the vocab stride comes from the tensor, not vocab.txt. Logits
+      // are [B, 1, vocab] — row j is one flat slice.
+      const stride = logits.dims[2]!;
+      const ldata = logits.data as Float32Array;
+      for (let j = 0; j < batch; j++) {
+        if (done[j]) continue;
+        const row = ldata.subarray(j * stride, (j + 1) * stride);
+        let best = 0;
+        for (let i = 1; i < row.length; i++) if (row[i]! > row[best]!) best = i;
+        if (best === EOS_TOKEN) {
+          done[j] = true;
+          remaining--;
+          continue;
+        }
+        const rowIds = ids[j]!;
+        rowIds.push(best);
+        const cut = runawayTruncateLen(rowIds);
+        if (cut !== null) {
+          rowIds.length = cut;
+          done[j] = true;
+          remaining--;
+        }
+      }
+      logits.dispose();
+      useBranch = true;
     }
-    useBranch = true;
+  } finally {
+    for (const tensor of Object.values(past)) tensor.dispose();
   }
   if (timing) timing.dec += performance.now() - t0;
   return ids.map((rowIds) =>
@@ -384,17 +420,27 @@ function skeletonBlock(det: Det): MokuroBlock {
   };
 }
 
-/** Detect-only pass (lazy OCR): skeleton blocks with final boxes but empty
-    lines — roughly 10x cheaper per page than full OCR. */
+/** Skeleton blocks (final boxes, empty lines) plus the exact float detector
+    rects aligned with them, so recognition reuses the detector's crops. */
+export interface DetectResult {
+  blocks: MokuroBlock[];
+  crops: number[][];
+}
+
+/** Detect-only pass (lazy OCR): skeletons — ~10x cheaper than full OCR. */
 export async function detectPage(
   models: OcrModels,
   bitmap: ImageBitmap,
-): Promise<MokuroBlock[]> {
-  return readingOrder(
+): Promise<DetectResult> {
+  const dets = readingOrder(
     dedupeText(await detect(models, bitmap)),
     bitmap.width,
     bitmap.height,
-  ).map(skeletonBlock);
+  );
+  return {
+    blocks: dets.map(skeletonBlock),
+    crops: dets.map((det) => [det.x1, det.y1, det.x2, det.y2]),
+  };
 }
 
 /** Recognize the text of one previously detected block (hover-triggered
@@ -448,29 +494,20 @@ async function encodeBatch(
   return encOut.last_hidden_state!;
 }
 
-/** OCR one manga page: detect text blocks, read each, return overlay-ready
-    blocks in reading order. Blocks go through the encoder AND the decoder in
-    batches of BLOCK_BATCH — the batched decode is the point (the decoder
-    dominates page time and its cost is per-run overhead), batching only the
-    encoder with a per-block decode was measured a net loss (the GPU sync
-    wait just moved into the dec phase). Everything stays strictly
-    SEQUENTIAL: onnxruntime-web crashes when two sessions run concurrently in
-    one runtime instance (OrtRun "__next_prime overflow"; the renderer never
-    recovers). */
-export async function ocrPage(
+/** Read a list of detections: crop each (padded), encode AND decode in
+    batches of BLOCK_BATCH, return overlay-ready blocks in input order
+    (empty reads dropped). The batched decode is the point — batching only
+    the encoder with a per-block decode measured a net loss (the GPU sync
+    wait just moved into the dec phase). Shared by ocrPage and
+    ocrPageFromSkeleton so identical rects give identical blocks. Strictly
+    SEQUENTIAL: onnxruntime-web crashes when two sessions run concurrently
+    in one runtime instance (OrtRun "__next_prime overflow"). */
+async function recognizeDets(
   models: OcrModels,
   bitmap: ImageBitmap,
-  pageIndex?: number,
+  dets: Det[],
+  timing: OcrTiming,
 ): Promise<MokuroBlock[]> {
-  const tDetect = performance.now();
-  const dets = readingOrder(
-    dedupeText(await detect(models, bitmap)),
-    bitmap.width,
-    bitmap.height,
-  );
-  const detectMs = performance.now() - tDetect;
-  const timing: OcrTiming = { crop: 0, enc: 0, dec: 0 };
-  const tBlocks = performance.now();
   const valid: { det: Det; px: Float32Array }[] = [];
   for (const det of dets) {
     const rect = cropRect(det, bitmap.width, bitmap.height);
@@ -497,12 +534,62 @@ export async function ocrPage(
       if (text) blocks.push(textBlock(batch[j]!.det, text));
     }
   }
+  return blocks;
+}
+
+/** OCR one manga page: detect text blocks, then read each (recognizeDets). */
+export async function ocrPage(
+  models: OcrModels,
+  bitmap: ImageBitmap,
+  pageIndex?: number,
+): Promise<MokuroBlock[]> {
+  const tDetect = performance.now();
+  const dets = readingOrder(
+    dedupeText(await detect(models, bitmap)),
+    bitmap.width,
+    bitmap.height,
+  );
+  const detectMs = performance.now() - tDetect;
+  const timing: OcrTiming = { crop: 0, enc: 0, dec: 0 };
+  const tBlocks = performance.now();
+  const blocks = await recognizeDets(models, bitmap, dets, timing);
   if (debugTiming) {
     const totalMs = performance.now() - tDetect;
     const blocksMs = performance.now() - tBlocks;
     console.debug(
       `[ocr-page] #${pageIndex ?? "?"} total ${totalMs.toFixed(0)}ms | ` +
         `detect ${detectMs.toFixed(0)} | blocks ${dets.length} in ${blocksMs.toFixed(0)} ` +
+        `(crop ${timing.crop.toFixed(0)}, enc ${timing.enc.toFixed(0)}, dec ${timing.dec.toFixed(0)})`,
+    );
+  }
+  return blocks;
+}
+
+/** Recognize a page from a stored detect skeleton: the exact float detector
+    rects (`crops`) go straight through recognizeDets — no second detector
+    pass, blocks identical to a full run. Debug reports detect 0. */
+export async function ocrPageFromSkeleton(
+  models: OcrModels,
+  bitmap: ImageBitmap,
+  crops: number[][],
+  pageIndex?: number,
+): Promise<MokuroBlock[]> {
+  const timing: OcrTiming = { crop: 0, enc: 0, dec: 0 };
+  const tBlocks = performance.now();
+  const dets: Det[] = crops.map((c) => ({
+    x1: c[0]!,
+    y1: c[1]!,
+    x2: c[2]!,
+    y2: c[3]!,
+    cls: 1,
+    conf: 1,
+  }));
+  const blocks = await recognizeDets(models, bitmap, dets, timing);
+  if (debugTiming) {
+    const totalMs = performance.now() - tBlocks;
+    console.debug(
+      `[ocr-page] #${pageIndex ?? "?"} total ${totalMs.toFixed(0)}ms | ` +
+        `detect 0 | blocks ${dets.length} in ${totalMs.toFixed(0)} ` +
         `(crop ${timing.crop.toFixed(0)}, enc ${timing.enc.toFixed(0)}, dec ${timing.dec.toFixed(0)})`,
     );
   }

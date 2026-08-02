@@ -10,6 +10,7 @@ pnpm tsx tests/book-css-smoke.ts
 pnpm tsx tests/resources-smoke.ts
 pnpm tsx tests/epub-smoke.ts
 pnpm tsx tests/ocr-download.ts
+pnpm tsx tests/decoder-selective-fetch.ts
 ```
 
 Browser smokes drive the real reader on real books. Books are private
@@ -82,6 +83,19 @@ Both drive the real reader on the dev server (`:1420`), manga from
 ```
 pnpm tsx tests/gate-timing.ts        # cold volume start: model load, detect gate, first pages. Target: gate < 30 s
 pnpm tsx tests/march-timing.ts [sec] # continuous page march, pages/min and per-stage timings from [ocr-page] logs. Target: >= 100 pages/min
+```
+
+## OCR cancellation regression (`tests/ocr-cancel-race.ts`)
+
+Imports one volume (`YUKI_BENCH_ZIP` or `YUKI_BENCH_DIR`), deletes it while
+OCR is running, and verifies in IndexedDB that the volume UUID leaves no
+rows in books, manga, mangaPages, or mangaOcr and never resurrects. A second
+import of the same fixture receives a new random UUID and must also delete
+cleanly. Set `YUKI_TEST_BASE` for a non-default server and
+`YUKI_BENCH_PROFILE_DIR` to reuse a warm model cache.
+
+```
+YUKI_BENCH_ZIP=/path/vol.zip pnpm tsx tests/ocr-cancel-race.ts
 ```
 
 `pdf-smoke` expectations (page counts, language) are tied to specific

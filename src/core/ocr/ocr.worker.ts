@@ -2,10 +2,17 @@ import { createOcrSessions, type OcrModels } from "./models";
 import {
   detectPage,
   ocrPage,
+  ocrPageFromSkeleton,
   recognizeBlock,
   setOcrDebugTiming,
 } from "./pipeline";
-import { loadMangaOcrPage, loadMangaPageBlob, putMangaOcr } from "../storage";
+import {
+  loadMangaOcrPage,
+  loadMangaPageBlob,
+  mergeMangaOcrBlock,
+  putMangaOcrDetect,
+  putMangaOcrFinal,
+} from "../storage";
 import type { MokuroBlock } from "../mokuro";
 import type { OcrModelFiles } from "./models";
 
@@ -86,28 +93,32 @@ async function runJob(
   }
   try {
     if (msg.type === "detect") {
-      const blocks = await detectPage(models, bitmap);
-      // A full "run" of the same page may have finished on another worker
-      // while this detect was in flight — a skeleton must never overwrite
-      // a final record.
-      const existing = await loadMangaOcrPage(msg.bookId, msg.pageIndex);
-      if (existing && !existing.partial) {
+      const { blocks, crops } = await detectPage(models, bitmap);
+      // Atomic at the storage boundary: skipped when the volume is gone or
+      // a full run already wrote a final record (never downgrade a final).
+      const written = await putMangaOcrDetect(
+        msg.bookId,
+        msg.pageIndex,
+        blocks,
+        crops,
+      );
+      if (written) {
         post({
           type: "page",
           bookId: msg.bookId,
           pageIndex: msg.pageIndex,
-          blocks: existing.blocks,
-          partial: false,
+          blocks,
+          partial: true,
         });
         return;
       }
-      await putMangaOcr(msg.bookId, msg.pageIndex, blocks, true);
+      const existing = await loadMangaOcrPage(msg.bookId, msg.pageIndex);
       post({
         type: "page",
         bookId: msg.bookId,
         pageIndex: msg.pageIndex,
-        blocks,
-        partial: true,
+        blocks: existing?.blocks ?? [],
+        partial: existing ? !!existing.partial : true,
       });
       return;
     }
@@ -117,17 +128,25 @@ async function runJob(
       if (record && target) {
         const filled = await recognizeBlock(models, bitmap, target);
         if (filled) {
-          record.blocks[msg.blockIndex] = filled;
-          const done = record.blocks.every((block) => block.lines.length > 0);
-          await putMangaOcr(msg.bookId, msg.pageIndex, record.blocks, !done);
-          post({
-            type: "page",
-            bookId: msg.bookId,
-            pageIndex: msg.pageIndex,
-            blocks: record.blocks,
-            partial: !done,
-          });
-          return;
+          // Atomic merge: folds THIS block into the current record inside one
+          // transaction, so a concurrent fill of another block on the same
+          // page is never clobbered (no read-outside/write-later lost update).
+          const merged = await mergeMangaOcrBlock(
+            msg.bookId,
+            msg.pageIndex,
+            msg.blockIndex,
+            filled,
+          );
+          if (merged) {
+            post({
+              type: "page",
+              bookId: msg.bookId,
+              pageIndex: msg.pageIndex,
+              blocks: merged.blocks,
+              partial: !!merged.partial,
+            });
+            return;
+          }
         }
       }
       // No skeleton to fill (already recognized or gone) — report as-is.
@@ -136,12 +155,35 @@ async function runJob(
         bookId: msg.bookId,
         pageIndex: msg.pageIndex,
         blocks: record?.blocks ?? [],
-        partial: record?.partial ?? true,
+        partial: record ? !!record.partial : true,
       });
       return;
     }
-    const blocks = await ocrPage(models, bitmap, msg.pageIndex);
-    await putMangaOcr(msg.bookId, msg.pageIndex, blocks);
+    // Full page recognition. Reuse the stored skeleton's exact float crops
+    // when present — no second detector pass, blocks identical to a full
+    // detect. Legacy rounded skeletons (no crops) fall back to full
+    // detect+recognize; a record already final is left untouched.
+    const existing = await loadMangaOcrPage(msg.bookId, msg.pageIndex);
+    if (existing && !existing.partial) {
+      post({
+        type: "page",
+        bookId: msg.bookId,
+        pageIndex: msg.pageIndex,
+        blocks: existing.blocks,
+        partial: false,
+      });
+      return;
+    }
+    const crops = existing?.crops;
+    const blocks =
+      crops &&
+      crops.length === existing.blocks.length &&
+      crops.every(
+        (crop) => crop.length === 4 && crop.every(Number.isFinite),
+      )
+      ? await ocrPageFromSkeleton(models, bitmap, crops, msg.pageIndex)
+      : await ocrPage(models, bitmap, msg.pageIndex);
+    await putMangaOcrFinal(msg.bookId, msg.pageIndex, blocks);
     post({
       type: "page",
       bookId: msg.bookId,
@@ -158,19 +200,32 @@ self.onmessage = (event: MessageEvent<OcrWorkerIn>) => {
   const msg = event.data;
   if (msg.type === "init") {
     setOcrDebugTiming(msg.debug === true);
-    modelsPromise = createOcrSessions(msg.files, msg.threads ?? 1, msg.ep ?? "wasm")
-      .then((models) => {
+    const init = createOcrSessions(
+      msg.files,
+      msg.threads ?? 1,
+      msg.ep ?? "wasm",
+    );
+    modelsPromise = init;
+    // Two-argument then: ready or error posts exactly once and the rejection
+    // is handled in-place — no rethrow (an unhandled rejection), no parked
+    // promise. Both handlers act only while THIS init is still the active
+    // modelsPromise, so a replaced init never posts stale or nulls the live
+    // promise. Jobs only arrive after "ready", so runJob's `await
+    // modelsPromise` never sees a rejection.
+    void init.then(
+      () => {
+        if (modelsPromise !== init) return;
         post({ type: "ready" });
-        return models;
-      })
-      .catch((err: unknown) => {
+      },
+      (err: unknown) => {
+        if (modelsPromise !== init) return;
         modelsPromise = null;
         post({
           type: "error",
           message: err instanceof Error ? err.message : String(err),
         });
-        throw err;
-      });
+      },
+    );
     return;
   }
   void runJob(msg).catch((err: unknown) => {

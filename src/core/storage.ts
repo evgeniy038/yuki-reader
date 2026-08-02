@@ -60,6 +60,10 @@ export interface MangaOcrRecord {
       lines are empty until recognized — on hover, in the reading window, or
       by the background catch-up pass. */
   partial?: boolean;
+  /** Exact float detector rects ([x1,y1,x2,y2], aligned with `blocks`;
+      `blocks[].box` stays rounded for the overlay) so recognition reuses
+      the detector's crops. Absent on legacy records — full detect then. */
+  crops?: number[][];
 }
 
 /** Cached OCR model file (downloaded once, reused forever). */
@@ -238,18 +242,100 @@ export async function deleteManga(id: string): Promise<void> {
     detector (measured 2x better CER). */
 export const OCR_ENGINE = 4;
 
-export async function putMangaOcr(
+// OCR writes are atomic at the storage boundary: every write opens the manga
+// store in the SAME readwrite transaction as the OCR store, serializing with
+// deleteManga — a deleted volume can never be resurrected by a late worker
+// result (the write sees the manga row gone and skips). A detect skeleton
+// never downgrades a final record; a block fill merges inside the
+// transaction so concurrent fills of different blocks never clobber.
+
+/** Detect skeleton: final boxes, empty lines, plus the exact float crop
+    rects (`crops`, aligned with `blocks`) so the recognition march reuses
+    them without a second detector pass. Returns false when the volume is
+    gone or the page already holds a final record (never downgrade it). */
+export async function putMangaOcrDetect(
   bookId: string,
   pageIndex: number,
   blocks: MokuroBlock[],
-  partial = false,
-): Promise<void> {
+  crops: number[][],
+): Promise<boolean> {
   const db = await open();
-  await db.put(
-    MANGA_OCR,
-    { blocks, engine: OCR_ENGINE, ...(partial ? { partial: true } : {}) },
-    `${bookId}/${pageIndex}`,
-  );
+  const tx = db.transaction([MANGA, MANGA_OCR], "readwrite");
+  const manga = await tx.objectStore(MANGA).get(bookId);
+  const store = tx.objectStore(MANGA_OCR);
+  const key = `${bookId}/${pageIndex}`;
+  const existing: MangaOcrRecord | undefined = manga
+    ? await store.get(key)
+    : undefined;
+  if (!manga || (existing?.engine === OCR_ENGINE && !existing.partial)) {
+    await tx.done;
+    return false;
+  }
+  await store.put({ blocks, crops, engine: OCR_ENGINE, partial: true }, key);
+  await tx.done;
+  return true;
+}
+
+/** Final recognition result for a page. Returns false when the volume is
+    gone (deleted/cancelled mid-flight — the result is dropped, not written). */
+export async function putMangaOcrFinal(
+  bookId: string,
+  pageIndex: number,
+  blocks: MokuroBlock[],
+): Promise<boolean> {
+  const db = await open();
+  const tx = db.transaction([MANGA, MANGA_OCR], "readwrite");
+  const manga = await tx.objectStore(MANGA).get(bookId);
+  if (!manga) {
+    await tx.done;
+    return false;
+  }
+  await tx
+    .objectStore(MANGA_OCR)
+    .put({ blocks, engine: OCR_ENGINE }, `${bookId}/${pageIndex}`);
+  await tx.done;
+  return true;
+}
+
+/** Fill ONE block of a skeleton record (hover lazy-OCR), atomically merging
+    into the current record so concurrent fills are never lost. No-op once
+    the page is final or the volume is gone. Returns the stored record (the
+    unchanged one when it was already final), or null when there is nothing
+    to fill. */
+export async function mergeMangaOcrBlock(
+  bookId: string,
+  pageIndex: number,
+  blockIndex: number,
+  block: MokuroBlock,
+): Promise<MangaOcrRecord | null> {
+  const db = await open();
+  const tx = db.transaction([MANGA, MANGA_OCR], "readwrite");
+  const manga = await tx.objectStore(MANGA).get(bookId);
+  const store = tx.objectStore(MANGA_OCR);
+  const key = `${bookId}/${pageIndex}`;
+  const existing: MangaOcrRecord | undefined = manga
+    ? await store.get(key)
+    : undefined;
+  if (!existing || existing.engine !== OCR_ENGINE) {
+    await tx.done;
+    return null;
+  }
+  if (!existing.partial || blockIndex < 0 || blockIndex >= existing.blocks.length) {
+    await tx.done;
+    return existing;
+  }
+  const blocks = existing.blocks.slice();
+  blocks[blockIndex] = block;
+  const done = blocks.every((b) => b.lines.length > 0);
+  const record: MangaOcrRecord = {
+    blocks,
+    engine: OCR_ENGINE,
+    ...(existing.crops ? { crops: existing.crops } : {}),
+    ...(done ? {} : { partial: true }),
+  };
+  await store.put(record, key);
+  await tx.done;
+  return record;
 }
 
 /** One page's OCR record (blocks + partial flag), or undefined when not
