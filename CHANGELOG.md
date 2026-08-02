@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.1] - 2026-08-02
+
+- Manga OCR: real 197- and 226-page volumes now finish 1.9–2.0× faster, dropping from 95 to 46 seconds and from 145 to 78 seconds; recognized text and box placement stay identical
+
 ## [1.3.0] - 2026-08-02
 
 - Library: language sections and the novels/manga subsections fold into a cover stack — click the section title or the stack to unfold; the state persists
