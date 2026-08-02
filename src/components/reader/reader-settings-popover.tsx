@@ -49,9 +49,9 @@ export function ReaderSettingsPopover({
         type="button"
         aria-label={t("reader.closeSettings")}
         onClick={onClose}
-        className="fixed inset-0 z-30"
+        className="pointer-events-auto fixed inset-0 z-30"
       />
-      <div className="fixed left-1/2 top-16 z-40 flex w-64 origin-top -translate-x-1/2 animate-in flex-col gap-3 rounded-card border border-subtle bg-raised p-3 shadow-floating fade-in-0 zoom-in-95 duration-100">
+      <div className="pointer-events-auto fixed left-1/2 top-16 z-40 flex w-64 origin-top -translate-x-1/2 animate-in flex-col gap-3 rounded-card border border-subtle bg-raised p-3 shadow-floating fade-in-0 zoom-in-95 duration-100">
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-content">{t("settings.theme")}</span>
           <SegmentedControl

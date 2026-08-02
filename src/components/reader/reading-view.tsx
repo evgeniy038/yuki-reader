@@ -604,12 +604,15 @@ export function ReadingView({
     [searchQuery, model],
   );
 
+  // Click-to-turn on the page surface itself: left/right halves page the
+  // book. Attached to the scroll box, not the shell, so panels and chrome
+  // never page. Selecting text never pages — drag suppression is tracked
+  // from pointerdown in the hook.
   usePagingInput({
-    targetRef: outerRef,
+    targetRef: scrollRef,
     vertical,
     enabled: chapters.length > 0,
-    edgeClickPx: 32,
-    ignoreClickSelector: ".book-content",
+    clickMode: "halves",
     onStep: (dir) => goTo(pageRef.current + dir),
   });
 

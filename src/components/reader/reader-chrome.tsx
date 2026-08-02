@@ -98,7 +98,7 @@ export function ReaderChrome({
   };
 
   return (
-    <>
+    <div className="pointer-events-none fixed inset-0 z-50 isolate">
       <button
         type="button"
         onMouseEnter={show}
@@ -108,7 +108,9 @@ export function ReaderChrome({
         tabIndex={visible ? -1 : 0}
         className={cn(
           "fixed left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-pointer items-center justify-center rounded-b-md border border-t-0 border-subtle bg-raised px-2.5 pb-0.5 text-muted-content shadow-floating transition-opacity duration-200 hover:text-strong",
-          visible ? "pointer-events-none opacity-0" : "opacity-100",
+          visible
+            ? "pointer-events-none opacity-0"
+            : "pointer-events-auto opacity-100",
         )}
       >
         <CaretDown weight="bold" className="size-3" />
@@ -126,7 +128,7 @@ export function ReaderChrome({
         className={cn(
           "fixed left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill border border-subtle bg-raised p-1 shadow-floating transition-[transform,opacity] duration-200",
           visible
-            ? "translate-y-0 opacity-100"
+            ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-3 opacity-0",
         )}
       >
@@ -200,6 +202,6 @@ export function ReaderChrome({
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
-    </>
+    </div>
   );
 }

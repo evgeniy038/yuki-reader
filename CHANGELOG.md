@@ -5,7 +5,12 @@ versioning — [SemVer](https://semver.org/).
 
 ## [1.2.5] - 2026-08-02
 
-- Reader: paging with the mouse now hugs the edge of a manga page instead of skipping across it, and novel pages turn only when you truly mean it; two-page manga spreads read seamlessly with a cover mode, fonts go larger with quick jumps to any spot, the on-screen controls are clearer, Escape closes the reader, and pan/zoom is free in every direction
+- Reader: click anywhere beside a manga page to turn it; the pointer shows where it works
+- Manga: two-page spreads have no gap, and the first page can be used as a cover
+- Novels: selecting text no longer turns the page, and the font can be made much larger
+- Reader: jump straight to a manga page or a position in a novel
+- Reader: controls are easier to find, and Escape exits novels and manga
+- Manga: zoom out further and move the page at any scale
 
 ## [1.2.4] - 2026-08-01
 
