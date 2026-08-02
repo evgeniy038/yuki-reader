@@ -5,8 +5,8 @@ versioning — [SemVer](https://semver.org/).
 
 ## [1.3.2] - 2026-08-02
 
-- Backup: export books, progress, statistics, settings and dictionaries with separate switches, then import the selected data on another device; OCR models are downloaded again when needed
-- Dictionaries: import Yomitan-compatible ZIP files, install the recommended English-English, English-Russian and Japanese-English dictionaries, reorder them and enable or disable each one
+- Progress transfer: compact export/import actions support customizable Yuki backups and ttsu backup ZIPs; OCR models are never included
+- Dictionaries: keep installed dictionaries in a compact list, then add Yomitan-compatible ZIPs or recommended English-English, English-Russian and Japanese-English packages from a modal
 - Reader: hold Shift over EPUB or OCR text to open a dictionary definition popup
 
 ## [1.3.1] - 2026-08-02

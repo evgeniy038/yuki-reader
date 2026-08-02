@@ -273,6 +273,113 @@ function validateManifest(value: unknown): asserts value is BackupManifest {
   }
 }
 
+interface TtsuProgressData {
+  progress?: number | string;
+  lastBookmarkModified?: number;
+}
+
+interface TtsuStatistic {
+  title?: string;
+  dateKey?: string;
+  charactersRead?: number;
+  readingTime?: number;
+}
+
+function titleKey(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
+function ttsuTitle(path: string): string {
+  const segment = path.split("/")[0] ?? path;
+  try {
+    return decodeURIComponent(segment)
+      .replaceAll("~ttu-star~", "*")
+      .replaceAll("~ttu-dend~", ".")
+      .replaceAll("~ttu-spc~", " ");
+  } catch {
+    return segment;
+  }
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+async function importTtsuBackup(
+  files: Record<string, Uint8Array>,
+): Promise<BackupImportSummary> {
+  const progressPaths = Object.keys(files).filter((path) =>
+    /(?:^|\/)progress_[^/]+\.json$/i.test(path),
+  );
+  const statisticsPaths = Object.keys(files).filter((path) =>
+    /(?:^|\/)statistics_[^/]+\.json$/i.test(path),
+  );
+  if (progressPaths.length === 0 && statisticsPaths.length === 0) {
+    throw new Error("Unsupported progress file");
+  }
+
+  const books = await loadAllBooks();
+  const booksByTitle = new Map(books.map((book) => [titleKey(book.title), book]));
+  const summary: BackupImportSummary = {
+    books: 0,
+    progress: 0,
+    stats: 0,
+    dictionaries: 0,
+  };
+
+  for (const path of progressPaths) {
+    const target = booksByTitle.get(titleKey(ttsuTitle(path)));
+    if (!target) continue;
+    const data = readJson<TtsuProgressData>(files, path);
+    const rawProgress = finiteNumber(data.progress);
+    if (rawProgress === undefined) continue;
+    const progress = rawProgress > 1 ? rawProgress / 100 : rawProgress;
+    await restoreBookProgress(target.id, progress, data.lastBookmarkModified);
+    summary.progress += 1;
+  }
+
+  const days = new Map<string, DailyStats>();
+  for (const path of statisticsPaths) {
+    const raw = readJson<unknown>(files, path);
+    const rows = Array.isArray(raw) ? raw : [raw];
+    for (const value of rows) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as TtsuStatistic;
+      if (!row.dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(row.dateKey)) continue;
+      const chars = Math.max(0, finiteNumber(row.charactersRead) ?? 0);
+      const timeMs = Math.max(0, (finiteNumber(row.readingTime) ?? 0) * 1000);
+      const day = days.get(row.dateKey) ?? {
+        date: row.dateKey,
+        chars: 0,
+        pages: 0,
+        timeMs: 0,
+      };
+      day.chars += chars;
+      day.timeMs += timeMs;
+      if (row.title) {
+        const target = booksByTitle.get(titleKey(row.title));
+        if (target) {
+          const perBook = { ...day.perBook };
+          const amount = perBook[target.id] ?? { chars: 0, pages: 0, timeMs: 0 };
+          perBook[target.id] = {
+            chars: amount.chars + chars,
+            pages: amount.pages,
+            timeMs: amount.timeMs + timeMs,
+          };
+          day.perBook = perBook;
+        }
+      }
+      days.set(row.dateKey, day);
+    }
+  }
+  for (const day of days.values()) {
+    await putStatsDay(day);
+    summary.stats += 1;
+  }
+  return summary;
+}
+
 function readBookRecord(
   files: Record<string, Uint8Array>,
   item: BackupBook,
@@ -309,6 +416,7 @@ export interface BackupImportSummary {
 
 export async function importBackup(file: Blob): Promise<BackupImportSummary> {
   const files = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  if (!files["manifest.json"]) return importTtsuBackup(files);
   const manifest = readJson<BackupManifest>(files, "manifest.json");
   validateManifest(manifest);
   const summary: BackupImportSummary = {
