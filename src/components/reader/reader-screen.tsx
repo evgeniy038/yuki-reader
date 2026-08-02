@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Book } from "@/core/library";
 import {
@@ -13,6 +13,7 @@ import { PdfReadingView } from "./pdf-reading-view";
 import { MangaReadingView } from "./manga-reading-view";
 import { ReaderChrome } from "./reader-chrome";
 import type { ReaderPanelMode } from "./reader-panel";
+import { DictionaryLookupLayer } from "./dictionary-popup";
 
 // The full-screen reader: the book view (EPUB reflow or PDF pages) and the
 // auto-hiding chrome. Reader-only UI state
@@ -42,6 +43,7 @@ export function ReaderScreen({
   // Only the PDF view knows whether the document has an outline (post-load),
   // so it reports up and the chrome's TOC button follows.
   const [pdfHasOutline, setPdfHasOutline] = useState(false);
+  const readerRef = useRef<HTMLDivElement>(null);
 
   // One Escape for the whole reader, innermost layer first: settings popover,
   // then side panel, then exit — but PDF never exits on Escape.
@@ -81,7 +83,7 @@ export function ReaderScreen({
   }, [settings]);
 
   return (
-    <div className="relative min-h-screen bg-canvas">
+    <div ref={readerRef} className="relative min-h-screen bg-canvas">
       <div
         style={readingStyle}
         data-furigana={settings.furigana ? undefined : "off"}
@@ -137,6 +139,10 @@ export function ReaderScreen({
         }
         panel={panel}
         onPanelChange={setPanel}
+      />
+      <DictionaryLookupLayer
+        rootRef={readerRef}
+        enabled={book.format !== "pdf"}
       />
     </div>
   );

@@ -3,6 +3,12 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.2] - 2026-08-02
+
+- Backup: export books, progress, statistics, settings and dictionaries with separate switches, then import the selected data on another device; OCR models are downloaded again when needed
+- Dictionaries: import Yomitan-compatible ZIP files, install the recommended English-English, English-Russian and Japanese-English dictionaries, reorder them and enable or disable each one
+- Reader: hold Shift over EPUB or OCR text to open a dictionary definition popup
+
 ## [1.3.1] - 2026-08-02
 
 - Manga OCR: real 197- and 226-page volumes now finish 1.9–2.0× faster, dropping from 95 to 46 seconds and from 145 to 78 seconds; recognized text and box placement stay identical

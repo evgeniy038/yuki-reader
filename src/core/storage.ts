@@ -3,6 +3,11 @@ import type { BookFormat, Language } from "./library";
 import type { MokuroBlock } from "./mokuro";
 import type { Chapter, EpubResource, TocEntry } from "./reading";
 import type { MangaStoredPage } from "./import-manga";
+import type {
+  DictionaryArchiveRecord,
+  DictionaryEntryRecord,
+  DictionaryRecord,
+} from "./dictionaries";
 import {
   applyBookDelta,
   applyDelta,
@@ -79,6 +84,15 @@ interface YukiDB extends DBSchema {
   mangaPages: { key: string; value: Blob };
   mangaOcr: { key: string; value: MangaOcrRecord };
   ocrModels: { key: string; value: OcrModelRecord };
+  dictionaries: { key: string; value: DictionaryRecord };
+  dictionaryEntries: {
+    key: string;
+    value: DictionaryEntryRecord;
+    indexes: {
+      byDictionaryTerm: [string, string];
+    };
+  };
+  dictionaryArchives: { key: string; value: DictionaryArchiveRecord };
 }
 
 const DB_NAME = "yuki";
@@ -90,11 +104,15 @@ const MANGA = "manga";
 const MANGA_PAGES = "mangaPages";
 const MANGA_OCR = "mangaOcr";
 const OCR_MODELS = "ocrModels";
+const DICTIONARIES = "dictionaries";
+const DICTIONARY_ENTRIES = "dictionaryEntries";
+const DICTIONARY_ARCHIVES = "dictionaryArchives";
+const BY_DICTIONARY_TERM = "byDictionaryTerm";
 
 let dbPromise: ReturnType<typeof openDB<YukiDB>> | null = null;
 function open() {
   if (!dbPromise) {
-    dbPromise = openDB<YukiDB>(DB_NAME, 6, {
+    dbPromise = openDB<YukiDB>(DB_NAME, 7, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1 && !db.objectStoreNames.contains(BOOKS)) {
           db.createObjectStore(BOOKS, { keyPath: "id" });
@@ -130,6 +148,26 @@ function open() {
             db.createObjectStore(OCR_MODELS, { keyPath: "url" });
           }
         }
+        // v7: Yomitan-compatible dictionaries. Archives are kept so a
+        // portable backup can restore the exact imported package; parsed term
+        // rows make lookups cheap without unzipping on every hover.
+        if (oldVersion < 7) {
+          if (!db.objectStoreNames.contains(DICTIONARIES)) {
+            db.createObjectStore(DICTIONARIES, { keyPath: "id" });
+          }
+          if (!db.objectStoreNames.contains(DICTIONARY_ENTRIES)) {
+            const entries = db.createObjectStore(DICTIONARY_ENTRIES, {
+              keyPath: "key",
+            });
+            entries.createIndex(BY_DICTIONARY_TERM, [
+              "dictionaryId",
+              "termKey",
+            ]);
+          }
+          if (!db.objectStoreNames.contains(DICTIONARY_ARCHIVES)) {
+            db.createObjectStore(DICTIONARY_ARCHIVES, { keyPath: "id" });
+          }
+        }
       },
     });
   }
@@ -155,6 +193,19 @@ export async function saveProgress(id: string, progress: number): Promise<void> 
     record.lastReadAt = Date.now();
     await db.put(BOOKS, record);
   }
+}
+
+export async function restoreBookProgress(
+  id: string,
+  progress: number,
+  lastReadAt?: number,
+): Promise<void> {
+  const db = await open();
+  const record = await db.get(BOOKS, id);
+  if (!record) return;
+  record.progress = Math.min(1, Math.max(0, progress));
+  record.lastReadAt = lastReadAt;
+  await db.put(BOOKS, record);
 }
 
 export async function deleteBook(id: string): Promise<void> {
@@ -402,6 +453,118 @@ export async function putOcrModel(url: string, bytes: Uint8Array): Promise<void>
   await db.put(OCR_MODELS, { url, bytes });
 }
 
+// --- Dictionaries ---------------------------------------------------------
+
+export async function loadAllDictionaries(): Promise<DictionaryRecord[]> {
+  const db = await open();
+  return (await db.getAll(DICTIONARIES)).sort((a, b) => a.order - b.order);
+}
+
+export async function loadDictionaryArchive(
+  id: string,
+): Promise<Uint8Array | undefined> {
+  const db = await open();
+  return (await db.get(DICTIONARY_ARCHIVES, id))?.bytes;
+}
+
+export async function loadDictionaryEntries(
+  dictionaryId: string,
+  termKey: string,
+): Promise<DictionaryEntryRecord[]> {
+  const db = await open();
+  return db.getAllFromIndex(
+    DICTIONARY_ENTRIES,
+    BY_DICTIONARY_TERM,
+    IDBKeyRange.only([dictionaryId, termKey]),
+  );
+}
+
+export async function replaceDictionary(
+  record: DictionaryRecord,
+  archive: Uint8Array,
+  entries: DictionaryEntryRecord[],
+): Promise<void> {
+  const db = await open();
+  const tx = db.transaction(
+    [DICTIONARIES, DICTIONARY_ENTRIES, DICTIONARY_ARCHIVES],
+    "readwrite",
+  );
+  const entriesStore = tx.objectStore(DICTIONARY_ENTRIES);
+  const index = entriesStore.index(BY_DICTIONARY_TERM);
+  let cursor = await index.openCursor(IDBKeyRange.bound([record.id, ""], [record.id, "\uffff"]));
+  while (cursor) {
+    await cursor.delete();
+    cursor = await cursor.continue();
+  }
+  await tx.objectStore(DICTIONARIES).put(record);
+  await tx.objectStore(DICTIONARY_ARCHIVES).put({ id: record.id, bytes: archive });
+  for (const entry of entries) await entriesStore.put(entry);
+  await tx.done;
+}
+
+export async function deleteDictionary(id: string): Promise<void> {
+  const db = await open();
+  const tx = db.transaction(
+    [DICTIONARIES, DICTIONARY_ENTRIES, DICTIONARY_ARCHIVES],
+    "readwrite",
+  );
+  await tx.objectStore(DICTIONARIES).delete(id);
+  await tx.objectStore(DICTIONARY_ARCHIVES).delete(id);
+  const index = tx.objectStore(DICTIONARY_ENTRIES).index(BY_DICTIONARY_TERM);
+  let cursor = await index.openCursor(IDBKeyRange.bound([id, ""], [id, "\uffff"]));
+  while (cursor) {
+    await cursor.delete();
+    cursor = await cursor.continue();
+  }
+  await tx.done;
+}
+
+export async function setDictionaryEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const db = await open();
+  const record = await db.get(DICTIONARIES, id);
+  if (!record) return;
+  record.enabled = enabled;
+  await db.put(DICTIONARIES, record);
+}
+
+export async function setDictionaryOrder(ids: string[]): Promise<void> {
+  const db = await open();
+  const tx = db.transaction(DICTIONARIES, "readwrite");
+  for (const [order, id] of ids.entries()) {
+    const record = await tx.store.get(id);
+    if (record) await tx.store.put({ ...record, order });
+  }
+  await tx.done;
+}
+
+export async function loadDictionaryArchives(): Promise<DictionaryArchiveRecord[]> {
+  const db = await open();
+  return db.getAll(DICTIONARY_ARCHIVES);
+}
+
+export async function putMangaOcrRecords(
+  bookId: string,
+  records: Map<number, MangaOcrRecord>,
+): Promise<void> {
+  const db = await open();
+  const tx = db.transaction([MANGA, MANGA_OCR], "readwrite");
+  if (!(await tx.objectStore(MANGA).get(bookId))) {
+    await tx.done;
+    return;
+  }
+  const store = tx.objectStore(MANGA_OCR);
+  for (const [pageIndex, record] of records) {
+    await store.put(
+      { ...record, engine: OCR_ENGINE },
+      `${bookId}/${pageIndex}`,
+    );
+  }
+  await tx.done;
+}
+
 // --- Reading statistics ----------------------------------------------------
 
 /**
@@ -445,4 +608,9 @@ export async function loadStats(): Promise<DailyStats[]> {
   const db = await open();
   const days = await db.getAll(STATS);
   return days.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export async function putStatsDay(day: DailyStats): Promise<void> {
+  const db = await open();
+  await db.put(STATS, day);
 }

@@ -117,6 +117,7 @@ export function usePagingInput({
         )
       )
         return;
+      if (el?.closest("[data-dictionary-popup]")) return;
       const ignoreSel = ignoreClickSelectorRef.current;
       if (ignoreSel && el?.closest(ignoreSel)) return;
 
@@ -152,6 +153,7 @@ export function usePagingInput({
       else if (back) onStepRef.current(-1);
     };
     const onKey = (event: KeyboardEvent) => {
+      if (event.shiftKey) return;
       const v = verticalRef.current;
       const fwd = v
         ? event.key === "ArrowLeft" ||

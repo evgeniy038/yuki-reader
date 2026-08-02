@@ -34,6 +34,8 @@ import {
 import { SettingsBlock, SettingsGroup, SettingsRow } from "./settings-group";
 import { ReadingPreview } from "./reading-preview";
 import { AboutSection } from "./about-section";
+import { BackupSection } from "./backup-section";
+import { DictionaryLibrarySection } from "./dictionary-library-section";
 
 interface SettingsPageProps {
   settings: ReadingSettings;
@@ -177,6 +179,8 @@ export function SettingsPage({
             </div>
           </SettingsRow>
         </SettingsGroup>
+        <DictionaryLibrarySection />
+        <BackupSection />
         <AboutSection />
       </PageContent>
     </PageShell>
