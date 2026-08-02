@@ -3,6 +3,11 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.2.6] - 2026-08-02
+
+- Novels: page-turn hover now works across the full reader surface, while text keeps its normal copy cursor
+- Updates: the Update button now applies the new version without clearing your library
+
 ## [1.2.5] - 2026-08-02
 
 - Reader: click anywhere beside a manga page to turn it; the pointer shows where it works

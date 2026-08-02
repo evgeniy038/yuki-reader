@@ -63,6 +63,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        clientsClaim: true,
         // Precache every built asset including public/pdfjs (cmaps + fonts):
         // after the first visit the reader works fully offline. User books
         // live in IndexedDB and never touch the SW cache. The OCR wasm
