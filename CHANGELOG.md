@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.0] - 2026-08-02
+
+- Library: language sections and the novels/manga subsections fold into a cover stack — click the section title or the stack to unfold; the state persists
+
 ## [1.2.9] - 2026-08-02
 
 - Full screen: the control pill parks below the system menu bar — all buttons respond again
