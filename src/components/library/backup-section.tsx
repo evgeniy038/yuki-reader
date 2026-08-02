@@ -148,9 +148,6 @@ export function BackupSection() {
         <DialogContent className="max-w-sm gap-4 p-5">
           <DialogHeader>
             <DialogTitle>{t("settings.backup.exportTitle")}</DialogTitle>
-            <p className="text-sm text-muted-content">
-              {t("settings.backup.exportHint")}
-            </p>
           </DialogHeader>
           <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
             {exportRows.map(([key, label, ariaLabel]) => (
@@ -168,9 +165,6 @@ export function BackupSection() {
               </div>
             ))}
           </div>
-          <p className="text-xs text-muted-content">
-            {t("settings.backup.modelsHint")}
-          </p>
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
           <DialogFooter>
             <Button

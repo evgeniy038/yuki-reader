@@ -184,9 +184,6 @@ export function DictionaryLibrarySection() {
         <DialogContent className="max-w-md gap-4 p-5">
           <DialogHeader>
             <DialogTitle>{t("settings.dictionaries.addTitle")}</DialogTitle>
-            <p className="text-sm text-muted-content">
-              {t("settings.dictionaries.addHint")}
-            </p>
           </DialogHeader>
 
           <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">

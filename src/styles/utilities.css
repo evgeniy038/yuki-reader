@@ -43,6 +43,12 @@
   border-color: var(--ds-border-subtle);
 }
 
+@utility divide-subtle {
+  & > :not(:last-child) {
+    border-color: var(--ds-border-subtle);
+  }
+}
+
 @utility icon-nav {
   width: var(--size-icon-nav);
   height: var(--size-icon-nav);
