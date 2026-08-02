@@ -186,7 +186,7 @@ export function DictionaryLibrarySection() {
             <DialogTitle>{t("settings.dictionaries.addTitle")}</DialogTitle>
           </DialogHeader>
 
-          <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
+          <div className="divide-y divide-subtle">
             {DICTIONARY_CATALOG.map((item) => {
               const installed = dictionaries.some(
                 (dictionary) => dictionary.id === item.id,
@@ -194,7 +194,7 @@ export function DictionaryLibrarySection() {
               return (
                 <div
                   key={item.id}
-                  className="flex items-center gap-3 px-3 py-2.5"
+                  className="flex items-center gap-3 py-2.5"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-default">
@@ -218,7 +218,7 @@ export function DictionaryLibrarySection() {
                     </span>
                   ) : (
                     <Button
-                      size="xs"
+                      size="sm"
                       loading={busy === item.id}
                       disabled={busy !== null}
                       onClick={() =>
@@ -252,6 +252,7 @@ export function DictionaryLibrarySection() {
             <Button
               variant="secondary"
               size="sm"
+              className="!shadow-none"
               onClick={() => inputRef.current?.click()}
               disabled={busy !== null}
             >
