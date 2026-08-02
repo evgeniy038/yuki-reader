@@ -211,3 +211,26 @@ export function loadShelfSort(): ShelfSort {
 export function saveShelfSort(sort: ShelfSort): void {
   window.localStorage.setItem(SHELF_SORT_KEY, sort);
 }
+
+// ---------------------------------------------------------------------------
+// Collapsed shelf sections (localStorage). Ids: "ja" | "en" | "other" for
+// language groups, "<group>:novels" | "<group>:manga" for subsections.
+
+const SHELF_COLLAPSED_KEY = "yuki-shelf-collapsed";
+
+export function loadShelfCollapsed(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SHELF_COLLAPSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveShelfCollapsed(ids: string[]): void {
+  window.localStorage.setItem(SHELF_COLLAPSED_KEY, JSON.stringify(ids));
+}

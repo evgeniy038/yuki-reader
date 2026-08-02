@@ -24,6 +24,7 @@ export const ru: Messages = {
     other: "Другое",
     novels: "Романы",
     manga: "Манга",
+    expandSection: "Развернуть раздел",
     finished: "Прочитано",
     menu: {
       open: "Открыть",

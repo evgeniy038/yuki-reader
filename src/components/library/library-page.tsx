@@ -5,11 +5,14 @@ import { useTranslation } from "react-i18next";
 import {
   buildShelfItems,
   groupByLanguage,
+  loadShelfCollapsed,
   loadShelfSort,
+  saveShelfCollapsed,
   saveShelfSort,
   sortBooks,
   SHELF_SORTS,
   type Book,
+  type ShelfItem,
   type ShelfSort,
 } from "@/core/library";
 import { blobToDataUrl } from "@/core/import-book";
@@ -36,11 +39,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { LibraryGrid } from "./library-grid";
 import { LibraryEmpty } from "./library-empty";
+import { CollapsibleShelf } from "./collapsible-shelf";
 import {
   PageActions,
   PageContent,
   PageHeader,
-  PageSectionTitle,
   PageShell,
   PageTitle,
 } from "./page-shell";
@@ -86,6 +89,9 @@ export function LibraryPage({
 }) {
   const { t } = useTranslation();
   const [sort, setSort] = useState<ShelfSort>(() => loadShelfSort());
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
+    () => new Set(loadShelfCollapsed()),
+  );
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -98,6 +104,21 @@ export function LibraryPage({
   useEffect(() => {
     saveShelfSort(sort);
   }, [sort]);
+
+  useEffect(() => {
+    saveShelfCollapsed([...collapsed]);
+  }, [collapsed]);
+
+  // Section ids: the language group ("ja") or a kind subsection inside it
+  // ("ja:novels" / "ja:manga").
+  const toggleSection = (id: string, next: boolean) => {
+    setCollapsed((prev) => {
+      const s = new Set(prev);
+      if (next) s.add(id);
+      else s.delete(id);
+      return s;
+    });
+  };
 
   // Sort options carry locale labels; the ids (SHELF_SORTS) stay in core.
   const sorts = useMemo(
@@ -121,7 +142,6 @@ export function LibraryPage({
       ),
     [items],
   );
-  const showGroupHeaders = groups.length > 1;
 
   const groupLabel = (id: "ja" | "en" | "other") =>
     id === "ja" ? "日本語" : id === "en" ? "English" : t("library.other");
@@ -244,41 +264,64 @@ export function LibraryPage({
               { kind: "novels" as const, items: novels },
               { kind: "manga" as const, items: manga },
             ].filter((sub) => sub.items.length > 0);
+            const gridFor = (entries: { item: ShelfItem }[]) => (
+              <LibraryGrid
+                items={entries.map(({ item }) => item)}
+                openableIds={openableIds}
+                flashId={flashId}
+                onOpenBook={onOpenBook}
+                onDetails={setDetailsId}
+                onRename={setRenamingId}
+                onChangeCover={pickCoverFor}
+                onDelete={setDeletingId}
+                onOpenSeries={onOpenSeries}
+                onRenameSeries={setRenamingSeries}
+                onDeleteSeries={setDeletingSeries}
+              />
+            );
+            // The group stack fans the first covers the flyers are measured
+            // off — so both must follow the VISIBLE tiles (a collapsed
+            // subsection has no tiles to fly from).
+            const visibleItems = subs.flatMap((sub) =>
+              collapsed.has(`${group.id}:${sub.kind}`)
+                ? []
+                : sub.items.map(({ item }) => item),
+            );
+            const allItems = subs.flatMap((sub) =>
+              sub.items.map(({ item }) => item),
+            );
             return (
               <section
                 key={group.id}
                 className={index < groups.length - 1 ? "mb-10" : ""}
               >
-                {showGroupHeaders ? (
-                  <PageSectionTitle>
-                    {groupLabel(group.id)} · {group.items.length}
-                  </PageSectionTitle>
-                ) : null}
-                {subs.map((sub, subIndex) => (
-                  <div
-                    key={sub.kind}
-                    className={subIndex < subs.length - 1 ? "mb-8" : ""}
-                  >
-                    {subs.length > 1 ? (
-                      <h3 className="mb-3 text-xs text-muted-content">
-                        {subLabel(group.id, sub.kind)}
-                      </h3>
-                    ) : null}
-                    <LibraryGrid
-                      items={sub.items.map(({ item }) => item)}
-                      openableIds={openableIds}
-                      flashId={flashId}
-                      onOpenBook={onOpenBook}
-                      onDetails={setDetailsId}
-                      onRename={setRenamingId}
-                      onChangeCover={pickCoverFor}
-                      onDelete={setDeletingId}
-                      onOpenSeries={onOpenSeries}
-                      onRenameSeries={setRenamingSeries}
-                      onDeleteSeries={setDeletingSeries}
-                    />
-                  </div>
-                ))}
+                <CollapsibleShelf
+                  level="group"
+                  label={`${groupLabel(group.id)} · ${group.items.length}`}
+                  collapsed={collapsed.has(group.id)}
+                  onChange={(next) => toggleSection(group.id, next)}
+                  items={visibleItems.length > 0 ? visibleItems : allItems}
+                >
+                  {subs.map((sub, subIndex) =>
+                    subs.length > 1 ? (
+                      <CollapsibleShelf
+                        key={sub.kind}
+                        level="sub"
+                        label={subLabel(group.id, sub.kind)}
+                        collapsed={collapsed.has(`${group.id}:${sub.kind}`)}
+                        onChange={(next) =>
+                          toggleSection(`${group.id}:${sub.kind}`, next)
+                        }
+                        items={sub.items.map(({ item }) => item)}
+                        className={subIndex < subs.length - 1 ? "mb-8" : ""}
+                      >
+                        {gridFor(sub.items)}
+                      </CollapsibleShelf>
+                    ) : (
+                      <div key={sub.kind}>{gridFor(sub.items)}</div>
+                    ),
+                  )}
+                </CollapsibleShelf>
               </section>
             );
           })

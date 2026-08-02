@@ -26,6 +26,7 @@ export const en = {
     other: "Other",
     novels: "Novels",
     manga: "Manga",
+    expandSection: "Expand section",
     finished: "Finished",
     menu: {
       open: "Open",

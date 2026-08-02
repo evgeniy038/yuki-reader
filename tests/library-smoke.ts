@@ -242,8 +242,8 @@ async function main(): Promise<void> {
     "sort persists across reload",
   );
 
-  // Single language → no group headers.
-  check((await page.locator("section h2").count()) === 0, "no group headers for one language");
+  // Group headers are always shown (they carry the collapse caret).
+  check((await page.locator("section h2").count()) === 1, "one group header for one language");
 
   // Cleanup both books.
   await deleteViaMenu(page);
