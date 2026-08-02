@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.2.7] - 2026-08-02
+
+- Updates: the Update button can no longer get stuck — a tab that lost track of the waiting update now simply reloads onto the new version
+
 ## [1.2.6] - 2026-08-02
 
 - Novels: page-turn hover now works across the full reader surface, while text keeps its normal copy cursor
