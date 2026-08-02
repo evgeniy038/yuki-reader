@@ -7,6 +7,7 @@ import {
   type ReadingSettings,
 } from "@/core/reading-settings";
 import type { OpenedData } from "@/components/library/use-shelf";
+import { useEscapeKey } from "@/lib/use-escape-key";
 import { ReadingView } from "./reading-view";
 import { PdfReadingView } from "./pdf-reading-view";
 import { MangaReadingView } from "./manga-reading-view";
@@ -35,13 +36,32 @@ export function ReaderScreen({
   // Reader side panels (TOC / search) — one at a time, owned here so the
   // chrome buttons and the views stay in sync.
   const [panel, setPanel] = useState<ReaderPanelMode>(null);
+  // Settings popover is controlled from here so Escape can close it before
+  // anything else reacts.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Only the PDF view knows whether the document has an outline (post-load),
   // so it reports up and the chrome's TOC button follows.
   const [pdfHasOutline, setPdfHasOutline] = useState(false);
 
-  // Book switch (or exit) closes the panels and forgets the old outline flag.
+  // One Escape for the whole reader, innermost layer first: settings popover,
+  // then side panel, then exit — but PDF never exits on Escape.
+  useEscapeKey(() => {
+    if (settingsOpen) {
+      setSettingsOpen(false);
+      return;
+    }
+    if (panel !== null) {
+      setPanel(null);
+      return;
+    }
+    if (book.format === "epub" || book.format === "manga") onExit();
+  });
+
+  // Book switch (or exit) closes the panels and settings, and forgets the old
+  // outline flag.
   useEffect(() => {
     setPanel(null);
+    setSettingsOpen(false);
     setPdfHasOutline(false);
   }, [book.id]);
 
@@ -80,6 +100,7 @@ export function ReaderScreen({
           <MangaReadingView
             bookId={book.id}
             initialProgress={book.progress}
+            mangaFirstPageAsCover={settings.mangaFirstPageAsCover}
             onProgress={onProgress}
           />
         ) : (
@@ -102,8 +123,15 @@ export function ReaderScreen({
         onExit={onExit}
         settings={settings}
         onSettingsChange={onSettingsChange}
+        settingsOpen={settingsOpen}
+        onSettingsOpenChange={setSettingsOpen}
         showFontSettings={book.format !== "pdf" && book.format !== "manga"}
+        showMangaSettings={book.format === "manga"}
         showSearch={book.format !== "manga"}
+        mangaFirstPageAsCover={settings.mangaFirstPageAsCover}
+        onMangaFirstPageAsCoverChange={(checked) =>
+          onSettingsChange({ ...settings, mangaFirstPageAsCover: checked })
+        }
         tocAvailable={
           book.format === "pdf" ? pdfHasOutline : (data.toc?.length ?? 0) > 0
         }

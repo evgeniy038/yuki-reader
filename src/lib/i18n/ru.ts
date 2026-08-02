@@ -147,6 +147,7 @@ export const ru: Messages = {
     marginAria: "поля страницы",
     furigana: "Фуригана",
     furiganaAria: "фуригана",
+    firstPageAsCover: "Первая страница как обложка",
     previewLangAria: "язык примера",
     about: {
       title: "О Yuki",
@@ -170,6 +171,10 @@ export const ru: Messages = {
     mangaError: "Не удалось открыть мангу",
     smaller: "меньше",
     larger: "больше",
+    jump: "Перейти",
+    jumpPercent: "Позиция чтения (%)",
+    jumpPage: "Страница",
+    showControls: "Показать управление чтением",
   },
   drop: "Отпустите, чтобы открыть",
   ocr: {

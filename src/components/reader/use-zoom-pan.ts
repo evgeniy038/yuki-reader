@@ -4,10 +4,12 @@ import type { MouseEvent, PointerEvent, RefObject } from "react";
 // Zoom + pan for the manga stage: the wheel zooms toward the cursor in both
 // directions — the point under it never moves, so no sideways drift and no
 // re-centering on zoom-out (the page simply keeps whatever offset the anchor
-// math leaves). A drag pans while zoomed in. No bounds, no snap to center;
-// the user owns the page position, page turns call `reset`. The wheel
-// listener is native (passive: false) so the page never scrolls.
+// math leaves). A drag pans whenever zoom ≠ 1 (zoomed in or out). No
+// bounds, no snap to center; the user owns the page position, page turns
+// call `reset`. The wheel listener is native (passive: false) so the page
+// never scrolls.
 const MAX_ZOOM = 5;
+const MIN_ZOOM = 1 / 3;
 // Wheel delta → zoom factor: exp(-deltaY * SPEED). 0.01 ≈ a full 1→5 zoom
 // range in ~160px of wheel travel — punchy but still controllable.
 const ZOOM_SPEED = 0.01;
@@ -38,7 +40,10 @@ export function useZoomPan({
       const py = event.clientY - (rect.top + rect.height / 2);
       setZoomPan((current) => {
         const factor = Math.exp(-event.deltaY * ZOOM_SPEED);
-        const next = Math.min(MAX_ZOOM, Math.max(1, current.zoom * factor));
+        const next = Math.min(
+          MAX_ZOOM,
+          Math.max(MIN_ZOOM, current.zoom * factor),
+        );
         // Both directions: the point under the cursor stays stationary.
         const k = next / current.zoom;
         return {
@@ -64,7 +69,7 @@ export function useZoomPan({
 
   const handlers = {
     onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
-      if (zoomPan.zoom <= 1 || event.button !== 0) return;
+      if (zoomPan.zoom === 1 || event.button !== 0) return;
       // Don't hijack OCR box interactions.
       if ((event.target as HTMLElement).closest("[data-ocr-block]")) return;
       dragRef.current = { px: event.clientX, py: event.clientY, moved: false };
@@ -97,7 +102,7 @@ export function useZoomPan({
 
   return {
     zoomPan,
-    zoomed: zoomPan.zoom > 1,
+    zoomed: zoomPan.zoom !== 1,
     reset: () => setZoomPan({ zoom: 1, x: 0, y: 0 }),
     handlers,
   };

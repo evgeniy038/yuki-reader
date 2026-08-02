@@ -62,6 +62,7 @@ export default function App() {
           furigana: true,
           pageMargin: PAGE_MARGIN_DEFAULT,
           theme: "light",
+          mangaFirstPageAsCover: true,
         },
   );
   useEffect(() => {

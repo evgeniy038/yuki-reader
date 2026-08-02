@@ -19,6 +19,9 @@ export function usePagingInput({
   vertical,
   enabled,
   wheel = true,
+  clickBoundsRef,
+  edgeClickPx = EDGE_CLICK_PX,
+  ignoreClickSelector,
   onStep,
 }: {
   /** Element that owns wheel/click (the scroll box or the stage). */
@@ -28,11 +31,23 @@ export function usePagingInput({
   enabled: boolean;
   /** Wheel paging — off where the wheel has another job (manga zoom). */
   wheel?: boolean;
+  /**
+   * Visible page bounds. When present, clicks outside these bounds turn the
+   * page instead of the fixed edge strips; when absent, the `edgeClickPx`
+   * strips on `targetRef` are used.
+   */
+  clickBoundsRef?: RefObject<HTMLElement | null>;
+  /** Width of the fallback edge-click strips. */
+  edgeClickPx?: number;
+  /** Clicks landing inside this selector never page. */
+  ignoreClickSelector?: string;
   onStep: (dir: 1 | -1) => void;
 }) {
   const lastWheelRef = useRef(0);
   const verticalRef = useLatest(vertical);
   const wheelRef = useLatest(wheel);
+  const edgeClickPxRef = useLatest(edgeClickPx);
+  const ignoreClickSelectorRef = useLatest(ignoreClickSelector);
   const onStepRef = useLatest(onStep);
 
   useEffect(() => {
@@ -56,14 +71,31 @@ export function usePagingInput({
     };
     const onClick = (event: MouseEvent) => {
       if (window.getSelection()?.toString().trim()) return;
+      const el = event.target as Element | null;
+      if (el?.closest("[data-page-indicator]")) return;
+      const ignoreSel = ignoreClickSelectorRef.current;
+      if (ignoreSel && el?.closest(ignoreSel)) return;
+
+      // Prefer the live page bounds; clicks in the margins around them turn
+      // the page. Vertical/RTL reads forward on the left, back on the right;
+      // horizontal reads the mirror.
+      const boundsEl = clickBoundsRef?.current;
+      if (boundsEl) {
+        const bounds = boundsEl.getBoundingClientRect();
+        const leftOf = event.clientX < bounds.left;
+        const rightOf = event.clientX > bounds.right;
+        const forward = verticalRef.current ? leftOf : rightOf;
+        const back = verticalRef.current ? rightOf : leftOf;
+        if (forward) onStepRef.current(1);
+        else if (back) onStepRef.current(-1);
+        return;
+      }
+
+      const px = edgeClickPxRef.current;
       const rect = target.getBoundingClientRect();
       const x = event.clientX - rect.left;
-      const forward = verticalRef.current
-        ? x < EDGE_CLICK_PX
-        : x > rect.width - EDGE_CLICK_PX;
-      const back = verticalRef.current
-        ? x > rect.width - EDGE_CLICK_PX
-        : x < EDGE_CLICK_PX;
+      const forward = verticalRef.current ? x < px : x > rect.width - px;
+      const back = verticalRef.current ? x > rect.width - px : x < px;
       if (forward) onStepRef.current(1);
       else if (back) onStepRef.current(-1);
     };

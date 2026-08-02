@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CaretLeft, CornersOut, Gear, List, MagnifyingGlass } from "@phosphor-icons/react";
+import { CaretDown, CaretLeft, CornersOut, Gear, List, MagnifyingGlass } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,9 +8,10 @@ import type { ReaderPanelMode } from "./reader-panel";
 import { ReaderSettingsPopover } from "./reader-settings-popover";
 
 // Auto-hiding control pill (mac-dock style): appears when the cursor nears the
-// top edge or hovers the pill, slides away otherwise. Holds exit / panels /
-// settings / fullscreen. The settings popover is a separate component — the
-// chrome only owns its open flag (an open popover pins the pill visible).
+// top edge, taps the pull handle, or hovers the pill, slides away otherwise.
+// Holds exit / panels / settings / fullscreen. The settings popover is a
+// separate component — controlled via settingsOpen when passed, otherwise the
+// chrome owns the flag (an open popover pins the pill visible).
 export function ReaderChrome({
   onExit,
   settings,
@@ -20,6 +21,11 @@ export function ReaderChrome({
   tocAvailable = false,
   panel = null,
   onPanelChange,
+  showMangaSettings = false,
+  mangaFirstPageAsCover = true,
+  onMangaFirstPageAsCoverChange,
+  settingsOpen: settingsOpenProp,
+  onSettingsOpenChange,
 }: {
   onExit: () => void;
   settings: ReadingSettings;
@@ -31,9 +37,16 @@ export function ReaderChrome({
   tocAvailable?: boolean;
   panel?: ReaderPanelMode;
   onPanelChange?: (panel: ReaderPanelMode) => void;
+  showMangaSettings?: boolean;
+  mangaFirstPageAsCover?: boolean;
+  onMangaFirstPageAsCoverChange?: (checked: boolean) => void;
+  /** Controlled popover flag; the chrome keeps its own when omitted. */
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
 }) {
   const [visible, setVisible] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpenInternal, setSettingsOpenInternal] = useState(false);
+  const settingsOpen = settingsOpenProp ?? settingsOpenInternal;
   const { t } = useTranslation();
   const hovering = useRef(false);
   const settingsOpenRef = useRef(false);
@@ -57,7 +70,7 @@ export function ReaderChrome({
   useEffect(() => {
     const initial = window.setTimeout(() => scheduleHide(), 1800);
     const onMove = (event: MouseEvent) => {
-      if (event.clientY < 40) show();
+      if (event.clientY < 64) show();
       else scheduleHide();
     };
     window.addEventListener("mousemove", onMove);
@@ -68,6 +81,17 @@ export function ReaderChrome({
     };
   }, []);
 
+  const setSettingsOpen = (open: boolean) => {
+    if (settingsOpenProp === undefined) setSettingsOpenInternal(open);
+    onSettingsOpenChange?.(open);
+  };
+
+  const toggleSettings = () => {
+    const open = !settingsOpen;
+    if (open) onPanelChange?.(null);
+    setSettingsOpen(open);
+  };
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.();
     else void document.exitFullscreen?.();
@@ -75,6 +99,21 @@ export function ReaderChrome({
 
   return (
     <>
+      <button
+        type="button"
+        onMouseEnter={show}
+        onClick={show}
+        aria-label={t("reader.showControls")}
+        title={t("reader.showControls")}
+        tabIndex={visible ? -1 : 0}
+        className={cn(
+          "fixed left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-pointer items-center justify-center rounded-b-md border border-t-0 border-subtle bg-raised px-2.5 pb-0.5 text-muted-content shadow-floating transition-opacity duration-200 hover:text-strong",
+          visible ? "pointer-events-none opacity-0" : "opacity-100",
+        )}
+      >
+        <CaretDown weight="bold" className="size-3" />
+      </button>
+
       <div
         onMouseEnter={() => {
           hovering.current = true;
@@ -131,7 +170,7 @@ export function ReaderChrome({
           variant="ghost"
           size="icon-sm"
           shape="round"
-          onClick={() => setSettingsOpen((open) => !open)}
+          onClick={toggleSettings}
           title={t("reader.settings")}
           aria-label={t("reader.settings")}
           aria-pressed={settingsOpen}
@@ -155,6 +194,9 @@ export function ReaderChrome({
           settings={settings}
           onSettingsChange={onSettingsChange}
           showFontSettings={showFontSettings}
+          showMangaSettings={showMangaSettings}
+          mangaFirstPageAsCover={mangaFirstPageAsCover}
+          onMangaFirstPageAsCoverChange={onMangaFirstPageAsCoverChange}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

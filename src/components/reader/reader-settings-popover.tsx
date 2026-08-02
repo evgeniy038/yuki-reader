@@ -8,9 +8,9 @@ import {
   type ReadingSettings,
 } from "@/core/reading-settings";
 import { useTranslation } from "react-i18next";
-import { useEscapeKey } from "@/lib/use-escape-key";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Stepper } from "@/components/ui/stepper";
+import { Switch } from "@/components/ui/switch";
 
 // The reader's quick settings popover: reading theme always (it recolors PDF
 // pages too), font controls only for the text reader — PDF pages are images
@@ -20,14 +20,19 @@ export function ReaderSettingsPopover({
   settings,
   onSettingsChange,
   showFontSettings,
+  showMangaSettings = false,
+  mangaFirstPageAsCover = true,
+  onMangaFirstPageAsCoverChange,
   onClose,
 }: {
   settings: ReadingSettings;
   onSettingsChange: (settings: ReadingSettings) => void;
   showFontSettings: boolean;
+  showMangaSettings?: boolean;
+  mangaFirstPageAsCover?: boolean;
+  onMangaFirstPageAsCoverChange?: (checked: boolean) => void;
   onClose: () => void;
 }) {
-  useEscapeKey(onClose);
   const { t } = useTranslation();
   const themeSegments = THEME_SEGMENTS.map((segment) => ({
     value: segment.value,
@@ -90,6 +95,20 @@ export function ReaderSettingsPopover({
               </div>
             </div>
           </>
+        ) : null}
+        {showMangaSettings ? (
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-xs text-muted-content">
+              {t("settings.firstPageAsCover")}
+            </span>
+            <Switch
+              checked={mangaFirstPageAsCover}
+              onCheckedChange={(checked) =>
+                onMangaFirstPageAsCoverChange?.(checked)
+              }
+              ariaLabel={t("settings.firstPageAsCover")}
+            />
+          </div>
         ) : null}
       </div>
     </>

@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Language } from "@/core/library";
 import type { Chapter, EpubResource, TocEntry } from "@/core/reading";
 import { scopeBookCss } from "@/core/book-css";
@@ -174,6 +175,7 @@ export function ReadingView({
       consumer debounces these into a dwell. */
   onProgress?: (progress: number, absolute: number, pageChars: number) => void;
 }) {
+  const { t } = useTranslation();
   const vertical = language === "ja";
   const outerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -572,6 +574,15 @@ export function ReadingView({
     onPanelChange?.(null);
   };
 
+  // Jump to a percentage of the whole book (indicator chip): the percent maps
+  // to a global char offset, then reuses the search-hit jump above.
+  const jumpToPercent = (percent: number) => {
+    const total = modelRef.current?.total ?? totalCount;
+    if (!total) return;
+    const clamped = Math.min(100, Math.max(0, percent));
+    jumpToChar(Math.round((clamped / 100) * Math.max(total - 1, 0)));
+  };
+
   // Jump to a section's start (TOC entry — identified by section, not char,
   // so zero-width sections like a cover page are reachable).
   const jumpToSection = (index: number) => {
@@ -594,9 +605,11 @@ export function ReadingView({
   );
 
   usePagingInput({
-    targetRef: scrollRef,
+    targetRef: outerRef,
     vertical,
     enabled: chapters.length > 0,
+    edgeClickPx: 32,
+    ignoreClickSelector: ".book-content",
     onStep: (dir) => goTo(pageRef.current + dir),
   });
 
@@ -611,7 +624,17 @@ export function ReadingView({
           <article ref={articleRef} className="book-content" />
         </div>
       </div>
-      <PageIndicator page={page + 1} pages={pageCount}>
+      <PageIndicator
+        page={page + 1}
+        pages={pageCount}
+        jumpMin={0}
+        jumpMax={100}
+        jumpStep={0.1}
+        jumpValue={totalCount > 0 ? (exploredCount / totalCount) * 100 : 0}
+        jumpLabel={t("reader.jumpPercent")}
+        jumpSubmitLabel={t("reader.jump")}
+        onJump={jumpToPercent}
+      >
         {totalCount > 0
           ? `${exploredCount} / ${totalCount} ${((exploredCount / totalCount) * 100).toFixed(1)}%`
           : `${page + 1} / ${pageCount}`}

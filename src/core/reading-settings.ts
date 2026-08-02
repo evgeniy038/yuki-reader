@@ -12,6 +12,8 @@ export interface ReadingSettings {
   pageMargin: number;
   /** Reading surface theme (EPUB page + PDF page alike), NOT the app theme. */
   theme: ReadingThemeId;
+  /** Treat the first manga page as a cover (single page, not a spread). */
+  mangaFirstPageAsCover: boolean;
 }
 
 // Reading surface themes: page background + text color for the text reader,
@@ -55,7 +57,9 @@ export function readingTheme(id: ReadingThemeId) {
 }
 
 export const FONT_SIZE_MIN = 14;
-export const FONT_SIZE_MAX = 24;
+// No upper cap: EPUB font size is unbounded above. Kept as an export so the
+// stepper's canIncrement (`fontSize < FONT_SIZE_MAX`) never disables "+".
+export const FONT_SIZE_MAX = Infinity;
 export const FONT_SIZE_STEP = 2;
 export const FONT_SIZE_DEFAULT = 18;
 
@@ -96,8 +100,10 @@ export function fontFamilyStack(id: FontFamilyId): string {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+// Only a lower bound: finite sizes pass through uncapped; non-finite
+// (NaN/±Infinity) falls back to the default.
 export const clampFontSize = (size: number) =>
-  clamp(size, FONT_SIZE_MIN, FONT_SIZE_MAX);
+  Number.isFinite(size) ? Math.max(FONT_SIZE_MIN, size) : FONT_SIZE_DEFAULT;
 
 // Segmented-control options for the two reading pickers, shared by the
 // settings page and the reader's quick popover (they must never drift).
@@ -126,6 +132,7 @@ export function loadReadingSettings(): ReadingSettings {
         furigana?: unknown;
         pageMargin?: unknown;
         theme?: unknown;
+        mangaFirstPageAsCover?: unknown;
       };
       const fontFamily: FontFamilyId =
         parsed.fontFamily === "serif" ||
@@ -139,12 +146,10 @@ export function loadReadingSettings(): ReadingSettings {
           : "light";
       return {
         fontFamily,
-        fontSize: numberOr(
-          parsed.fontSize,
-          FONT_SIZE_MIN,
-          FONT_SIZE_MAX,
-          FONT_SIZE_DEFAULT,
-        ),
+        fontSize:
+          typeof parsed.fontSize === "number"
+            ? clampFontSize(parsed.fontSize)
+            : FONT_SIZE_DEFAULT,
         lineHeight: numberOr(
           parsed.lineHeight,
           LINE_HEIGHT_MIN,
@@ -160,6 +165,10 @@ export function loadReadingSettings(): ReadingSettings {
           PAGE_MARGIN_DEFAULT,
         ),
         theme,
+        mangaFirstPageAsCover:
+          typeof parsed.mangaFirstPageAsCover === "boolean"
+            ? parsed.mangaFirstPageAsCover
+            : true,
       };
     }
   } catch {
@@ -172,6 +181,7 @@ export function loadReadingSettings(): ReadingSettings {
     furigana: true,
     pageMargin: PAGE_MARGIN_DEFAULT,
     theme: "light",
+    mangaFirstPageAsCover: true,
   };
 }
 

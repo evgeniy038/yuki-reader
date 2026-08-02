@@ -27,7 +27,7 @@ import { MangaOcrOverlay } from "./manga-ocr-overlay";
 const PAGE_MARGIN = 16;
 const SPREAD_MIN_ASPECT = 1.2;
 const SPREAD_MIN_WIDTH = 880;
-const GUTTER = 8;
+const GUTTER = 0;
 /** Keep object URLs this many pages around the current one. */
 const URL_WINDOW = 8;
 
@@ -38,13 +38,23 @@ interface ViewPage {
   height: number;
 }
 
-function spreadFirstOf(page: number): number {
-  if (page <= 1) return 1;
-  return page % 2 === 0 ? page : page - 1;
+function spreadFirstOf(page: number, firstPageAsCover: boolean): number {
+  if (firstPageAsCover) {
+    if (page <= 1) return 1;
+    return page % 2 === 0 ? page : page - 1;
+  }
+  return page % 2 === 1 ? page : page - 1;
 }
 
-function visibleNums(first: number, spread: boolean, numPages: number): number[] {
-  return spread && first > 1 && first + 1 <= numPages ? [first, first + 1] : [first];
+function visibleNums(
+  first: number,
+  spread: boolean,
+  numPages: number,
+  firstPageAsCover: boolean,
+): number[] {
+  const canPair =
+    spread && first + 1 <= numPages && (!firstPageAsCover || first > 1);
+  return canPair ? [first, first + 1] : [first];
 }
 
 function fitScale(
@@ -64,16 +74,20 @@ function fitScale(
 export function MangaReadingView({
   bookId,
   initialProgress = 0,
+  mangaFirstPageAsCover = true,
   onProgress,
 }: {
   bookId: string;
   initialProgress?: number;
+  /** True: page 1 is a solo cover, then [2,3], [4,5]… False: [1,2], [3,4]… */
+  mangaFirstPageAsCover?: boolean;
   /** Fraction read + absolute position (first visible page, 1-based) + how
       many pages the visible set holds. */
   onProgress?: (progress: number, absolute: number, pageCount: number) => void;
 }) {
   const { t } = useTranslation();
   const outerRef = useRef<HTMLDivElement>(null);
+  const pageSetRef = useRef<HTMLDivElement>(null);
   const [record, setRecord] = useState<MangaRecord | null>(null);
   const [failed, setFailed] = useState(false);
   const [page, setPage] = useState(1);
@@ -83,6 +97,8 @@ export function MangaReadingView({
   );
   const [view, setView] = useState<{ key: string; pages: ViewPage[] } | null>(null);
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  // Which blank margin the cursor is over — those turn the page on click.
+  const [hoverSide, setHoverSide] = useState<"left" | "right" | null>(null);
   // Zoom + pan over the fitted page set: the wheel zooms toward the cursor,
   // a drag pans while zoomed in. Both reset on every page turn.
   const {
@@ -195,8 +211,10 @@ export function MangaReadingView({
   spreadRef.current = spread;
 
   // Normalize the anchor to a spread boundary (31 → 30 shows [30,31]).
-  const first = spread ? spreadFirstOf(page) : page;
-  const nums = record ? visibleNums(first, spread, numPages) : [];
+  const first = spread ? spreadFirstOf(page, mangaFirstPageAsCover) : page;
+  const nums = record
+    ? visibleNums(first, spread, numPages, mangaFirstPageAsCover)
+    : [];
 
   // Load the visible set (blobs → object URLs, natural sizes from the sidecar
   // or the image itself). Rapid navigation is token-guarded; the previous
@@ -273,15 +291,19 @@ export function MangaReadingView({
   // to 2, then spreads advance by two.
   const stepFor = (dir: 1 | -1): number => {
     if (!spreadRef.current) return dir;
-    if (pageRef.current === 1 && dir > 0) return 1;
+    if (mangaFirstPageAsCover && pageRef.current === 1 && dir > 0) return 1;
     return 2 * dir;
   };
 
   const goTo = (index: number) => {
     const count = numPagesRef.current;
-    const max = spreadRef.current ? spreadFirstOf(count) : count;
+    const max = spreadRef.current
+      ? spreadFirstOf(count, mangaFirstPageAsCover)
+      : count;
     let target = Math.max(1, Math.min(max, index));
-    if (spreadRef.current && target > 1) target = spreadFirstOf(target);
+    if (spreadRef.current && target > 1) {
+      target = spreadFirstOf(target, mangaFirstPageAsCover);
+    }
     if (target === pageRef.current) return;
     pageRef.current = target;
     setPage(target);
@@ -293,6 +315,7 @@ export function MangaReadingView({
     vertical: true,
     enabled: record !== null,
     wheel: false,
+    clickBoundsRef: pageSetRef,
     onStep: (dir) => goTo(pageRef.current + stepFor(dir)),
   });
 
@@ -310,18 +333,36 @@ export function MangaReadingView({
     <div
       ref={outerRef}
       className={`grid h-full w-full select-none place-items-center overflow-hidden ${
-        zoomed ? "cursor-grab active:cursor-grabbing" : ""
+        hoverSide
+          ? "cursor-pointer"
+          : zoomed
+            ? "cursor-grab active:cursor-grabbing"
+            : ""
       }`}
       style={{ background: "var(--reading-bg, var(--ds-surface-canvas))" }}
       data-manga-page={view?.pages[0]?.num ?? ""}
       // No native drags on the stage, ever: an accidental press-and-move would
       // otherwise drag the page image (or a stray selection) as a ghost.
       onDragStart={(event) => event.preventDefault()}
+      onMouseMove={(event) => {
+        const el = pageSetRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const side =
+          event.clientX < rect.left
+            ? "left"
+            : event.clientX > rect.right
+              ? "right"
+              : null;
+        setHoverSide((prev) => (prev === side ? prev : side));
+      }}
+      onMouseLeave={() => setHoverSide(null)}
       {...zoomPanHandlers}
     >
       {view ? (
         <div
-          className="flex flex-row-reverse items-center gap-2"
+          ref={pageSetRef}
+          className="flex flex-row-reverse items-center gap-0"
           style={{
             transform: `translate(${zoomPan.x}px, ${zoomPan.y}px) scale(${zoomPan.zoom})`,
           }}
@@ -366,7 +407,18 @@ export function MangaReadingView({
         </div>
       ) : null}
       {record ? (
-        <PageIndicator page={first} pageLast={nums[nums.length - 1] ?? first} pages={numPages}>
+        <PageIndicator
+          page={first}
+          pageLast={nums[nums.length - 1] ?? first}
+          pages={numPages}
+          jumpMin={1}
+          jumpMax={numPages}
+          jumpStep={1}
+          jumpValue={first}
+          jumpLabel={t("reader.jumpPage")}
+          jumpSubmitLabel={t("reader.jump")}
+          onJump={(value) => goTo(Math.round(value))}
+        >
           {first === (nums[nums.length - 1] ?? first)
             ? `${first} / ${numPages}`
             : `${first}–${nums[nums.length - 1]} / ${numPages}`}

@@ -149,6 +149,7 @@ export const en = {
     marginAria: "page margins",
     furigana: "Furigana",
     furiganaAria: "furigana",
+    firstPageAsCover: "First page as cover",
     previewLangAria: "preview language",
     about: {
       title: "About yuki",
@@ -172,6 +173,10 @@ export const en = {
     mangaError: "Couldn't open the manga",
     smaller: "smaller",
     larger: "larger",
+    jump: "Go",
+    jumpPercent: "Reading position (%)",
+    jumpPage: "Page",
+    showControls: "Show reader controls",
   },
   drop: "Drop to open",
   ocr: {
