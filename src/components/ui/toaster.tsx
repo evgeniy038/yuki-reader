@@ -3,10 +3,10 @@ import { Toaster as Sonner } from "sonner";
 export function Toaster() {
   return (
     <Sonner
-      position="bottom-center"
+      position="top-center"
       theme="light"
       offset={16}
-      mobileOffset={{ bottom: 16, left: 12, right: 12 }}
+      mobileOffset={{ top: 16, left: 12, right: 12 }}
       duration={3000}
       gap={8}
       visibleToasts={1}
