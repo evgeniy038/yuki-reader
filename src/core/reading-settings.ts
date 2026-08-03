@@ -31,7 +31,7 @@ const READING_THEMES: {
 }[] = [
   {
     id: "light",
-    bg: "#ffffff",
+    bg: "oklch(96.25% 0.0022 67.8)",
     text: "#1d1d1f",
     muted: "#86868b",
     pdfFilter: "none",

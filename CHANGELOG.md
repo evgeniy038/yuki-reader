@@ -13,6 +13,7 @@ versioning — [SemVer](https://semver.org/).
 - Reader: Noto Serif JP is now the default font, font choices use selects, and controls hide after two seconds with a smaller fullscreen reveal zone
 - Reader: focused controls keep their arrow keys, and novel position percentages are rounded to one decimal
 - Reader: the control pill hides one second after the pointer leaves, while its reveal handle fades out after two seconds; outside clicks hide the pill immediately
+- Reader: Light pages use a warmer white for easier reading
 
 ## [1.3.1] - 2026-08-02
 
