@@ -208,14 +208,16 @@ function entryKey(dictionaryId: string, termKey: string, index: number): string 
   return `${dictionaryId}\u0000${termKey}\u0000${String(index).padStart(12, "0")}`;
 }
 
-export async function importDictionaryArchive(
+export interface DictionaryImportOptions {
+  id?: string;
+  sourceUrl?: string;
+  enabled?: boolean;
+  order?: number;
+}
+
+async function importDictionaryArchiveInProcess(
   archive: Uint8Array,
-  options: {
-    id?: string;
-    sourceUrl?: string;
-    enabled?: boolean;
-    order?: number;
-  } = {},
+  options: DictionaryImportOptions = {},
 ): Promise<DictionaryRecord> {
   const id = options.id ?? randomId();
   const parsed = parseYomitanDictionary(archive, id);
@@ -243,6 +245,61 @@ export async function importDictionaryArchive(
     key: entryKey(id, entry.termKey, index),
   }));
   await replaceDictionary(record, archive, entries);
+  return record;
+}
+
+type DictionaryWorkerMessage = {
+  type: "import";
+  archive: ArrayBuffer;
+  options: DictionaryImportOptions;
+};
+
+type DictionaryWorkerResponse =
+  | { type: "done"; record: DictionaryRecord }
+  | { type: "error"; message: string };
+
+function transferableBuffer(bytes: Uint8Array): ArrayBuffer {
+  return (
+    bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+      ? bytes.buffer
+      : bytes.slice().buffer
+  ) as ArrayBuffer;
+}
+
+function importDictionaryArchiveInWorker(
+  archive: Uint8Array,
+  options: DictionaryImportOptions,
+): Promise<DictionaryRecord> {
+  const worker = new Worker(new URL("./dictionary.worker.ts", import.meta.url), {
+    type: "module",
+  });
+  const buffer = transferableBuffer(archive);
+  return new Promise((resolve, reject) => {
+    const finish = () => worker.terminate();
+    worker.onmessage = (event: MessageEvent<DictionaryWorkerResponse>) => {
+      finish();
+      if (event.data.type === "error") {
+        reject(new Error(event.data.message));
+      } else {
+        resolve(event.data.record);
+      }
+    };
+    worker.onerror = (event) => {
+      finish();
+      reject(new Error(event.message || "Dictionary worker failed"));
+    };
+    worker.postMessage({ type: "import", archive: buffer, options }, [buffer]);
+  });
+}
+
+export async function importDictionaryArchive(
+  archive: Uint8Array,
+  options: DictionaryImportOptions = {},
+): Promise<DictionaryRecord> {
+  const record =
+    typeof window !== "undefined" && typeof Worker !== "undefined"
+      ? await importDictionaryArchiveInWorker(archive, options)
+      : await importDictionaryArchiveInProcess(archive, options);
   notifyDictionaryChange();
   return record;
 }

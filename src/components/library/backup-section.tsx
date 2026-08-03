@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
 import {
+  CheckCircle,
   DownloadSimple,
   FileArrowUp,
   UploadSimple,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   DEFAULT_BACKUP_OPTIONS,
   exportBackup,
@@ -55,7 +57,9 @@ export function BackupSection() {
       link.download = `yuki-progress-${new Date().toISOString().slice(0, 10)}.zip`;
       link.click();
       URL.revokeObjectURL(url);
-      setMessage(t("settings.backup.exported"));
+      toast.success(t("settings.backup.exported"), {
+        icon: <CheckCircle className="size-4 text-primary" weight="fill" />,
+      });
       setOpen(null);
     } catch (cause) {
       setError(

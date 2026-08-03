@@ -160,6 +160,7 @@ export const ru: Messages = {
       importHint: "Есть ZIP Yomitan?",
       install: "Установить",
       installed: "Установлен",
+      ready: "{{title}} готов к использованию",
       empty: "Нет установленных словарей",
       entries: "{{count, number}} записей",
       remove: "Удалить словарь",

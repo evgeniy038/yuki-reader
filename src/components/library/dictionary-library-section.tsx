@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import {
   CaretDown,
   CaretUp,
+  CheckCircle,
   DownloadSimple,
   FileArrowUp,
   Plus,
   Trash,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   DICTIONARY_CATALOG,
   importDictionaryArchive,
@@ -68,6 +70,15 @@ export function DictionaryLibrarySection() {
       await importDictionaryArchive(new Uint8Array(await file.arrayBuffer()));
     });
     if (imported) setAddOpen(false);
+  };
+
+  const installRecommended = async (item: (typeof DICTIONARY_CATALOG)[number]) => {
+    const installed = await run(item.id, () => installDictionaryFromUrl(item));
+    if (installed) {
+      toast.success(t("settings.dictionaries.ready", { title: item.title }), {
+        icon: <CheckCircle className="size-4 text-primary" weight="fill" />,
+      });
+    }
   };
 
   const toggle = (dictionary: DictionaryRecord, enabled: boolean) => {
@@ -221,9 +232,7 @@ export function DictionaryLibrarySection() {
                       size="sm"
                       loading={busy === item.id}
                       disabled={busy !== null}
-                      onClick={() =>
-                        void run(item.id, () => installDictionaryFromUrl(item))
-                      }
+                      onClick={() => void installRecommended(item)}
                     >
                       {busy === item.id ? null : <DownloadSimple />}
                       {t("settings.dictionaries.install")}

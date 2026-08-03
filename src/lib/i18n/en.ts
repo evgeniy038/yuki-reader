@@ -162,6 +162,7 @@ export const en = {
       importHint: "Have a Yomitan ZIP?",
       install: "Install",
       installed: "Installed",
+      ready: "{{title}} is ready to use",
       empty: "No dictionaries installed",
       entries: "{{count, number}} entries",
       remove: "Remove dictionary",

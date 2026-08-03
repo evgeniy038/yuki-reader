@@ -7,6 +7,7 @@ import "@fontsource-variable/noto-serif-jp";
 import "@/lib/i18n";
 import App from "./App";
 import { UpdateToast } from "./components/ui/update-toast";
+import { Toaster } from "./components/ui/toaster";
 import "./index.css";
 
 // HashRouter: yuki is a static site where only index.html exists — hash
@@ -19,6 +20,7 @@ createRoot(document.getElementById("root")!).render(
         <App />
       </HashRouter>
       <UpdateToast />
+      <Toaster />
     </IconContext.Provider>
   </StrictMode>,
 );

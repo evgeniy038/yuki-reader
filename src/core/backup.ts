@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
+  DICTIONARIES_CHANGED_EVENT,
   importDictionaryArchive,
   type DictionaryRecord,
 } from "./dictionaries";
@@ -165,8 +166,9 @@ function noProgress(record: BookRecord): SerializedBookRecord {
   return result;
 }
 
-export async function exportBackup(
+export async function exportBackupInProcess(
   requested: Partial<BackupOptions> = {},
+  settings: Record<string, string> = localSettings(),
 ): Promise<Blob> {
   const options = { ...DEFAULT_BACKUP_OPTIONS, ...requested };
   const files: Record<string, Uint8Array> = {};
@@ -241,7 +243,7 @@ export async function exportBackup(
   }
   if (options.settings) {
     manifest.settingsFile = "settings.json";
-    files[manifest.settingsFile] = json(localSettings());
+    files[manifest.settingsFile] = json(settings);
   }
   if (options.dictionaries) {
     const dictionaries = await loadAllDictionaries();
@@ -260,6 +262,56 @@ export async function exportBackup(
 
   files["manifest.json"] = json(manifest);
   return new Blob([zipSync(files) as BlobPart], { type: "application/zip" });
+}
+
+export type BackupWorkerMessage =
+  | {
+      type: "export";
+      options: Partial<BackupOptions>;
+      settings: Record<string, string>;
+    }
+  | { type: "import"; buffer: ArrayBuffer };
+
+export type BackupWorkerResponse =
+  | { type: "exported"; buffer: ArrayBuffer }
+  | { type: "imported"; summary: BackupImportSummary }
+  | { type: "error"; message: string };
+
+function runBackupWorker(
+  message: BackupWorkerMessage,
+  transfer: Transferable[] = [],
+): Promise<BackupWorkerResponse> {
+  const worker = new Worker(new URL("./backup.worker.ts", import.meta.url), {
+    type: "module",
+  });
+  return new Promise((resolve, reject) => {
+    const finish = () => worker.terminate();
+    worker.onmessage = (event: MessageEvent<BackupWorkerResponse>) => {
+      finish();
+      resolve(event.data);
+    };
+    worker.onerror = (event) => {
+      finish();
+      reject(new Error(event.message || "Backup worker failed"));
+    };
+    worker.postMessage(message, transfer);
+  });
+}
+
+export async function exportBackup(
+  requested: Partial<BackupOptions> = {},
+): Promise<Blob> {
+  if (typeof window === "undefined" || typeof Worker === "undefined") {
+    return exportBackupInProcess(requested);
+  }
+  const result = await runBackupWorker({
+    type: "export",
+    options: requested,
+    settings: localSettings(),
+  });
+  if (result.type === "error") throw new Error(result.message);
+  if (result.type !== "exported") throw new Error("Backup export failed");
+  return new Blob([result.buffer], { type: "application/zip" });
 }
 
 function validateManifest(value: unknown): asserts value is BackupManifest {
@@ -412,9 +464,10 @@ export interface BackupImportSummary {
   progress: number;
   stats: number;
   dictionaries: number;
+  settings?: Record<string, string>;
 }
 
-export async function importBackup(file: Blob): Promise<BackupImportSummary> {
+export async function importBackupInProcess(file: Blob): Promise<BackupImportSummary> {
   const files = unzipSync(new Uint8Array(await file.arrayBuffer()));
   if (!files["manifest.json"]) return importTtsuBackup(files);
   const manifest = readJson<BackupManifest>(files, "manifest.json");
@@ -480,8 +533,10 @@ export async function importBackup(file: Blob): Promise<BackupImportSummary> {
     }
   }
 
+  let settings: Record<string, string> | undefined;
   if (manifest.settingsFile) {
-    restoreLocalSettings(readJson<Record<string, string>>(files, manifest.settingsFile));
+    settings = readJson<Record<string, string>>(files, manifest.settingsFile);
+    restoreLocalSettings(settings);
   }
 
   for (const item of manifest.dictionaries ?? []) {
@@ -495,5 +550,20 @@ export async function importBackup(file: Blob): Promise<BackupImportSummary> {
     summary.dictionaries += 1;
   }
 
-  return summary;
+  return settings ? { ...summary, settings } : summary;
+}
+
+export async function importBackup(file: Blob): Promise<BackupImportSummary> {
+  if (typeof window === "undefined" || typeof Worker === "undefined") {
+    return importBackupInProcess(file);
+  }
+  const buffer = await file.arrayBuffer();
+  const result = await runBackupWorker({ type: "import", buffer }, [buffer]);
+  if (result.type === "error") throw new Error(result.message);
+  if (result.type !== "imported") throw new Error("Backup import failed");
+  if (result.summary.settings) restoreLocalSettings(result.summary.settings);
+  if (result.summary.dictionaries > 0) {
+    window.dispatchEvent(new Event(DICTIONARIES_CHANGED_EVENT));
+  }
+  return result.summary;
 }
