@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils"
 // box (primary keeps the signature blue ring, quiet variants a neutral
 // one), so primary/outline/secondary/destructive all paint the exact same
 // footprint. Hover is brightness 105%, but not during a press, so the press
-// filter doesn't fight the brightness. Loading doesn't gray the button: variant colors stay, only
-// the cursor changes; the only gray state is disabled.
+// filter doesn't fight the brightness. Loading keeps the button's variant and
+// replaces its leading icon with the spinner.
 const buttonVariants = cva(
   "group/button relative inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap btn-transition outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-97 will-change-scale data-[force-press=true]:scale-94 disabled:cursor-not-allowed data-[disabled]:border-transparent data-[disabled]:bg-none data-[disabled]:bg-hover-surface data-[disabled]:text-muted-content data-[disabled]:shadow-none data-[disabled]:text-shadow-none data-[loading]:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -138,7 +138,7 @@ function Button({
         if (typeof ref === "function") ref(button)
         else if (ref) ref.current = button
       }}
-      data-disabled={disabled || undefined}
+      data-disabled={disabled && !loading ? true : undefined}
       data-loading={loading || undefined}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
@@ -147,8 +147,8 @@ function Button({
     >
       {loading ? (
         <>
-          <ButtonSpinner className="absolute left-2.5" />
-          <span className="btn-content ml-4.5">{children}</span>
+          <ButtonSpinner />
+          <span className="btn-content">{children}</span>
         </>
       ) : (
         children

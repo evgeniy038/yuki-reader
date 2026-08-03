@@ -225,7 +225,7 @@ export function DictionaryLibrarySection() {
                         void run(item.id, () => installDictionaryFromUrl(item))
                       }
                     >
-                      <DownloadSimple />
+                      {busy === item.id ? null : <DownloadSimple />}
                       {t("settings.dictionaries.install")}
                     </Button>
                   )}

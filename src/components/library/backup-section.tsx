@@ -175,7 +175,7 @@ export function BackupSection() {
               {t("settings.backup.cancel")}
             </Button>
             <Button loading={busy === "export"} onClick={() => void download()}>
-              <UploadSimple />
+              {busy === "export" ? null : <UploadSimple />}
               {t("settings.backup.export")}
             </Button>
           </DialogFooter>

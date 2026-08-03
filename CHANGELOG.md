@@ -15,6 +15,7 @@ versioning — [SemVer](https://semver.org/).
 - Reader: the control pill hides one second after the pointer leaves, while its reveal handle fades out after two seconds; outside clicks hide the pill immediately
 - Reader: Light pages use a warmer white for easier reading
 - Reader: font weight can be adjusted from Settings and quick reader settings
+- Buttons: loading keeps the original variant, disables the action, and replaces its icon with a spinner
 
 ## [1.3.1] - 2026-08-02
 
