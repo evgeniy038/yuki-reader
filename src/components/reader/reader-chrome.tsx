@@ -8,7 +8,8 @@ import type { ReadingSettings } from "@/core/reading-settings";
 import type { ReaderPanelMode } from "./reader-panel";
 import { ReaderSettingsPopover } from "./reader-settings-popover";
 
-const AUTO_HIDE_MS = 2000;
+const PILL_HIDE_MS = 1000;
+const HANDLE_HIDE_MS = 2000;
 const REVEAL_ZONE_PX = 64;
 const FULLSCREEN_REVEAL_ZONE_PX = 64;
 
@@ -58,13 +59,17 @@ export function ReaderChrome({
   settingsOpen?: boolean;
   onSettingsOpenChange?: (open: boolean) => void;
 }) {
-  const [visible, setVisible] = useState(true);
+  const [pillVisible, setPillVisible] = useState(true);
+  const [handleVisible, setHandleVisible] = useState(false);
   const [settingsOpenInternal, setSettingsOpenInternal] = useState(false);
   const settingsOpen = settingsOpenProp ?? settingsOpenInternal;
   const { t } = useTranslation();
   const hovering = useRef(false);
+  const chromeRef = useRef<HTMLDivElement>(null);
+  const pillVisibleRef = useRef(true);
   const settingsOpenRef = useRef(false);
-  const hideTimer = useRef<number | undefined>(undefined);
+  const pillHideTimer = useRef<number | undefined>(undefined);
+  const handleHideTimer = useRef<number | undefined>(undefined);
   // In fullscreen the top strip is the system's (see the header comment):
   // the pill drops below it and reveals from a lower zone.
   const fullscreen = useFullscreen();
@@ -78,47 +83,74 @@ export function ReaderChrome({
     fullscreenRef.current = fullscreen;
   }, [fullscreen]);
 
-  const hide = () => {
-    if (hovering.current || settingsOpenRef.current) {
-      hideTimer.current = window.setTimeout(hide, AUTO_HIDE_MS);
+  const scheduleHandleHide = () => {
+    if (handleHideTimer.current) window.clearTimeout(handleHideTimer.current);
+    handleHideTimer.current = window.setTimeout(() => {
+      setHandleVisible(false);
+    }, HANDLE_HIDE_MS);
+  };
+  const hidePill = (force = false) => {
+    if (
+      !pillVisibleRef.current ||
+      (!force && (hovering.current || settingsOpenRef.current))
+    )
       return;
-    }
-    setVisible(false);
+    pillVisibleRef.current = false;
+    setPillVisible(false);
+    setHandleVisible(true);
+    scheduleHandleHide();
   };
-  const scheduleHide = () => {
-    if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(hide, AUTO_HIDE_MS);
+  const schedulePillHide = () => {
+    if (pillHideTimer.current) window.clearTimeout(pillHideTimer.current);
+    pillHideTimer.current = window.setTimeout(() => {
+      pillHideTimer.current = undefined;
+      hidePill();
+    }, PILL_HIDE_MS);
   };
-  const show = () => {
-    if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    setVisible(true);
-    scheduleHide();
+  const showPill = () => {
+    if (pillHideTimer.current) window.clearTimeout(pillHideTimer.current);
+    if (handleHideTimer.current) window.clearTimeout(handleHideTimer.current);
+    pillVisibleRef.current = true;
+    setPillVisible(true);
+    setHandleVisible(false);
+    if (!hovering.current && !settingsOpenRef.current) schedulePillHide();
+  };
+
+  const setSettingsOpen = (open: boolean) => {
+    if (settingsOpenProp === undefined) setSettingsOpenInternal(open);
+    onSettingsOpenChange?.(open);
+    if (open) showPill();
+    else schedulePillHide();
   };
 
   useEffect(() => {
-    scheduleHide();
+    schedulePillHide();
     const onMove = (event: MouseEvent) => {
       // Fullscreen: reveal from a compact zone hugging the parked pill — the
       // cursor never has to enter the system-owned top strip.
       const revealY = fullscreenRef.current
         ? FULLSCREEN_REVEAL_ZONE_PX
         : REVEAL_ZONE_PX;
-      if (event.clientY < revealY) show();
-      else scheduleHide();
+      if (event.clientY < revealY) showPill();
+      else if (!hovering.current) schedulePillHide();
+    };
+    const onDocumentClick = (event: MouseEvent) => {
+      if (settingsOpenRef.current) return;
+      const target = event.target;
+      if (!(target instanceof Node) || !chromeRef.current?.contains(target)) {
+        hidePill(true);
+      }
     };
     window.addEventListener("mousemove", onMove);
+    document.addEventListener("click", onDocumentClick, true);
     return () => {
-      if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      if (pillHideTimer.current) window.clearTimeout(pillHideTimer.current);
+      if (handleHideTimer.current)
+        window.clearTimeout(handleHideTimer.current);
       window.removeEventListener("mousemove", onMove);
+      document.removeEventListener("click", onDocumentClick, true);
     };
   }, []);
-
-  const setSettingsOpen = (open: boolean) => {
-    if (settingsOpenProp === undefined) setSettingsOpenInternal(open);
-    onSettingsOpenChange?.(open);
-    if (open) show();
-    else scheduleHide();
-  };
 
   const toggleSettings = () => {
     const open = !settingsOpen;
@@ -132,19 +164,19 @@ export function ReaderChrome({
   };
 
   return (
-    <>
+    <div ref={chromeRef}>
       <button
         type="button"
-        onMouseEnter={show}
-        onClick={show}
+        onMouseEnter={showPill}
+        onClick={showPill}
         aria-label={t("reader.showControls")}
         title={t("reader.showControls")}
-        tabIndex={visible ? -1 : 0}
+        tabIndex={handleVisible ? 0 : -1}
         className={cn(
           "absolute left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-pointer items-center justify-center rounded-b-md border border-t-0 border-subtle bg-raised px-2.5 pb-0.5 text-muted-content shadow-floating transition-opacity duration-200 hover:text-strong",
-          visible
-            ? "pointer-events-none opacity-0"
-            : "pointer-events-auto opacity-100",
+          handleVisible
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0",
         )}
       >
         <CaretDown weight="bold" className="size-3" />
@@ -153,16 +185,16 @@ export function ReaderChrome({
       <div
         onMouseEnter={() => {
           hovering.current = true;
-          show();
+          showPill();
         }}
         onMouseLeave={() => {
           hovering.current = false;
-          scheduleHide();
+          schedulePillHide();
         }}
         className={cn(
           "absolute left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill border border-subtle bg-raised p-1 shadow-floating transition-[transform,opacity] duration-200",
           fullscreen ? "top-11" : "top-3",
-          visible
+          pillVisible
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-3 opacity-0",
         )}
@@ -235,9 +267,12 @@ export function ReaderChrome({
           mangaFirstPageAsCover={mangaFirstPageAsCover}
           onMangaFirstPageAsCoverChange={onMangaFirstPageAsCoverChange}
           fullscreen={fullscreen}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            hidePill(true);
+          }}
         />
       ) : null}
-    </>
+    </div>
   );
 }
