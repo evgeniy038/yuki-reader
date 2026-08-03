@@ -8,6 +8,10 @@ import type { ReadingSettings } from "@/core/reading-settings";
 import type { ReaderPanelMode } from "./reader-panel";
 import { ReaderSettingsPopover } from "./reader-settings-popover";
 
+const AUTO_HIDE_MS = 2000;
+const REVEAL_ZONE_PX = 64;
+const FULLSCREEN_REVEAL_ZONE_PX = 64;
+
 // Auto-hiding control pill (mac-dock style): appears when the cursor nears the
 // top edge, taps the pull handle, or hovers the pill, slides away otherwise.
 // Holds exit / panels / settings / fullscreen. The settings popover is a
@@ -74,29 +78,36 @@ export function ReaderChrome({
     fullscreenRef.current = fullscreen;
   }, [fullscreen]);
 
-  const show = () => {
-    if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    setVisible(true);
+  const hide = () => {
+    if (hovering.current || settingsOpenRef.current) {
+      hideTimer.current = window.setTimeout(hide, AUTO_HIDE_MS);
+      return;
+    }
+    setVisible(false);
   };
   const scheduleHide = () => {
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => {
-      if (!hovering.current && !settingsOpenRef.current) setVisible(false);
-    }, 1400);
+    hideTimer.current = window.setTimeout(hide, AUTO_HIDE_MS);
+  };
+  const show = () => {
+    if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    setVisible(true);
+    scheduleHide();
   };
 
   useEffect(() => {
-    const initial = window.setTimeout(() => scheduleHide(), 1800);
+    scheduleHide();
     const onMove = (event: MouseEvent) => {
-      // Fullscreen: reveal from a 120px zone hugging the parked pill — the
+      // Fullscreen: reveal from a compact zone hugging the parked pill — the
       // cursor never has to enter the system-owned top strip.
-      const revealY = fullscreenRef.current ? 120 : 64;
+      const revealY = fullscreenRef.current
+        ? FULLSCREEN_REVEAL_ZONE_PX
+        : REVEAL_ZONE_PX;
       if (event.clientY < revealY) show();
       else scheduleHide();
     };
     window.addEventListener("mousemove", onMove);
     return () => {
-      window.clearTimeout(initial);
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
       window.removeEventListener("mousemove", onMove);
     };
@@ -105,6 +116,8 @@ export function ReaderChrome({
   const setSettingsOpen = (open: boolean) => {
     if (settingsOpenProp === undefined) setSettingsOpenInternal(open);
     onSettingsOpenChange?.(open);
+    if (open) show();
+    else scheduleHide();
   };
 
   const toggleSettings = () => {

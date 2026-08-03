@@ -11,6 +11,7 @@ import {
 import type { Book } from "@/core/library";
 import { normalizeSeriesKey } from "@/core/mokuro";
 import {
+  FONT_FAMILY_DEFAULT,
   FONT_SIZE_DEFAULT,
   LINE_HEIGHT_DEFAULT,
   PAGE_MARGIN_DEFAULT,
@@ -56,7 +57,7 @@ export default function App() {
     typeof window !== "undefined"
       ? loadReadingSettings()
       : {
-          fontFamily: "sans",
+          fontFamily: FONT_FAMILY_DEFAULT,
           fontSize: FONT_SIZE_DEFAULT,
           lineHeight: LINE_HEIGHT_DEFAULT,
           furigana: true,

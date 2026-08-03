@@ -10,6 +10,7 @@ versioning — [SemVer](https://semver.org/).
 - Settings: dictionary installation now uses a flat list with compact, borderless ZIP import controls
 - Novels: page turns now respond to arrow keys and scrolling, not clicks on the reading surface
 - Reader: hold Shift over EPUB or OCR text to open a dictionary definition popup
+- Reader: Noto Serif JP is now the default font, font choices use selects, and controls hide after two seconds with a smaller fullscreen reveal zone
 
 ## [1.3.1] - 2026-08-02
 

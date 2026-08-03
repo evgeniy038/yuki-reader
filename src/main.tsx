@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router";
 import { IconContext } from "@phosphor-icons/react";
 import "@fontsource-variable/inter";
+import "@fontsource-variable/noto-serif-jp";
 import "@/lib/i18n";
 import App from "./App";
 import { UpdateToast } from "./components/ui/update-toast";

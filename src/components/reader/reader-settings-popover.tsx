@@ -1,5 +1,5 @@
 import {
-  FONT_SEGMENTS,
+  FONT_OPTIONS,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   FONT_SIZE_STEP,
@@ -10,6 +10,13 @@ import {
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Stepper } from "@/components/ui/stepper";
 import { Switch } from "@/components/ui/switch";
 
@@ -75,14 +82,35 @@ export function ReaderSettingsPopover({
           <>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-content">{t("settings.font")}</span>
-              <SegmentedControl
-                segments={FONT_SEGMENTS}
+              <Select
                 value={settings.fontFamily}
-                onChange={(fontFamily) =>
-                  onSettingsChange({ ...settings, fontFamily })
-                }
-                ariaLabel={t("settings.fontAria")}
-              />
+                onValueChange={(fontFamily) => {
+                  const option = FONT_OPTIONS.find(
+                    (item) => item.value === fontFamily,
+                  );
+                  if (option) {
+                    onSettingsChange({ ...settings, fontFamily: option.value });
+                  }
+                }}
+              >
+                <SelectTrigger
+                  aria-label={t("settings.fontAria")}
+                  className="w-full"
+                >
+                  <SelectValue>
+                    {(fontFamily: string) =>
+                      FONT_OPTIONS.find((option) => option.value === fontFamily)
+                        ?.label ?? fontFamily}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {FONT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-content">{t("settings.size")}</span>

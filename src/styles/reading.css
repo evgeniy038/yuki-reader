@@ -8,12 +8,12 @@
 
 .reading {
   color: var(--reading-text, var(--ds-content-strong));
-  font-family: var(--reading-font-family, var(--font-sans));
+  font-family: var(--reading-font-family, "Noto Serif JP Variable", serif);
   font-size: var(--reading-font-size, 1.125rem);
   /* Remap targets for book font-family declarations (see scopeBookCss):
      follow the user's reading font when set, else JP serif/sans generics. */
-  --book-font-serif: var(--reading-font-family, "Hiragino Mincho ProN", "Yu Mincho", serif);
-  --book-font-sans: var(--reading-font-family, "Hiragino Sans", "Yu Gothic", sans-serif);
+  --book-font-serif: var(--reading-font-family, "Noto Serif JP Variable", serif);
+  --book-font-sans: var(--reading-font-family, "Noto Serif JP Variable", sans-serif);
   /* Quality line breaking: kinsoku (no dangling punctuation), keep latin words
      whole, wrap long tokens gracefully, balance horizontal lines. */
   line-break: strict;

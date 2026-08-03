@@ -11,7 +11,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Stepper } from "@/components/ui/stepper";
 import {
-  FONT_SEGMENTS,
+  FONT_OPTIONS,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   FONT_SIZE_STEP,
@@ -123,14 +123,35 @@ export function SettingsPage({
             />
           </SettingsRow>
           <SettingsRow label={t("settings.font")}>
-            <SegmentedControl
-              segments={FONT_SEGMENTS}
+            <Select
               value={settings.fontFamily}
-              onChange={(fontFamily) =>
-                onSettingsChange({ ...settings, fontFamily })
-              }
-              ariaLabel={t("settings.fontAria")}
-            />
+              onValueChange={(fontFamily) => {
+                const option = FONT_OPTIONS.find(
+                  (item) => item.value === fontFamily,
+                );
+                if (option) {
+                  onSettingsChange({ ...settings, fontFamily: option.value });
+                }
+              }}
+            >
+              <SelectTrigger
+                aria-label={t("settings.fontAria")}
+                className="min-w-40"
+              >
+                <SelectValue>
+                  {(fontFamily: string) =>
+                    FONT_OPTIONS.find((option) => option.value === fontFamily)
+                      ?.label ?? fontFamily}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {FONT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </SettingsRow>
           <SettingsRow label={t("settings.size")}>
             <Stepper

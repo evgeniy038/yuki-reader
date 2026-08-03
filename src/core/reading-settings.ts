@@ -1,4 +1,4 @@
-type FontFamilyId = "sans" | "serif" | "gothic";
+type FontFamilyId = "noto-serif-jp" | "sans" | "serif" | "gothic";
 type ReadingThemeId = "light" | "sepia" | "dark";
 
 export interface ReadingSettings {
@@ -57,6 +57,7 @@ export function readingTheme(id: ReadingThemeId) {
 }
 
 export const FONT_SIZE_MIN = 14;
+export const FONT_FAMILY_DEFAULT: FontFamilyId = "noto-serif-jp";
 // No upper cap: EPUB font size is unbounded above. Kept as an export so the
 // stepper's canIncrement (`fontSize < FONT_SIZE_MAX`) never disables "+".
 export const FONT_SIZE_MAX = Infinity;
@@ -74,6 +75,11 @@ export const PAGE_MARGIN_STEP = 4;
 export const PAGE_MARGIN_DEFAULT = 40;
 
 const FONT_FAMILIES: { id: FontFamilyId; label: string; stack: string }[] = [
+  {
+    id: "noto-serif-jp",
+    label: "Noto Serif JP",
+    stack: '"Noto Serif JP Variable", "Noto Serif JP", serif',
+  },
   {
     id: "sans",
     label: "Sans",
@@ -105,11 +111,11 @@ const clamp = (value: number, min: number, max: number) =>
 export const clampFontSize = (size: number) =>
   Number.isFinite(size) ? Math.max(FONT_SIZE_MIN, size) : FONT_SIZE_DEFAULT;
 
-// Segmented-control options for the two reading pickers, shared by the
-// settings page and the reader's quick popover (they must never drift).
+// Font options shared by Settings and the reader's quick popover (they must
+// never drift).
 // Theme labels come from the locales (settings.themeLight/Sepia/Dark);
 // font names are proper names and stay as-is.
-export const FONT_SEGMENTS = FONT_FAMILIES.map((family) => ({
+export const FONT_OPTIONS = FONT_FAMILIES.map((family) => ({
   value: family.id,
   label: family.label,
 }));
@@ -135,11 +141,12 @@ export function loadReadingSettings(): ReadingSettings {
         mangaFirstPageAsCover?: unknown;
       };
       const fontFamily: FontFamilyId =
+        parsed.fontFamily === "noto-serif-jp" ||
         parsed.fontFamily === "serif" ||
         parsed.fontFamily === "gothic" ||
         parsed.fontFamily === "sans"
           ? parsed.fontFamily
-          : "sans";
+          : FONT_FAMILY_DEFAULT;
       const theme: ReadingThemeId =
         parsed.theme === "sepia" || parsed.theme === "dark"
           ? parsed.theme
@@ -175,7 +182,7 @@ export function loadReadingSettings(): ReadingSettings {
     // ignore malformed storage
   }
   return {
-    fontFamily: "sans",
+    fontFamily: FONT_FAMILY_DEFAULT,
     fontSize: FONT_SIZE_DEFAULT,
     lineHeight: LINE_HEIGHT_DEFAULT,
     furigana: true,
