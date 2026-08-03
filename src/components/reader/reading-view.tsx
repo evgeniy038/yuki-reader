@@ -599,6 +599,10 @@ export function ReadingView({
     tocEntries.map((entry) => entry.offset),
     exploredCount,
   );
+  const progressPercent =
+    totalCount > 0
+      ? Number(((exploredCount / totalCount) * 100).toFixed(1))
+      : 0;
   const searchResults = useMemo(
     () => (model ? buildSearchResults(model.index, searchQuery, model.total) : []),
     [searchQuery, model],
@@ -632,13 +636,13 @@ export function ReadingView({
         jumpMin={0}
         jumpMax={100}
         jumpStep={0.1}
-        jumpValue={totalCount > 0 ? (exploredCount / totalCount) * 100 : 0}
+        jumpValue={progressPercent}
         jumpLabel={t("reader.jumpPercent")}
         jumpSubmitLabel={t("reader.jump")}
         onJump={jumpToPercent}
       >
         {totalCount > 0
-          ? `${exploredCount} / ${totalCount} ${((exploredCount / totalCount) * 100).toFixed(1)}%`
+          ? `${exploredCount} / ${totalCount} ${progressPercent.toFixed(1)}%`
           : `${page + 1} / ${pageCount}`}
       </PageIndicator>
       {panel === "toc" ? (

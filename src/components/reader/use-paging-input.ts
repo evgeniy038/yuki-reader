@@ -12,6 +12,18 @@ const EDGE_CLICK_PX = 50;
 // a drag (text selection, pan) whose trailing synthetic click must not page.
 const DRAG_THRESHOLD_PX = 5;
 
+// The reader is the keyboard fallback. Once another element owns focus, let
+// that element keep its native/component arrow-key behavior. New controls get
+// this automatically without changing the reader or any UI primitive.
+function hasFocusedElement(): boolean {
+  const active = document.activeElement;
+  return (
+    active !== null &&
+    active !== document.body &&
+    active !== document.documentElement
+  );
+}
+
 // Paged-turn input, shared by all readers: wheel (guarded), optional
 // click-to-turn and paging keys. Click paging uses live page bounds when
 // provided (`clickBoundsRef`, manga), otherwise slim edge strips (PDF).
@@ -144,6 +156,7 @@ export function usePagingInput({
       else if (back) onStepRef.current(-1);
     };
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || hasFocusedElement()) return;
       if (event.shiftKey) return;
       const isArrow =
         event.key === "ArrowLeft" ||
