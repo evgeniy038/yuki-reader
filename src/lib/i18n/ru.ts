@@ -142,6 +142,8 @@ export const ru: Messages = {
     size: "Размер",
     sizeDecrease: "уменьшить шрифт",
     sizeIncrease: "увеличить шрифт",
+    weight: "Жирность",
+    weightAria: "жирность шрифта",
     lineHeight: "Межстрочник",
     lineHeightAria: "межстрочник",
     margin: "Поля",

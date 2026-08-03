@@ -10,6 +10,7 @@
   color: var(--reading-text, var(--ds-content-strong));
   font-family: var(--reading-font-family, "Noto Serif JP Variable", serif);
   font-size: var(--reading-font-size, 1.125rem);
+  font-weight: var(--reading-font-weight, var(--font-weight-normal));
   /* Remap targets for book font-family declarations (see scopeBookCss):
      follow the user's reading font when set, else JP serif/sans generics. */
   --book-font-serif: var(--reading-font-family, "Noto Serif JP Variable", serif);

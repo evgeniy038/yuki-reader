@@ -4,6 +4,7 @@ type ReadingThemeId = "light" | "sepia" | "dark";
 export interface ReadingSettings {
   fontFamily: FontFamilyId;
   fontSize: number;
+  fontWeight: number;
   /** Unitless line-height; unset-ish default keeps the CSS fallbacks close. */
   lineHeight: number;
   /** Show ruby annotations (furigana) in the reader. */
@@ -63,6 +64,10 @@ export const FONT_FAMILY_DEFAULT: FontFamilyId = "noto-serif-jp";
 export const FONT_SIZE_MAX = Infinity;
 export const FONT_SIZE_STEP = 2;
 export const FONT_SIZE_DEFAULT = 18;
+export const FONT_WEIGHT_MIN = 200;
+export const FONT_WEIGHT_MAX = 900;
+export const FONT_WEIGHT_STEP = 100;
+export const FONT_WEIGHT_DEFAULT = 400;
 
 export const LINE_HEIGHT_MIN = 1.4;
 export const LINE_HEIGHT_MAX = 2.2;
@@ -111,6 +116,17 @@ const clamp = (value: number, min: number, max: number) =>
 export const clampFontSize = (size: number) =>
   Number.isFinite(size) ? Math.max(FONT_SIZE_MIN, size) : FONT_SIZE_DEFAULT;
 
+export const clampFontWeight = (weight: number) =>
+  Number.isFinite(weight)
+    ? Math.min(
+        FONT_WEIGHT_MAX,
+        Math.max(
+          FONT_WEIGHT_MIN,
+          Math.round(weight / FONT_WEIGHT_STEP) * FONT_WEIGHT_STEP,
+        ),
+      )
+    : FONT_WEIGHT_DEFAULT;
+
 // Font options shared by Settings and the reader's quick popover (they must
 // never drift).
 // Theme labels come from the locales (settings.themeLight/Sepia/Dark);
@@ -134,6 +150,7 @@ export function loadReadingSettings(): ReadingSettings {
       const parsed = JSON.parse(raw) as {
         fontFamily?: unknown;
         fontSize?: unknown;
+        fontWeight?: unknown;
         lineHeight?: unknown;
         furigana?: unknown;
         pageMargin?: unknown;
@@ -157,6 +174,10 @@ export function loadReadingSettings(): ReadingSettings {
           typeof parsed.fontSize === "number"
             ? clampFontSize(parsed.fontSize)
             : FONT_SIZE_DEFAULT,
+        fontWeight:
+          typeof parsed.fontWeight === "number"
+            ? clampFontWeight(parsed.fontWeight)
+            : FONT_WEIGHT_DEFAULT,
         lineHeight: numberOr(
           parsed.lineHeight,
           LINE_HEIGHT_MIN,
@@ -184,6 +205,7 @@ export function loadReadingSettings(): ReadingSettings {
   return {
     fontFamily: FONT_FAMILY_DEFAULT,
     fontSize: FONT_SIZE_DEFAULT,
+    fontWeight: FONT_WEIGHT_DEFAULT,
     lineHeight: LINE_HEIGHT_DEFAULT,
     furigana: true,
     pageMargin: PAGE_MARGIN_DEFAULT,

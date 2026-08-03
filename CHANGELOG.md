@@ -14,6 +14,7 @@ versioning — [SemVer](https://semver.org/).
 - Reader: focused controls keep their arrow keys, and novel position percentages are rounded to one decimal
 - Reader: the control pill hides one second after the pointer leaves, while its reveal handle fades out after two seconds; outside clicks hide the pill immediately
 - Reader: Light pages use a warmer white for easier reading
+- Reader: font weight can be adjusted from Settings and quick reader settings
 
 ## [1.3.1] - 2026-08-02
 

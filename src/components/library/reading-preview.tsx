@@ -94,6 +94,7 @@ export function ReadingPreview({
             {
               fontFamily: fontFamilyStack(settings.fontFamily),
               fontSize: `${settings.fontSize}px`,
+              fontWeight: settings.fontWeight,
               lineHeight: settings.lineHeight,
               writingMode: vertical ? "vertical-rl" : "horizontal-tb",
               padding: `${Math.round(settings.pageMargin / 2)}px`,

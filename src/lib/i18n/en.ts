@@ -144,6 +144,8 @@ export const en = {
     size: "Size",
     sizeDecrease: "decrease font size",
     sizeIncrease: "increase font size",
+    weight: "Weight",
+    weightAria: "font weight",
     lineHeight: "Line height",
     lineHeightAria: "line height",
     margin: "Margins",

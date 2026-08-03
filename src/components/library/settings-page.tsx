@@ -15,6 +15,9 @@ import {
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   FONT_SIZE_STEP,
+  FONT_WEIGHT_MAX,
+  FONT_WEIGHT_MIN,
+  FONT_WEIGHT_STEP,
   LINE_HEIGHT_MAX,
   LINE_HEIGHT_MIN,
   LINE_HEIGHT_STEP,
@@ -23,6 +26,7 @@ import {
   PAGE_MARGIN_STEP,
   THEME_SEGMENTS,
   clampFontSize,
+  clampFontWeight,
   type ReadingSettings,
 } from "@/core/reading-settings";
 import {
@@ -152,6 +156,26 @@ export function SettingsPage({
                 ))}
               </SelectContent>
             </Select>
+          </SettingsRow>
+          <SettingsRow label={t("settings.weight")}>
+            <div className="flex items-center gap-3">
+              <Slider
+                value={settings.fontWeight}
+                onValueChange={(fontWeight) =>
+                  onSettingsChange({
+                    ...settings,
+                    fontWeight: clampFontWeight(fontWeight),
+                  })
+                }
+                min={FONT_WEIGHT_MIN}
+                max={FONT_WEIGHT_MAX}
+                step={FONT_WEIGHT_STEP}
+                ariaLabel={t("settings.weightAria")}
+              />
+              <span className="w-9 text-right text-sm text-default tabular-nums">
+                {settings.fontWeight}
+              </span>
+            </div>
           </SettingsRow>
           <SettingsRow label={t("settings.size")}>
             <Stepper

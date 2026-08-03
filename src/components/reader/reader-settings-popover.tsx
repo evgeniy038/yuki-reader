@@ -3,8 +3,12 @@ import {
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   FONT_SIZE_STEP,
+  FONT_WEIGHT_MAX,
+  FONT_WEIGHT_MIN,
+  FONT_WEIGHT_STEP,
   THEME_SEGMENTS,
   clampFontSize,
+  clampFontWeight,
   type ReadingSettings,
 } from "@/core/reading-settings";
 import { useTranslation } from "react-i18next";
@@ -17,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Stepper } from "@/components/ui/stepper";
 import { Switch } from "@/components/ui/switch";
 
@@ -111,6 +116,27 @@ export function ReaderSettingsPopover({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-content">{t("settings.weight")}</span>
+              <div className="flex items-center gap-3">
+                <Slider
+                  value={settings.fontWeight}
+                  onValueChange={(fontWeight) =>
+                    onSettingsChange({
+                      ...settings,
+                      fontWeight: clampFontWeight(fontWeight),
+                    })
+                  }
+                  min={FONT_WEIGHT_MIN}
+                  max={FONT_WEIGHT_MAX}
+                  step={FONT_WEIGHT_STEP}
+                  ariaLabel={t("settings.weightAria")}
+                />
+                <span className="w-9 text-right text-sm text-default tabular-nums">
+                  {settings.fontWeight}
+                </span>
+              </div>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-content">{t("settings.size")}</span>

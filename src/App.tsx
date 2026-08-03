@@ -13,6 +13,7 @@ import { normalizeSeriesKey } from "@/core/mokuro";
 import {
   FONT_FAMILY_DEFAULT,
   FONT_SIZE_DEFAULT,
+  FONT_WEIGHT_DEFAULT,
   LINE_HEIGHT_DEFAULT,
   PAGE_MARGIN_DEFAULT,
   loadReadingSettings,
@@ -59,6 +60,7 @@ export default function App() {
       : {
           fontFamily: FONT_FAMILY_DEFAULT,
           fontSize: FONT_SIZE_DEFAULT,
+          fontWeight: FONT_WEIGHT_DEFAULT,
           lineHeight: LINE_HEIGHT_DEFAULT,
           furigana: true,
           pageMargin: PAGE_MARGIN_DEFAULT,

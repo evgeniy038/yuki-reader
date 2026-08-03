@@ -74,6 +74,7 @@ export function ReaderScreen({
     return {
       "--reading-font-family": fontFamilyStack(settings.fontFamily),
       "--reading-font-size": `${settings.fontSize}px`,
+      "--reading-font-weight": String(settings.fontWeight),
       "--reading-line-height": String(settings.lineHeight),
       "--reading-bg": theme.bg,
       "--reading-text": theme.text,
