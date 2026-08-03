@@ -110,9 +110,16 @@ const DICTIONARY_ARCHIVES = "dictionaryArchives";
 const BY_DICTIONARY_TERM = "byDictionaryTerm";
 
 let dbPromise: ReturnType<typeof openDB<YukiDB>> | null = null;
+
+// A schema upgrade waits for every other connection (another tab) to close;
+// if a tab hangs on to an old version, openDB would pend FOREVER — no event,
+// no error, just silence. Bound the wait and fail loudly instead; the next
+// call retries from scratch (dbPromise is reset on rejection).
+const DB_OPEN_TIMEOUT_MS = 15_000;
+
 function open() {
   if (!dbPromise) {
-    dbPromise = openDB<YukiDB>(DB_NAME, 7, {
+    const request = openDB<YukiDB>(DB_NAME, 7, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1 && !db.objectStoreNames.contains(BOOKS)) {
           db.createObjectStore(BOOKS, { keyPath: "id" });
@@ -169,6 +176,24 @@ function open() {
           }
         }
       },
+    });
+    dbPromise = Promise.race([
+      request,
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                "The library database is locked by another tab — close other yuki tabs and retry",
+              ),
+            ),
+          DB_OPEN_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    dbPromise.catch(() => {
+      // Let the next call retry instead of caching a dead promise forever.
+      dbPromise = null;
     });
   }
   return dbPromise;

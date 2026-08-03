@@ -23,7 +23,7 @@ files, not in the repo — paths come from env vars:
 | `YUKI_TEST_EPUB_FILTER2` | name substring of a second book | library, shelf-collapse |
 | `YUKI_TEST_PDF_TEXT` | PDF with a text layer | pdf-smoke, reader-panel, perf-probe, pdf-probe |
 | `YUKI_TEST_PDF_SCAN` | scanned PDF | pdf-smoke, perf-probe, pdf-probe |
-| `YUKI_TEST_MANGA_DIR` | manga folder (volume folders with `.mokuro`, zip in `kaguya/`) | manga-smoke, manga-drag-smoke, ocr-smoke, ocr-quality |
+| `YUKI_TEST_MANGA_DIR` | manga folder (volume folders with `.mokuro`, zip in `kaguya/`) | manga-smoke, manga-drag-smoke, ocr-smoke, ocr-quality, backup-smoke |
 
 Do not edit `src/` during a browser run — vite full-reload breaks in-flight
 loads.

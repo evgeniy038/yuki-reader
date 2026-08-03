@@ -99,6 +99,12 @@
   transition: margin-left var(--duration-press) var(--ease-press);
 }
 
+/* Loading swaps the leading icon for the spinner — the icon's own svg must
+   not linger next to it. */
+[data-slot="button"][data-loading] .btn-content > svg:first-child {
+  display: none;
+}
+
 /* Dynamic spinner: steady rotation + slower eased rotation + arc-length
    morph, so every cycle looks slightly different. */
 @keyframes spin-linear {

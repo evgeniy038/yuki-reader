@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, Zip, ZipPassThrough } from "fflate";
 import {
   DICTIONARIES_CHANGED_EVENT,
   importDictionaryArchive,
@@ -38,15 +38,80 @@ export type BackupOperationProgressPhase =
   | "unpack"
   | "restore";
 
+/** Which item is being processed right now — for the human-facing detail
+    line ("Book 3 of 12 · page 145 of 226"), not for the bar. */
+export interface BackupOperationItem {
+  kind: "book" | "page";
+  index: number;
+  count: number;
+}
+
 export interface BackupOperationProgress {
   phase: BackupOperationProgressPhase;
   current: number;
   total: number;
+  item?: BackupOperationItem;
 }
 
 export type BackupOperationProgressListener = (
   progress: BackupOperationProgress,
 ) => void;
+
+/** Cooperative cancellation: checked at item boundaries (between books,
+    between manga pages) — never mid-write, so the library stays consistent. */
+export interface BackupCancelToken {
+  cancelled: boolean;
+}
+
+export class BackupCancelledError extends Error {
+  /** Set when an import had already restored some items before the cancel. */
+  summary?: BackupImportSummary;
+  constructor(summary?: BackupImportSummary) {
+    super("Backup operation cancelled");
+    this.name = "BackupCancelledError";
+    this.summary = summary;
+  }
+}
+
+// The archive is streamed file by file instead of building one giant in-memory
+// buffer: each item's bytes are pushed into the zip and released right away,
+// so peak memory stays near the archive size instead of several times the
+// library. Content is stored uncompressed — books are already-compressed
+// formats (EPUB, JPEG, PDF), deflating them again only burns CPU.
+function createZipArchive(): {
+  add: (name: string, data: Uint8Array) => void;
+  finish: () => Promise<Blob>;
+} {
+  const chunks: Uint8Array[] = [];
+  let failure: Error | null = null;
+  let onFinal: (() => void) | null = null;
+  const zip = new Zip((err, chunk, final) => {
+    if (err) {
+      failure = err;
+      onFinal?.();
+      return;
+    }
+    chunks.push(chunk);
+    if (final) onFinal?.();
+  });
+  return {
+    add(name, data) {
+      if (failure) throw failure;
+      const file = new ZipPassThrough(name);
+      zip.add(file);
+      file.push(data, true);
+    },
+    finish() {
+      return new Promise<Blob>((resolve, reject) => {
+        onFinal = () =>
+          failure
+            ? reject(failure)
+            : resolve(new Blob(chunks as BlobPart[], { type: "application/zip" }));
+        zip.end();
+      });
+    },
+  };
+}
 
 export const DEFAULT_BACKUP_OPTIONS: BackupOptions = {
   books: true,
@@ -186,9 +251,10 @@ export async function exportBackupInProcess(
   requested: Partial<BackupOptions> = {},
   settings: Record<string, string> = localSettings(),
   onProgress?: BackupOperationProgressListener,
+  token?: BackupCancelToken,
 ): Promise<Blob> {
   const options = { ...DEFAULT_BACKUP_OPTIONS, ...requested };
-  const files: Record<string, Uint8Array> = {};
+  const archive = createZipArchive();
   const manifest: BackupManifest = {
     format: "yuki-backup",
     version: 1,
@@ -196,12 +262,31 @@ export async function exportBackupInProcess(
     options,
   };
 
-  onProgress?.({ phase: "prepare", current: 0, total: 0 });
   const records = await loadAllBooks();
   const dictionaries = options.dictionaries ? await loadAllDictionaries() : [];
+  // The bar must move with the real work: packing a 200-page manga dwarfs a
+  // book record, so pages are progress units, not just books. Manga records
+  // are loaded once up front and reused by the export loop below.
+  const mangaByBookId = new Map<string, MangaRecord>();
+  if (options.books) {
+    for (const record of records) {
+      if (record.format === "manga") {
+        const manga = await loadManga(record.id);
+        if (manga) mangaByBookId.set(record.id, manga);
+      }
+    }
+  }
   const total = Math.max(
     1,
-    (options.books || options.progress ? records.length : 0) +
+    (options.books
+      ? records.reduce(
+          (sum, record) =>
+            sum + 1 + (mangaByBookId.get(record.id)?.pages.length ?? 0),
+          0,
+        )
+      : options.progress
+        ? records.length
+        : 0) +
       (options.stats ? 1 : 0) +
       (options.settings ? 1 : 0) +
       dictionaries.length,
@@ -210,7 +295,14 @@ export async function exportBackupInProcess(
   onProgress?.({ phase: "prepare", current: completed, total });
   if (options.books) {
     manifest.books = [];
-    for (const record of records) {
+    for (const [bookIndex, record] of records.entries()) {
+      if (token?.cancelled) throw new BackupCancelledError();
+      onProgress?.({
+        phase: "prepare",
+        current: completed,
+        total,
+        item: { kind: "book", index: bookIndex + 1, count: records.length },
+      });
       const recordFile = `books/${record.id}.json`;
       const serialized = options.progress
         ? (() => {
@@ -221,39 +313,47 @@ export async function exportBackupInProcess(
       const resourceRefs: ResourceRef[] = [];
       for (const [index, resource] of (record.resources ?? []).entries()) {
         const file = `books/${record.id}/resources/${index}.bin`;
-        files[file] = resource.bytes;
+        archive.add(file, resource.bytes);
         resourceRefs.push({ path: resource.path, mime: resource.mime, file });
       }
       if (resourceRefs.length > 0) serialized.resources = resourceRefs;
       if (record.pdfBytes) {
         serialized.pdfFile = `books/${record.id}/book.pdf`;
-        files[serialized.pdfFile] = record.pdfBytes;
+        archive.add(serialized.pdfFile, record.pdfBytes);
       }
 
       const item: BackupBook = { id: record.id, recordFile };
       if (record.format === "manga") {
-        const manga = await loadManga(record.id);
+        const manga = mangaByBookId.get(record.id);
         if (manga) {
           const pages: MangaBackup["pages"] = [];
           for (const [index, page] of manga.pages.entries()) {
+            if (token?.cancelled) throw new BackupCancelledError();
+            onProgress?.({
+              phase: "prepare",
+              current: completed,
+              total,
+              item: { kind: "page", index: index + 1, count: manga.pages.length },
+            });
             const blob = await loadMangaPageBlob(record.id, index);
             if (!blob) throw new Error(`Manga page ${record.id}/${index} is missing`);
             const file = `books/${record.id}/pages/${index}.bin`;
-            files[file] = new Uint8Array(await blob.arrayBuffer());
+            archive.add(file, new Uint8Array(await blob.arrayBuffer()));
             pages.push({ file, mime: blob.type || pageMime(page.path) });
+            completed += 1;
           }
           const ocr: MangaBackup["ocr"] = [];
           for (const [pageIndex, ocrRecord] of await loadMangaOcr(record.id)) {
             const file = `books/${record.id}/ocr/${pageIndex}.json`;
-            files[file] = json(ocrRecord);
+            archive.add(file, json(ocrRecord));
             ocr.push({ page: pageIndex, file });
           }
           const mangaFile = `books/${record.id}/manga.json`;
-          files[mangaFile] = json({ record: manga, pages, ocr });
+          archive.add(mangaFile, json({ record: manga, pages, ocr }));
           item.mangaFile = mangaFile;
         }
       }
-      files[recordFile] = json(serialized);
+      archive.add(recordFile, json(serialized));
       manifest.books.push(item);
       completed += 1;
       onProgress?.({ phase: "prepare", current: completed, total });
@@ -271,13 +371,13 @@ export async function exportBackupInProcess(
 
   if (options.stats) {
     manifest.statsFile = "stats.json";
-    files[manifest.statsFile] = json(await loadStats());
+    archive.add(manifest.statsFile, json(await loadStats()));
     completed += 1;
     onProgress?.({ phase: "prepare", current: completed, total });
   }
   if (options.settings) {
     manifest.settingsFile = "settings.json";
-    files[manifest.settingsFile] = json(settings);
+    archive.add(manifest.settingsFile, json(settings));
     completed += 1;
     onProgress?.({ phase: "prepare", current: completed, total });
   }
@@ -287,10 +387,10 @@ export async function exportBackupInProcess(
     );
     manifest.dictionaries = [];
     for (const record of dictionaries) {
-      const archive = archives.get(record.id);
-      if (archive) {
+      const archiveBytes = archives.get(record.id);
+      if (archiveBytes) {
         const archiveFile = `dictionaries/${record.id}.zip`;
-        files[archiveFile] = archive;
+        archive.add(archiveFile, archiveBytes);
         manifest.dictionaries.push({ record, archiveFile });
       }
       completed += 1;
@@ -298,11 +398,11 @@ export async function exportBackupInProcess(
     }
   }
 
-  files["manifest.json"] = json(manifest);
+  archive.add("manifest.json", json(manifest));
   onProgress?.({ phase: "pack", current: 0, total: 0 });
-  const archive = zipSync(files) as BlobPart;
+  const blob = await archive.finish();
   onProgress?.({ phase: "pack", current: 1, total: 1 });
-  return new Blob([archive], { type: "application/zip" });
+  return blob;
 }
 
 export type BackupWorkerMessage =
@@ -311,25 +411,56 @@ export type BackupWorkerMessage =
       options: Partial<BackupOptions>;
       settings: Record<string, string>;
     }
-  | { type: "import"; buffer: ArrayBuffer };
+  | { type: "import"; buffer: ArrayBuffer }
+  | { type: "cancel" };
 
 export type BackupWorkerResponse =
   | { type: "progress"; progress: BackupOperationProgress }
   | { type: "exported"; buffer: ArrayBuffer }
   | { type: "imported"; summary: BackupImportSummary }
+  | { type: "cancelled"; summary?: BackupImportSummary }
   | { type: "error"; message: string };
+
+// If the worker goes silent (killed on memory pressure, deadlocked on a
+// blocked database) its promise would never settle — without a watchdog the
+// dialog would spin forever. Silence longer than this is a hard failure.
+const BACKUP_STALL_TIMEOUT_MS = 120_000;
+
+export interface BackupWorkerTask {
+  result: Promise<BackupWorkerResponse>;
+  /** "terminate" kills the worker outright (export — nothing is written, so
+      instant cancel is safe); "cooperative" asks the worker to stop at the
+      next item boundary (import — mid-write cancellation must stay atomic). */
+  cancel: () => void;
+}
 
 function runBackupWorker(
   message: BackupWorkerMessage,
   transfer: Transferable[] = [],
   onProgress?: BackupOperationProgressListener,
-): Promise<BackupWorkerResponse> {
+  cancelMode: "terminate" | "cooperative" = "cooperative",
+): BackupWorkerTask {
   const worker = new Worker(new URL("./backup.worker.ts", import.meta.url), {
     type: "module",
   });
-  return new Promise((resolve, reject) => {
-    const finish = () => worker.terminate();
+  let cancelRequested = false;
+  let rejectResult: ((cause: Error) => void) | null = null;
+  let stallTimer: ReturnType<typeof setTimeout>;
+  const finish = () => {
+    clearTimeout(stallTimer);
+    worker.terminate();
+  };
+  const result = new Promise<BackupWorkerResponse>((resolve, reject) => {
+    rejectResult = reject;
+    const armWatchdog = () => {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        finish();
+        reject(new Error("Backup operation stalled"));
+      }, BACKUP_STALL_TIMEOUT_MS);
+    };
     worker.onmessage = (event: MessageEvent<BackupWorkerResponse>) => {
+      armWatchdog();
       if (event.data.type === "progress") {
         onProgress?.(event.data.progress);
         return;
@@ -341,25 +472,63 @@ function runBackupWorker(
       finish();
       reject(new Error(event.message || "Backup worker failed"));
     };
+    armWatchdog();
     worker.postMessage(message, transfer);
   });
+  return {
+    result,
+    cancel: () => {
+      if (cancelRequested) return;
+      cancelRequested = true;
+      if (cancelMode === "terminate") {
+        finish();
+        rejectResult?.(new BackupCancelledError());
+        return;
+      }
+      worker.postMessage({ type: "cancel" });
+    },
+  };
 }
 
-export async function exportBackup(
+export interface BackupTask<T> {
+  promise: Promise<T>;
+  cancel: () => void;
+}
+
+function cancelledOrThrow(result: BackupWorkerResponse): void {
+  if (result.type === "cancelled") {
+    throw new BackupCancelledError(result.summary);
+  }
+  if (result.type === "error") throw new Error(result.message);
+}
+
+export function exportBackupTask(
   requested: Partial<BackupOptions> = {},
   onProgress?: BackupOperationProgressListener,
-): Promise<Blob> {
+): BackupTask<Blob> {
   if (typeof window === "undefined" || typeof Worker === "undefined") {
-    return exportBackupInProcess(requested, localSettings(), onProgress);
+    const token: BackupCancelToken = { cancelled: false };
+    return {
+      promise: exportBackupInProcess(requested, localSettings(), onProgress, token),
+      cancel: () => {
+        token.cancelled = true;
+      },
+    };
   }
-  const result = await runBackupWorker({
-    type: "export",
-    options: requested,
-    settings: localSettings(),
-  }, [], onProgress);
-  if (result.type === "error") throw new Error(result.message);
-  if (result.type !== "exported") throw new Error("Backup export failed");
-  return new Blob([result.buffer], { type: "application/zip" });
+  const task = runBackupWorker(
+    { type: "export", options: requested, settings: localSettings() },
+    [],
+    onProgress,
+    "terminate",
+  );
+  return {
+    promise: task.result.then((result) => {
+      cancelledOrThrow(result);
+      if (result.type !== "exported") throw new Error("Backup export failed");
+      return new Blob([result.buffer], { type: "application/zip" });
+    }),
+    cancel: task.cancel,
+  };
 }
 
 function validateManifest(value: unknown): asserts value is BackupManifest {
@@ -409,6 +578,7 @@ function finiteNumber(value: unknown): number | undefined {
 async function importTtsuBackup(
   files: Record<string, Uint8Array>,
   onProgress?: BackupOperationProgressListener,
+  token?: BackupCancelToken,
 ): Promise<BackupImportSummary> {
   const progressPaths = Object.keys(files).filter((path) =>
     /(?:^|\/)progress_[^/]+\.json$/i.test(path),
@@ -420,6 +590,47 @@ async function importTtsuBackup(
     throw new Error("Unsupported progress file");
   }
 
+  // Parse everything before writing anything: a corrupt file must abort the
+  // import before the library changes at all, never halfway through.
+  const progressOps: {
+    key: string;
+    progress: number;
+    lastReadAt?: number;
+  }[] = [];
+  for (const path of progressPaths) {
+    const data = readJson<TtsuProgressData>(files, path);
+    const rawProgress = finiteNumber(data.progress);
+    if (rawProgress === undefined) continue;
+    const lastReadAt = finiteNumber(data.lastBookmarkModified);
+    progressOps.push({
+      key: titleKey(ttsuTitle(path)),
+      progress: rawProgress > 1 ? rawProgress / 100 : rawProgress,
+      ...(lastReadAt !== undefined ? { lastReadAt } : {}),
+    });
+  }
+
+  const dayRows: {
+    dateKey: string;
+    chars: number;
+    timeMs: number;
+    titleKey?: string;
+  }[] = [];
+  for (const path of statisticsPaths) {
+    const raw = readJson<unknown>(files, path);
+    const rows = Array.isArray(raw) ? raw : [raw];
+    for (const value of rows) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as TtsuStatistic;
+      if (!row.dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(row.dateKey)) continue;
+      dayRows.push({
+        dateKey: row.dateKey,
+        chars: Math.max(0, finiteNumber(row.charactersRead) ?? 0),
+        timeMs: Math.max(0, (finiteNumber(row.readingTime) ?? 0) * 1000),
+        ...(row.title ? { titleKey: titleKey(row.title) } : {}),
+      });
+    }
+  }
+
   const books = await loadAllBooks();
   const booksByTitle = new Map(books.map((book) => [titleKey(book.title), book]));
   const summary: BackupImportSummary = {
@@ -428,63 +639,50 @@ async function importTtsuBackup(
     stats: 0,
     dictionaries: 0,
   };
-  const total = Math.max(1, progressPaths.length + statisticsPaths.length);
+  const total = Math.max(1, progressOps.length + dayRows.length);
   let completed = 0;
   onProgress?.({ phase: "restore", current: completed, total });
 
-  for (const path of progressPaths) {
-    try {
-      const target = booksByTitle.get(titleKey(ttsuTitle(path)));
-      if (!target) continue;
-      const data = readJson<TtsuProgressData>(files, path);
-      const rawProgress = finiteNumber(data.progress);
-      if (rawProgress === undefined) continue;
-      const progress = rawProgress > 1 ? rawProgress / 100 : rawProgress;
-      await restoreBookProgress(target.id, progress, data.lastBookmarkModified);
+  for (const op of progressOps) {
+    if (token?.cancelled) throw new BackupCancelledError(summary);
+    const target = booksByTitle.get(op.key);
+    if (target) {
+      await restoreBookProgress(target.id, op.progress, op.lastReadAt);
       summary.progress += 1;
-    } finally {
-      completed += 1;
-      onProgress?.({ phase: "restore", current: completed, total });
-    }
-  }
-
-  const days = new Map<string, DailyStats>();
-  for (const path of statisticsPaths) {
-    const raw = readJson<unknown>(files, path);
-    const rows = Array.isArray(raw) ? raw : [raw];
-    for (const value of rows) {
-      if (!value || typeof value !== "object") continue;
-      const row = value as TtsuStatistic;
-      if (!row.dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(row.dateKey)) continue;
-      const chars = Math.max(0, finiteNumber(row.charactersRead) ?? 0);
-      const timeMs = Math.max(0, (finiteNumber(row.readingTime) ?? 0) * 1000);
-      const day = days.get(row.dateKey) ?? {
-        date: row.dateKey,
-        chars: 0,
-        pages: 0,
-        timeMs: 0,
-      };
-      day.chars += chars;
-      day.timeMs += timeMs;
-      if (row.title) {
-        const target = booksByTitle.get(titleKey(row.title));
-        if (target) {
-          const perBook = { ...day.perBook };
-          const amount = perBook[target.id] ?? { chars: 0, pages: 0, timeMs: 0 };
-          perBook[target.id] = {
-            chars: amount.chars + chars,
-            pages: amount.pages,
-            timeMs: amount.timeMs + timeMs,
-          };
-          day.perBook = perBook;
-        }
-      }
-      days.set(row.dateKey, day);
     }
     completed += 1;
     onProgress?.({ phase: "restore", current: completed, total });
   }
+
+  const days = new Map<string, DailyStats>();
+  for (const row of dayRows) {
+    const day = days.get(row.dateKey) ?? {
+      date: row.dateKey,
+      chars: 0,
+      pages: 0,
+      timeMs: 0,
+    };
+    day.chars += row.chars;
+    day.timeMs += row.timeMs;
+    if (row.titleKey) {
+      const target = booksByTitle.get(row.titleKey);
+      if (target) {
+        const perBook = { ...day.perBook };
+        const amount = perBook[target.id] ?? { chars: 0, pages: 0, timeMs: 0 };
+        perBook[target.id] = {
+          chars: amount.chars + row.chars,
+          pages: amount.pages,
+          timeMs: amount.timeMs + row.timeMs,
+        };
+        day.perBook = perBook;
+      }
+    }
+    days.set(row.dateKey, day);
+    completed += 1;
+    onProgress?.({ phase: "restore", current: completed, total });
+  }
   for (const day of days.values()) {
+    if (token?.cancelled) throw new BackupCancelledError(summary);
     await putStatsDay(day);
     summary.stats += 1;
   }
@@ -527,20 +725,129 @@ export interface BackupImportSummary {
   settings?: Record<string, string>;
 }
 
+interface PreparedManga {
+  record: MangaRecord;
+  blobs: Blob[];
+  ocr: Map<number, MangaOcrRecord>;
+}
+
+interface PreparedRestore {
+  books: { record: BookRecord; manga?: PreparedManga }[];
+  progress: BackupProgress[];
+  stats: DailyStats[];
+  settings?: Record<string, string>;
+  dictionaries: {
+    bytes: Uint8Array;
+    meta: {
+      id: string;
+      sourceUrl?: string;
+      enabled: boolean;
+      order: number;
+    };
+  }[];
+}
+
+// Parse and validate the whole archive without touching the database. Any
+// corruption throws here — before a single byte is restored — so a broken
+// backup can never leave the library half-imported.
+function prepareRestore(
+  files: Record<string, Uint8Array>,
+  manifest: BackupManifest,
+): PreparedRestore {
+  const prepared: PreparedRestore = {
+    books: [],
+    progress: [],
+    stats: [],
+    dictionaries: [],
+  };
+
+  for (const item of manifest.books ?? []) {
+    if (!item || typeof item.id !== "string" || !safePath(item.recordFile)) {
+      throw new Error("Invalid book entry in backup");
+    }
+    const record = readBookRecord(files, item, manifest.options.progress);
+    let manga: PreparedManga | undefined;
+    if (item.mangaFile) {
+      const data = readJson<MangaBackup>(files, item.mangaFile);
+      if (!data?.record || !Array.isArray(data.pages)) {
+        throw new Error(`Invalid manga record: ${item.id}`);
+      }
+      manga = {
+        record: data.record,
+        blobs: data.pages.map(
+          (page) =>
+            new Blob([bytesAt(files, page.file) as BlobPart], {
+              type: page.mime || "application/octet-stream",
+            }),
+        ),
+        ocr: new Map(
+          (data.ocr ?? []).map((entry) => [
+            entry.page,
+            readJson<MangaOcrRecord>(files, entry.file),
+          ]),
+        ),
+      };
+    }
+    prepared.books.push({ record, manga });
+  }
+
+  for (const item of manifest.progress ?? []) {
+    if (
+      !item ||
+      typeof item.id !== "string" ||
+      !Number.isFinite(item.progress) ||
+      (item.lastReadAt !== undefined && !Number.isFinite(item.lastReadAt))
+    ) {
+      throw new Error("Invalid progress entry in backup");
+    }
+    prepared.progress.push(item);
+  }
+
+  if (manifest.statsFile) {
+    const stats = readJson<DailyStats[]>(files, manifest.statsFile);
+    if (!Array.isArray(stats)) throw new Error("Invalid stats in backup");
+    prepared.stats = stats.filter(
+      (day): day is DailyStats => !!day && typeof day.date === "string",
+    );
+  }
+
+  if (manifest.settingsFile) {
+    prepared.settings = readJson<Record<string, string>>(
+      files,
+      manifest.settingsFile,
+    );
+  }
+
+  for (const item of manifest.dictionaries ?? []) {
+    if (!item?.record || typeof item.record.id !== "string") {
+      throw new Error("Invalid dictionary entry in backup");
+    }
+    prepared.dictionaries.push({
+      bytes: bytesAt(files, item.archiveFile),
+      meta: {
+        id: item.record.id,
+        sourceUrl: item.record.sourceUrl,
+        enabled: item.record.enabled,
+        order: item.record.order,
+      },
+    });
+  }
+
+  return prepared;
+}
+
 export async function importBackupInProcess(
   file: Blob,
   onProgress?: BackupOperationProgressListener,
+  token?: BackupCancelToken,
 ): Promise<BackupImportSummary> {
   onProgress?.({ phase: "unpack", current: 0, total: 0 });
   const files = unzipSync(new Uint8Array(await file.arrayBuffer()));
   onProgress?.({ phase: "unpack", current: 1, total: 1 });
-  if (!files["manifest.json"]) return importTtsuBackup(files, onProgress);
+  if (!files["manifest.json"]) return importTtsuBackup(files, onProgress, token);
   const manifest = readJson<BackupManifest>(files, "manifest.json");
   validateManifest(manifest);
-  const stats = manifest.statsFile
-    ? readJson<DailyStats[]>(files, manifest.statsFile)
-    : undefined;
-  if (stats && !Array.isArray(stats)) throw new Error("Invalid stats in backup");
+  const prepared = prepareRestore(files, manifest);
   const summary: BackupImportSummary = {
     books: 0,
     progress: 0,
@@ -549,51 +856,40 @@ export async function importBackupInProcess(
   };
   const restoreTotal = Math.max(
     1,
-    (manifest.books?.length ?? 0) +
-      (manifest.progress?.length ?? 0) +
-      (stats?.length ?? 0) +
-      (manifest.settingsFile ? 1 : 0) +
-      (manifest.dictionaries?.length ?? 0),
+    prepared.books.length +
+      prepared.progress.length +
+      prepared.stats.length +
+      (prepared.settings ? 1 : 0) +
+      prepared.dictionaries.length,
   );
   let restored = 0;
-  const reportRestore = () => {
+  const reportRestore = (item?: BackupOperationItem) => {
     restored += 1;
-    onProgress?.({ phase: "restore", current: restored, total: restoreTotal });
+    onProgress?.({ phase: "restore", current: restored, total: restoreTotal, ...(item ? { item } : {}) });
   };
   onProgress?.({ phase: "restore", current: restored, total: restoreTotal });
 
-  // ponytail: restore sequentially; stage into a temporary database only if
-  // all-or-nothing recovery becomes necessary after real failure reports.
-  if (manifest.books) {
-    for (const item of manifest.books) {
-      const record = readBookRecord(files, item, manifest.options.progress);
-      await deleteManga(record.id);
-      await putBook(record);
-      if (item.mangaFile) {
-        const manga = readJson<MangaBackup>(files, item.mangaFile);
-        if (!manga?.record || !Array.isArray(manga.pages)) {
-          throw new Error(`Invalid manga record: ${item.id}`);
-        }
-        const blobs = manga.pages.map((page) =>
-          new Blob([bytesAt(files, page.file) as BlobPart], {
-            type: page.mime || "application/octet-stream",
-          }),
-        );
-        await putMangaVolume(manga.record, blobs);
-        const ocr = new Map<number, MangaOcrRecord>();
-        for (const item of manga.ocr ?? []) {
-          ocr.set(item.page, readJson<MangaOcrRecord>(files, item.file));
-        }
-        await putMangaOcrRecords(record.id, ocr);
-      }
-      summary.books += 1;
-      reportRestore();
+  // ponytail: writes run sequentially; an IndexedDB failure mid-restore can
+  // still leave a partial state — stage into a temporary database only if
+  // real failure reports show that is necessary.
+  for (const [index, item] of prepared.books.entries()) {
+    // Cancellation lands between books, never mid-book: the volume write is a
+    // single transaction, so the library stays consistent after a cancel.
+    if (token?.cancelled) throw new BackupCancelledError(summary);
+    await deleteManga(item.record.id);
+    await putBook(item.record);
+    if (item.manga) {
+      await putMangaVolume(item.manga.record, item.manga.blobs);
+      await putMangaOcrRecords(item.record.id, item.manga.ocr);
     }
+    summary.books += 1;
+    reportRestore({ kind: "book", index: index + 1, count: prepared.books.length });
   }
 
   if (manifest.progress) {
     const existing = await loadAllBooks();
-    for (const item of manifest.progress) {
+    for (const item of prepared.progress) {
+      if (token?.cancelled) throw new BackupCancelledError(summary);
       const target = existing.find(
         (book) =>
           book.id === item.id ||
@@ -605,36 +901,27 @@ export async function importBackupInProcess(
       }
       reportRestore();
     }
-  } else if (manifest.books && manifest.options.progress) {
-    summary.progress = manifest.books.length;
+  } else if (prepared.books.length > 0 && manifest.options.progress) {
+    summary.progress = prepared.books.length;
   }
 
-  if (stats) {
-    for (const day of stats) {
-      if (day && typeof day.date === "string") {
-        await putStatsDay(day);
-        summary.stats += 1;
-      }
-      reportRestore();
-    }
-  }
-
-  let settings: Record<string, string> | undefined;
-  if (manifest.settingsFile) {
-    settings = readJson<Record<string, string>>(files, manifest.settingsFile);
-    restoreLocalSettings(settings);
+  for (const day of prepared.stats) {
+    if (token?.cancelled) throw new BackupCancelledError(summary);
+    await putStatsDay(day);
+    summary.stats += 1;
     reportRestore();
   }
 
-  for (const item of manifest.dictionaries ?? []) {
-    const archive = bytesAt(files, item.archiveFile);
+  if (prepared.settings) {
+    if (token?.cancelled) throw new BackupCancelledError(summary);
+    restoreLocalSettings(prepared.settings);
+    reportRestore();
+  }
+
+  for (const item of prepared.dictionaries) {
+    if (token?.cancelled) throw new BackupCancelledError(summary);
     const dictionaryStart = restored;
-    await importDictionaryArchive(archive, {
-      id: item.record.id,
-      sourceUrl: item.record.sourceUrl,
-      enabled: item.record.enabled,
-      order: item.record.order,
-    }, (progress) => {
+    await importDictionaryArchive(item.bytes, item.meta, (progress) => {
       const fraction =
         progress.total > 0 ? Math.min(1, progress.current / progress.total) : 0;
       onProgress?.({
@@ -648,27 +935,50 @@ export async function importBackupInProcess(
   }
 
   onProgress?.({ phase: "restore", current: restoreTotal, total: restoreTotal });
-  return settings ? { ...summary, settings } : summary;
+  return prepared.settings ? { ...summary, settings: prepared.settings } : summary;
 }
 
-export async function importBackup(
+export function importBackupTask(
   file: Blob,
   onProgress?: BackupOperationProgressListener,
-): Promise<BackupImportSummary> {
+): BackupTask<BackupImportSummary> {
   if (typeof window === "undefined" || typeof Worker === "undefined") {
-    return importBackupInProcess(file, onProgress);
+    const token: BackupCancelToken = { cancelled: false };
+    return {
+      promise: (async () => {
+        const summary = await importBackupInProcess(file, onProgress, token);
+        if (summary.dictionaries > 0 && typeof window !== "undefined") {
+          window.dispatchEvent(new Event(DICTIONARIES_CHANGED_EVENT));
+        }
+        return summary;
+      })(),
+      cancel: () => {
+        token.cancelled = true;
+      },
+    };
   }
-  const buffer = await file.arrayBuffer();
-  const result = await runBackupWorker(
-    { type: "import", buffer },
-    [buffer],
-    onProgress,
-  );
-  if (result.type === "error") throw new Error(result.message);
-  if (result.type !== "imported") throw new Error("Backup import failed");
-  if (result.summary.settings) restoreLocalSettings(result.summary.settings);
-  if (result.summary.dictionaries > 0) {
-    window.dispatchEvent(new Event(DICTIONARIES_CHANGED_EVENT));
-  }
-  return result.summary;
+  let task: BackupWorkerTask | null = null;
+  let cancelRequested = false;
+  return {
+    promise: (async () => {
+      const buffer = await file.arrayBuffer();
+      // A cancel clicked while the file was being read (before the worker
+      // exists) must not be lost.
+      if (cancelRequested) throw new BackupCancelledError();
+      task = runBackupWorker({ type: "import", buffer }, [buffer], onProgress);
+      if (cancelRequested) task.cancel();
+      const result = await task.result;
+      cancelledOrThrow(result);
+      if (result.type !== "imported") throw new Error("Backup import failed");
+      if (result.summary.settings) restoreLocalSettings(result.summary.settings);
+      if (result.summary.dictionaries > 0) {
+        window.dispatchEvent(new Event(DICTIONARIES_CHANGED_EVENT));
+      }
+      return result.summary;
+    })(),
+    cancel: () => {
+      cancelRequested = true;
+      task?.cancel();
+    },
+  };
 }
