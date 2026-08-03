@@ -12,10 +12,9 @@ const EDGE_CLICK_PX = 50;
 // a drag (text selection, pan) whose trailing synthetic click must not page.
 const DRAG_THRESHOLD_PX = 5;
 
-// Paged-turn input, shared by all readers: wheel (guarded), click-to-turn
-// and paging keys. Click paging has three modes, checked in order: live page
-// bounds (`clickBoundsRef`, manga), full left/right halves of the target
-// (`clickMode: "halves"`, EPUB text), and slim edge strips (default, PDF).
+// Paged-turn input, shared by all readers: wheel (guarded), optional
+// click-to-turn and paging keys. Click paging uses live page bounds when
+// provided (`clickBoundsRef`, manga), otherwise slim edge strips (PDF).
 // A click that ends a drag or starts on an existing selection never pages —
 // tracked from pointerdown, because browsers can collapse a drag selection
 // before the click handler runs.
@@ -27,8 +26,9 @@ export function usePagingInput({
   vertical,
   enabled,
   wheel = true,
+  click = true,
+  keyboard = "all",
   clickBoundsRef,
-  clickMode = "edges",
   edgeClickPx = EDGE_CLICK_PX,
   ignoreClickSelector,
   onStep,
@@ -40,16 +40,15 @@ export function usePagingInput({
   enabled: boolean;
   /** Wheel paging — off where the wheel has another job (manga zoom). */
   wheel?: boolean;
+  /** Mouse click paging — off where clicks should only select text. */
+  click?: boolean;
+  /** Keyboard paging keys — all legacy keys or arrow keys only. */
+  keyboard?: "all" | "arrows";
   /**
    * Visible page bounds. When present, clicks outside these bounds turn the
-   * page instead of the fixed edge strips; when absent, `clickMode` decides.
+   * page instead of the fixed edge strips.
    */
   clickBoundsRef?: RefObject<HTMLElement | null>;
-  /**
-   * Click zone shape on `targetRef` when no bounds are given: slim edge
-   * strips (default) or the full left/right halves of the surface.
-   */
-  clickMode?: "edges" | "halves";
   /** Width of the edge-click strips (edges mode only). */
   edgeClickPx?: number;
   /** Clicks landing inside this selector never page. */
@@ -59,7 +58,7 @@ export function usePagingInput({
   const lastWheelRef = useRef(0);
   const verticalRef = useLatest(vertical);
   const wheelRef = useLatest(wheel);
-  const clickModeRef = useLatest(clickMode);
+  const keyboardRef = useLatest(keyboard);
   const edgeClickPxRef = useLatest(edgeClickPx);
   const ignoreClickSelectorRef = useLatest(ignoreClickSelector);
   const onStepRef = useLatest(onStep);
@@ -138,14 +137,6 @@ export function usePagingInput({
 
       const rect = target.getBoundingClientRect();
       const x = event.clientX - rect.left;
-      // Halves mode: the whole surface pages, split down the middle.
-      if (clickModeRef.current === "halves") {
-        const leftHalf = x < rect.width / 2;
-        const forward = verticalRef.current ? leftHalf : !leftHalf;
-        onStepRef.current(forward ? 1 : -1);
-        return;
-      }
-
       const px = edgeClickPxRef.current;
       const forward = verticalRef.current ? x < px : x > rect.width - px;
       const back = verticalRef.current ? x > rect.width - px : x < px;
@@ -154,6 +145,12 @@ export function usePagingInput({
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.shiftKey) return;
+      const isArrow =
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowRight" ||
+        event.key === "ArrowUp" ||
+        event.key === "ArrowDown";
+      if (keyboardRef.current === "arrows" && !isArrow) return;
       const v = verticalRef.current;
       const fwd = v
         ? event.key === "ArrowLeft" ||
@@ -177,14 +174,18 @@ export function usePagingInput({
       onStepRef.current(fwd ? 1 : -1);
     };
     target.addEventListener("wheel", onWheel, { passive: false });
-    target.addEventListener("pointerdown", onPointerDown);
-    target.addEventListener("click", onClick);
+    if (click) {
+      target.addEventListener("pointerdown", onPointerDown);
+      target.addEventListener("click", onClick);
+    }
     window.addEventListener("keydown", onKey);
     return () => {
       target.removeEventListener("wheel", onWheel);
-      target.removeEventListener("pointerdown", onPointerDown);
-      target.removeEventListener("click", onClick);
+      if (click) {
+        target.removeEventListener("pointerdown", onPointerDown);
+        target.removeEventListener("click", onClick);
+      }
       window.removeEventListener("keydown", onKey);
     };
-  }, [targetRef, enabled, verticalRef, onStepRef]);
+  }, [targetRef, enabled, click, verticalRef, onStepRef]);
 }

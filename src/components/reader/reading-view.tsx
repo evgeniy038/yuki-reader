@@ -213,7 +213,6 @@ export function ReadingView({
   const [totalCount, setTotalCount] = useState(0);
   const [model, setModel] = useState<ArticleBuild | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [pageTurnHover, setPageTurnHover] = useState(false);
 
   const currentSection = () =>
     modelRef.current?.sections[currentSectionRef.current];
@@ -605,27 +604,22 @@ export function ReadingView({
     [searchQuery, model],
   );
 
-  // Click-to-turn on the full reader stage: left/right halves page the book,
-  // including the breathing room above and below the page. Text keeps its
-  // normal cursor for copying; the pointer appears in the safe empty surface.
+  // Novel pages move with wheel/keyboard input only; clicks stay available for
+  // text selection and dictionary lookup.
   usePagingInput({
     targetRef: outerRef,
     vertical,
     enabled: chapters.length > 0,
-    clickMode: "halves",
+    click: false,
+    keyboard: "arrows",
     onStep: (dir) => goTo(pageRef.current + dir),
   });
 
   return (
     <div
       ref={outerRef}
-      className={`relative flex h-full w-full ${pageTurnHover ? "cursor-pointer" : ""}`}
+      className="relative flex h-full w-full"
       style={{ background: "var(--reading-bg, var(--ds-surface-canvas))" }}
-      onMouseMove={(event) => {
-        const target = event.target as Element | null;
-        setPageTurnHover(!target?.closest(".book-content"));
-      }}
-      onMouseLeave={() => setPageTurnHover(false)}
     >
       <div ref={scrollRef} className="m-auto overflow-hidden">
         <div ref={contentRef} className="reading" data-vertical={vertical ? "true" : undefined}>

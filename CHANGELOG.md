@@ -8,6 +8,7 @@ versioning — [SemVer](https://semver.org/).
 - Progress transfer: compact export/import actions support customizable Yuki backups and ttsu backup ZIPs; OCR models are never included
 - Dictionaries: keep installed dictionaries in a compact list, then add Yomitan-compatible ZIPs or recommended English-English, English-Russian and Japanese-English packages from a modal
 - Settings: dictionary installation now uses a flat list with compact, borderless ZIP import controls
+- Novels: page turns now respond to arrow keys and scrolling, not clicks on the reading surface
 - Reader: hold Shift over EPUB or OCR text to open a dictionary definition popup
 
 ## [1.3.1] - 2026-08-02
