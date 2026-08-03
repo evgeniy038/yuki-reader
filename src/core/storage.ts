@@ -1,4 +1,4 @@
-import { openDB, type DBSchema } from "idb";
+import { openDB, unwrap, type DBSchema } from "idb";
 import type { BookFormat, Language } from "./library";
 import type { MokuroBlock } from "./mokuro";
 import type { Chapter, EpubResource, TocEntry } from "./reading";
@@ -483,6 +483,7 @@ export async function replaceDictionary(
   record: DictionaryRecord,
   archive: Uint8Array,
   entries: DictionaryEntryRecord[],
+  onProgress?: (current: number, total: number) => void,
 ): Promise<void> {
   const db = await open();
   const tx = db.transaction(
@@ -498,7 +499,15 @@ export async function replaceDictionary(
   }
   await tx.objectStore(DICTIONARIES).put(record);
   await tx.objectStore(DICTIONARY_ARCHIVES).put({ id: record.id, bytes: archive });
-  for (const entry of entries) await entriesStore.put(entry);
+  onProgress?.(0, entries.length);
+  const rawEntriesStore = unwrap(entriesStore);
+  const reportEvery = Math.max(1, Math.ceil(entries.length / 50));
+  for (const [index, entry] of entries.entries()) {
+    rawEntriesStore.put(entry);
+    if ((index + 1) % reportEvery === 0 || index === entries.length - 1) {
+      onProgress?.(index + 1, entries.length);
+    }
+  }
   await tx.done;
 }
 

@@ -163,6 +163,12 @@ export const en = {
       install: "Install",
       installed: "Installed",
       ready: "{{title}} is ready to use",
+      stage: {
+        download: "Downloading",
+        unpack: "Unpacking",
+        index: "Building index",
+        save: "Saving entries",
+      },
       empty: "No dictionaries installed",
       entries: "{{count, number}} entries",
       remove: "Remove dictionary",
@@ -195,6 +201,12 @@ export const en = {
       exported: "Progress exported",
       imported: "Imported {{progress}} progress records",
       error: "Couldn't process the progress file",
+      transfer: {
+        prepare: "Preparing backup",
+        pack: "Packing backup",
+        unpack: "Opening backup",
+        restore: "Restoring data",
+      },
     },
     about: {
       title: "About yuki",

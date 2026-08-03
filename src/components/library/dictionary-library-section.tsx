@@ -18,6 +18,8 @@ import {
   removeDictionary,
   reorderDictionaries,
   updateDictionaryEnabled,
+  type DictionaryProgress,
+  type DictionaryProgressPhase,
   type DictionaryRecord,
 } from "@/core/dictionaries";
 import { Button } from "@/components/ui/button";
@@ -28,13 +30,62 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { DashRing } from "@/components/ui/dash-ring";
+import { ProgressRing } from "@/components/ui/progress-ring";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
+
+const DICTIONARY_PROGRESS_RANGES: Record<
+  DictionaryProgressPhase,
+  readonly [number, number]
+> = {
+  download: [0, 0.55],
+  unpack: [0.55, 0.65],
+  index: [0.65, 0.82],
+  save: [0.82, 1],
+};
+
+function dictionaryPercent(progress: DictionaryProgress | null): number | null {
+  if (!progress || progress.total <= 0) return null;
+  const [start, end] = DICTIONARY_PROGRESS_RANGES[progress.phase];
+  const fraction = Math.min(1, Math.max(0, progress.current / progress.total));
+  return Math.round((start + (end - start) * fraction) * 100);
+}
+
+function DictionaryProgressIndicator({
+  progress,
+  label,
+}: {
+  progress: DictionaryProgress | null;
+  label: string;
+}) {
+  const percent = dictionaryPercent(progress);
+  const description = percent === null ? label : `${label}, ${percent}%`;
+  return (
+    <div
+      role="status"
+      aria-label={description}
+      title={description}
+      className="size-9 shrink-0"
+    >
+      <ProgressRing value={(percent ?? 0) / 100} className="size-9">
+        {percent === null ? (
+          <DashRing className="size-3.5 text-primary" />
+        ) : (
+          <span className="text-[9px] font-medium tabular-nums text-strong">
+            {percent}%
+          </span>
+        )}
+      </ProgressRing>
+    </div>
+  );
+}
 
 export function DictionaryLibrarySection() {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dictionaries, setDictionaries] = useState<DictionaryRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [progress, setProgress] = useState<DictionaryProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -48,6 +99,7 @@ export function DictionaryLibrarySection() {
 
   const run = async (id: string, action: () => Promise<unknown>) => {
     setBusy(id);
+    setProgress(null);
     setError(null);
     try {
       await action();
@@ -62,18 +114,25 @@ export function DictionaryLibrarySection() {
       return false;
     } finally {
       setBusy(null);
+      setProgress(null);
     }
   };
 
   const onImport = async (file: File) => {
     const imported = await run(file.name, async () => {
-      await importDictionaryArchive(new Uint8Array(await file.arrayBuffer()));
+      await importDictionaryArchive(
+        new Uint8Array(await file.arrayBuffer()),
+        {},
+        (next) => setProgress(next),
+      );
     });
     if (imported) setAddOpen(false);
   };
 
   const installRecommended = async (item: (typeof DICTIONARY_CATALOG)[number]) => {
-    const installed = await run(item.id, () => installDictionaryFromUrl(item));
+    const installed = await run(item.id, () =>
+      installDictionaryFromUrl(item, (next) => setProgress(next)),
+    );
     if (installed) {
       toast.success(t("settings.dictionaries.ready", { title: item.title }), {
         icon: <CheckCircle className="size-4 text-primary" weight="fill" />,
@@ -202,6 +261,8 @@ export function DictionaryLibrarySection() {
               const installed = dictionaries.some(
                 (dictionary) => dictionary.id === item.id,
               );
+              const installing = busy === item.id;
+              const stage = progress?.phase ?? "download";
               return (
                 <div
                   key={item.id}
@@ -227,10 +288,14 @@ export function DictionaryLibrarySection() {
                     <span className="shrink-0 text-xs text-muted-content">
                       {t("settings.dictionaries.installed")}
                     </span>
+                  ) : installing ? (
+                    <DictionaryProgressIndicator
+                      progress={progress}
+                      label={t(`settings.dictionaries.stage.${stage}`)}
+                    />
                   ) : (
                     <Button
                       size="sm"
-                      loading={busy === item.id}
                       disabled={busy !== null}
                       onClick={() => void installRecommended(item)}
                     >
@@ -258,16 +323,26 @@ export function DictionaryLibrarySection() {
                 if (file) void onImport(file);
               }}
             />
-            <Button
-              variant="secondary"
-              size="sm"
-              className="!shadow-none"
-              onClick={() => inputRef.current?.click()}
-              disabled={busy !== null}
-            >
-              <FileArrowUp />
-              {t("settings.dictionaries.importZip")}
-            </Button>
+            {busy !== null &&
+            !DICTIONARY_CATALOG.some((item) => item.id === busy) ? (
+              <DictionaryProgressIndicator
+                progress={progress}
+                label={t(
+                  `settings.dictionaries.stage.${progress?.phase ?? "unpack"}`,
+                )}
+              />
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="!shadow-none"
+                onClick={() => inputRef.current?.click()}
+                disabled={busy !== null}
+              >
+                <FileArrowUp />
+                {t("settings.dictionaries.importZip")}
+              </Button>
+            )}
           </div>
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </DialogContent>

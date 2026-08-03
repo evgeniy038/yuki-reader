@@ -19,6 +19,8 @@ export function Toaster() {
           boxShadow: "var(--shadow-floating)",
           color: "var(--ds-content-strong)",
           fontFamily: "var(--font-sans)",
+          width: "fit-content",
+          maxWidth: "calc(100vw - 24px)",
           padding: "10px 12px",
         },
         classNames: {

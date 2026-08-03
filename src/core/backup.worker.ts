@@ -21,6 +21,7 @@ self.onmessage = async (event: MessageEvent<BackupWorkerMessage>) => {
       const blob = await exportBackupInProcess(
         event.data.options,
         event.data.settings,
+        (progress) => post({ type: "progress", progress }),
       );
       const buffer = await blob.arrayBuffer();
       post(
@@ -30,7 +31,10 @@ self.onmessage = async (event: MessageEvent<BackupWorkerMessage>) => {
       return;
     }
 
-    const summary = await importBackupInProcess(new Blob([event.data.buffer]));
+    const summary = await importBackupInProcess(
+      new Blob([event.data.buffer]),
+      (progress) => post({ type: "progress", progress }),
+    );
     post({ type: "imported", summary } satisfies BackupWorkerResponse);
   } catch (cause) {
     post({

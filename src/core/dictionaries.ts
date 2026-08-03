@@ -139,10 +139,13 @@ function bankNumber(path: string): number {
 export function parseYomitanDictionary(
   archive: Uint8Array,
   dictionaryId = randomId(),
+  onProgress?: DictionaryProgressListener,
 ): ParsedDictionary & { id: string } {
   // ponytail: unzipSync keeps large dictionaries in memory; move parsing to a
   // worker/streaming ZIP reader if mobile imports hit the memory ceiling.
+  onProgress?.({ phase: "unpack", current: 0, total: 0 });
   const files = unzipSync(archive);
+  onProgress?.({ phase: "unpack", current: 1, total: 1 });
   const indexFile = files["index.json"];
   if (!indexFile) throw new Error("Dictionary ZIP is missing index.json");
   const index = parseIndex(indexFile);
@@ -157,7 +160,8 @@ export function parseYomitanDictionary(
   }
 
   const entries: ParsedDictionary["entries"] = [];
-  for (const path of bankPaths) {
+  onProgress?.({ phase: "index", current: 0, total: bankPaths.length });
+  for (const [bankIndex, path] of bankPaths.entries()) {
     const raw = JSON.parse(strFromU8(files[path]!)) as unknown;
     if (!Array.isArray(raw)) throw new Error(`Invalid term bank: ${path}`);
     for (const row of raw) {
@@ -180,6 +184,11 @@ export function parseYomitanDictionary(
         ...(stringOr(row[7]) ? { termTags: row[7] as string } : {}),
       });
     }
+    onProgress?.({
+      phase: "index",
+      current: bankIndex + 1,
+      total: bankPaths.length,
+    });
   }
 
   return {
@@ -215,12 +224,23 @@ export interface DictionaryImportOptions {
   order?: number;
 }
 
+export type DictionaryProgressPhase = "download" | "unpack" | "index" | "save";
+
+export interface DictionaryProgress {
+  phase: DictionaryProgressPhase;
+  current: number;
+  total: number;
+}
+
+export type DictionaryProgressListener = (progress: DictionaryProgress) => void;
+
 async function importDictionaryArchiveInProcess(
   archive: Uint8Array,
   options: DictionaryImportOptions = {},
+  onProgress?: DictionaryProgressListener,
 ): Promise<DictionaryRecord> {
   const id = options.id ?? randomId();
-  const parsed = parseYomitanDictionary(archive, id);
+  const parsed = parseYomitanDictionary(archive, id, onProgress);
   const current = await loadAllDictionaries();
   const record: DictionaryRecord = {
     id,
@@ -244,7 +264,9 @@ async function importDictionaryArchiveInProcess(
     dictionaryId: id,
     key: entryKey(id, entry.termKey, index),
   }));
-  await replaceDictionary(record, archive, entries);
+  await replaceDictionary(record, archive, entries, (current, total) =>
+    onProgress?.({ phase: "save", current, total }),
+  );
   return record;
 }
 
@@ -255,6 +277,7 @@ type DictionaryWorkerMessage = {
 };
 
 type DictionaryWorkerResponse =
+  | { type: "progress"; progress: DictionaryProgress }
   | { type: "done"; record: DictionaryRecord }
   | { type: "error"; message: string };
 
@@ -269,6 +292,7 @@ function transferableBuffer(bytes: Uint8Array): ArrayBuffer {
 function importDictionaryArchiveInWorker(
   archive: Uint8Array,
   options: DictionaryImportOptions,
+  onProgress?: DictionaryProgressListener,
 ): Promise<DictionaryRecord> {
   const worker = new Worker(new URL("./dictionary.worker.ts", import.meta.url), {
     type: "module",
@@ -277,6 +301,10 @@ function importDictionaryArchiveInWorker(
   return new Promise((resolve, reject) => {
     const finish = () => worker.terminate();
     worker.onmessage = (event: MessageEvent<DictionaryWorkerResponse>) => {
+      if (event.data.type === "progress") {
+        onProgress?.(event.data.progress);
+        return;
+      }
       finish();
       if (event.data.type === "error") {
         reject(new Error(event.data.message));
@@ -295,25 +323,77 @@ function importDictionaryArchiveInWorker(
 export async function importDictionaryArchive(
   archive: Uint8Array,
   options: DictionaryImportOptions = {},
+  onProgress?: DictionaryProgressListener,
 ): Promise<DictionaryRecord> {
   const record =
     typeof window !== "undefined" && typeof Worker !== "undefined"
-      ? await importDictionaryArchiveInWorker(archive, options)
-      : await importDictionaryArchiveInProcess(archive, options);
+      ? await importDictionaryArchiveInWorker(archive, options, onProgress)
+      : await importDictionaryArchiveInProcess(archive, options, onProgress);
   notifyDictionaryChange();
   return record;
 }
 
 export async function installDictionaryFromUrl(
   item: DictionaryCatalogItem,
+  onProgress?: DictionaryProgressListener,
 ): Promise<DictionaryRecord> {
   const response = await fetch(item.sourceUrl);
   if (!response.ok) throw new Error(`Dictionary download failed (${response.status})`);
-  const archive = new Uint8Array(await response.arrayBuffer());
+  const archive = await responseBytes(response, onProgress);
   return importDictionaryArchive(archive, {
     id: item.id,
     sourceUrl: item.sourceUrl,
+  }, onProgress);
+}
+
+async function responseBytes(
+  response: Response,
+  onProgress?: DictionaryProgressListener,
+): Promise<Uint8Array> {
+  const header = Number(response.headers.get("content-length"));
+  const total = Number.isFinite(header) && header > 0 ? header : 0;
+  onProgress?.({ phase: "download", current: 0, total });
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    onProgress?.({
+      phase: "download",
+      current: bytes.length,
+      total: total || bytes.length,
+    });
+    return bytes;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  let reported = 0;
+  let reportedAt = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    chunks.push(value);
+    loaded += value.byteLength;
+    const now = Date.now();
+    if (loaded - reported >= 256 * 1024 || now - reportedAt >= 100) {
+      onProgress?.({ phase: "download", current: loaded, total });
+      reported = loaded;
+      reportedAt = now;
+    }
+  }
+
+  const bytes = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  onProgress?.({
+    phase: "download",
+    current: loaded,
+    total: total || loaded,
   });
+  return bytes;
 }
 
 export async function lookupDictionaries(term: string): Promise<DictionaryLookup[]> {

@@ -8,6 +8,8 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
+  type BackupOperationProgress,
+  type BackupOperationProgressPhase,
   DEFAULT_BACKUP_OPTIONS,
   exportBackup,
   importBackup,
@@ -22,9 +24,68 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { DashRing } from "@/components/ui/dash-ring";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
 
 type OpenDialog = "export" | "import" | null;
+
+const BACKUP_PROGRESS_RANGES: Record<
+  BackupOperationProgressPhase,
+  readonly [number, number]
+> = {
+  prepare: [0, 0.8],
+  pack: [0.8, 1],
+  unpack: [0, 0.15],
+  restore: [0.15, 1],
+};
+
+function backupPercent(progress: BackupOperationProgress | null): number | null {
+  if (!progress || progress.total <= 0) return null;
+  const [start, end] = BACKUP_PROGRESS_RANGES[progress.phase];
+  const fraction = Math.min(1, Math.max(0, progress.current / progress.total));
+  return Math.round((start + (end - start) * fraction) * 100);
+}
+
+function TransferProgress({
+  progress,
+  label,
+}: {
+  progress: BackupOperationProgress | null;
+  label: string;
+}) {
+  const percent = backupPercent(progress);
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-col gap-2 py-2"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {percent === null ? (
+            <DashRing className="size-3.5 shrink-0 text-primary" />
+          ) : null}
+          <span className="truncate text-sm text-default">{label}</span>
+        </div>
+        <span className="shrink-0 text-xs tabular-nums text-muted-content">
+          {percent === null ? "…" : `${percent}%`}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent ?? undefined}
+        className="h-1.5 w-full overflow-hidden rounded-full bg-muted-surface"
+      >
+        <div
+          className="h-full rounded-full bg-primary-gradient transition-[width] duration-300"
+          style={{ width: `${percent ?? 42}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function BackupSection() {
   const { t } = useTranslation();
@@ -32,6 +93,7 @@ export function BackupSection() {
   const [options, setOptions] = useState<BackupOptions>(DEFAULT_BACKUP_OPTIONS);
   const [open, setOpen] = useState<OpenDialog>(null);
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
+  const [progress, setProgress] = useState<BackupOperationProgress | null>(null);
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,14 +105,20 @@ export function BackupSection() {
   const openDialog = (next: Exclude<OpenDialog, null>) => {
     setMessage(null);
     setError(null);
+    setProgress(null);
     setOpen(next);
+  };
+
+  const closeDialog = () => {
+    if (busy === null) setOpen(null);
   };
 
   const download = async () => {
     setBusy("export");
     setError(null);
+    setProgress(null);
     try {
-      const blob = await exportBackup(options);
+      const blob = await exportBackup(options, (next) => setProgress(next));
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -67,14 +135,16 @@ export function BackupSection() {
       );
     } finally {
       setBusy(null);
+      setProgress(null);
     }
   };
 
   const restore = async (file: File) => {
     setBusy("import");
     setError(null);
+    setProgress(null);
     try {
-      const summary = await importBackup(file);
+      const summary = await importBackup(file, (next) => setProgress(next));
       setMessage(
         t("settings.backup.imported", {
           progress: summary.progress,
@@ -87,8 +157,22 @@ export function BackupSection() {
         cause instanceof Error ? cause.message : t("settings.backup.error"),
       );
       setBusy(null);
+      setProgress(null);
     }
   };
+
+  const transferLabel =
+    progress?.phase === "prepare"
+      ? t("settings.backup.transfer.prepare")
+      : progress?.phase === "pack"
+        ? t("settings.backup.transfer.pack")
+        : progress?.phase === "unpack"
+          ? t("settings.backup.transfer.unpack")
+          : progress?.phase === "restore"
+            ? t("settings.backup.transfer.restore")
+            : busy === "export"
+              ? t("settings.backup.transfer.prepare")
+              : t("settings.backup.transfer.unpack");
 
   const chooseFile = (file: File | undefined) => {
     setDragging(false);
@@ -147,117 +231,123 @@ export function BackupSection() {
 
       <Dialog
         open={open === "export"}
-        onOpenChange={(next) => !next && setOpen(null)}
+        onOpenChange={(next) => !next && closeDialog()}
       >
         <DialogContent className="max-w-sm gap-4 p-5">
           <DialogHeader>
             <DialogTitle>{t("settings.backup.exportTitle")}</DialogTitle>
           </DialogHeader>
-          <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
-            {exportRows.map(([key, label, ariaLabel]) => (
-              <div
-                key={key}
-                className="flex min-h-10 items-center justify-between gap-3 px-3 py-2"
-              >
-                <span className="text-sm text-default">{label}</span>
-                <Switch
-                  checked={options[key]}
-                  onCheckedChange={(value) => setOption(key, value)}
-                  ariaLabel={ariaLabel}
-                  disabled={busy !== null}
-                />
+          {busy === "export" ? (
+            <TransferProgress progress={progress} label={transferLabel} />
+          ) : (
+            <>
+              <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
+                {exportRows.map(([key, label, ariaLabel]) => (
+                  <div
+                    key={key}
+                    className="flex min-h-10 items-center justify-between gap-3 px-3 py-2"
+                  >
+                    <span className="text-sm text-default">{label}</span>
+                    <Switch
+                      checked={options[key]}
+                      onCheckedChange={(value) => setOption(key, value)}
+                      ariaLabel={ariaLabel}
+                      disabled={busy !== null}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setOpen(null)}
-              disabled={busy !== null}
-            >
-              {t("settings.backup.cancel")}
-            </Button>
-            <Button loading={busy === "export"} onClick={() => void download()}>
-              {busy === "export" ? null : <UploadSimple />}
-              {t("settings.backup.export")}
-            </Button>
-          </DialogFooter>
+              {error ? <p className="text-xs text-destructive">{error}</p> : null}
+              <DialogFooter>
+                <Button variant="secondary" onClick={closeDialog}>
+                  {t("settings.backup.cancel")}
+                </Button>
+                <Button onClick={() => void download()}>
+                  <UploadSimple />
+                  {t("settings.backup.export")}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
       <Dialog
         open={open === "import"}
-        onOpenChange={(next) => !next && setOpen(null)}
+        onOpenChange={(next) => !next && closeDialog()}
       >
         <DialogContent className="max-w-md gap-4 p-5">
           <DialogHeader>
             <DialogTitle>{t("settings.backup.importTitle")}</DialogTitle>
-            <p className="text-sm text-muted-content">
-              {t("settings.backup.importHint")}
-            </p>
+            {busy !== "import" ? (
+              <p className="text-sm text-muted-content">
+                {t("settings.backup.importHint")}
+              </p>
+            ) : null}
           </DialogHeader>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".zip,.yuki,application/zip"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              chooseFile(file);
-            }}
-          />
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label={t("settings.backup.dropzone")}
-            onClick={() => inputRef.current?.click()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                inputRef.current?.click();
-              }
-            }}
-            onDragEnter={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              chooseFile(event.dataTransfer.files[0]);
-            }}
-            className={`flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-5 text-center outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40 ${
-              dragging
-                ? "border-primary bg-primary/5"
-                : "border-subtle hover:border-strong hover:bg-hover-surface"
-            }`}
-          >
-            <FileArrowUp className="mb-2 size-6 text-muted-content" />
-            <p className="text-sm font-medium text-default">
-              {dragging
-                ? t("settings.backup.dropActive")
-                : t("settings.backup.dropzone")}
-            </p>
-            <p className="mt-1 text-xs text-muted-content">
-              {t("settings.backup.browse")}
-            </p>
-          </div>
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setOpen(null)}
-              disabled={busy !== null}
-            >
-              {t("settings.backup.cancel")}
-            </Button>
-          </DialogFooter>
+          {busy === "import" ? (
+            <TransferProgress progress={progress} label={transferLabel} />
+          ) : (
+            <>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".zip,.yuki,application/zip"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  chooseFile(file);
+                }}
+              />
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={t("settings.backup.dropzone")}
+                onClick={() => inputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    inputRef.current?.click();
+                  }
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setDragging(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  chooseFile(event.dataTransfer.files[0]);
+                }}
+                className={`flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-5 text-center outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40 ${
+                  dragging
+                    ? "border-primary bg-primary/5"
+                    : "border-subtle hover:border-strong hover:bg-hover-surface"
+                }`}
+              >
+                <FileArrowUp className="mb-2 size-6 text-muted-content" />
+                <p className="text-sm font-medium text-default">
+                  {dragging
+                    ? t("settings.backup.dropActive")
+                    : t("settings.backup.dropzone")}
+                </p>
+                <p className="mt-1 text-xs text-muted-content">
+                  {t("settings.backup.browse")}
+                </p>
+              </div>
+              {error ? <p className="text-xs text-destructive">{error}</p> : null}
+              <DialogFooter>
+                <Button variant="secondary" onClick={closeDialog}>
+                  {t("settings.backup.cancel")}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </>

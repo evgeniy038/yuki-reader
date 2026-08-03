@@ -161,6 +161,12 @@ export const ru: Messages = {
       install: "Установить",
       installed: "Установлен",
       ready: "{{title}} готов к использованию",
+      stage: {
+        download: "Загрузка",
+        unpack: "Распаковка",
+        index: "Построение индекса",
+        save: "Сохранение записей",
+      },
       empty: "Нет установленных словарей",
       entries: "{{count, number}} записей",
       remove: "Удалить словарь",
@@ -193,6 +199,12 @@ export const ru: Messages = {
       exported: "Прогресс экспортирован",
       imported: "Импортировано записей прогресса: {{progress}}",
       error: "Не удалось обработать файл прогресса",
+      transfer: {
+        prepare: "Подготовка backup",
+        pack: "Сборка backup",
+        unpack: "Открытие backup",
+        restore: "Восстановление данных",
+      },
     },
     about: {
       title: "О Yuki",
