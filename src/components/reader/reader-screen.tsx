@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Book } from "@/core/library";
+import { DICTIONARIES_ENABLED } from "@/core/dictionaries";
 import {
   fontFamilyStack,
   readingTheme,
@@ -143,7 +144,7 @@ export function ReaderScreen({
       />
       <DictionaryLookupLayer
         rootRef={readerRef}
-        enabled={book.format !== "pdf"}
+        enabled={DICTIONARIES_ENABLED && book.format !== "pdf"}
       />
     </div>
   );

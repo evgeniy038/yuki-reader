@@ -156,6 +156,8 @@ export const ru: Messages = {
       title: "Словари",
       add: "Добавить",
       addTitle: "Добавить словарь",
+      enabled: "Использовать словари",
+      enabledAria: "включить словари",
       importZip: "Импортировать ZIP",
       importHint: "Есть ZIP Yomitan?",
       install: "Установить",

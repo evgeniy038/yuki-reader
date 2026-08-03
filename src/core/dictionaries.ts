@@ -91,6 +91,7 @@ export const DICTIONARY_CATALOG: DictionaryCatalogItem[] = [
 ];
 
 export const DICTIONARIES_CHANGED_EVENT = "yuki:dictionaries-changed";
+export const DICTIONARIES_ENABLED = false;
 
 function notifyDictionaryChange(): void {
   if (typeof window !== "undefined") {
@@ -397,6 +398,7 @@ async function responseBytes(
 }
 
 export async function lookupDictionaries(term: string): Promise<DictionaryLookup[]> {
+  if (!DICTIONARIES_ENABLED) return [];
   const termKey = normalizeDictionaryTerm(term);
   if (!termKey) return [];
   const dictionaries = await loadAllDictionaries();

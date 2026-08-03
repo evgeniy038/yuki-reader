@@ -24,7 +24,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { DashRing } from "@/components/ui/dash-ring";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
 
 type OpenDialog = "export" | "import" | null;
@@ -39,9 +38,10 @@ const BACKUP_PROGRESS_RANGES: Record<
   restore: [0.15, 1],
 };
 
-function backupPercent(progress: BackupOperationProgress | null): number | null {
-  if (!progress || progress.total <= 0) return null;
+function backupPercent(progress: BackupOperationProgress | null): number {
+  if (!progress) return 0;
   const [start, end] = BACKUP_PROGRESS_RANGES[progress.phase];
+  if (progress.total <= 0) return Math.round(start * 100);
   const fraction = Math.min(1, Math.max(0, progress.current / progress.total));
   return Math.round((start + (end - start) * fraction) * 100);
 }
@@ -61,26 +61,21 @@ function TransferProgress({
       className="flex flex-col gap-2 py-2"
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          {percent === null ? (
-            <DashRing className="size-3.5 shrink-0 text-primary" />
-          ) : null}
-          <span className="truncate text-sm text-default">{label}</span>
-        </div>
+        <span className="truncate text-sm text-default">{label}</span>
         <span className="shrink-0 text-xs tabular-nums text-muted-content">
-          {percent === null ? "…" : `${percent}%`}
+          {percent}%
         </span>
       </div>
       <div
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={percent ?? undefined}
+        aria-valuenow={percent}
         className="h-1.5 w-full overflow-hidden rounded-full bg-muted-surface"
       >
         <div
           className="h-full rounded-full bg-primary-gradient transition-[width] duration-300"
-          style={{ width: `${percent ?? 42}%` }}
+          style={{ width: `${percent}%` }}
         />
       </div>
     </div>
@@ -237,26 +232,26 @@ export function BackupSection() {
           <DialogHeader>
             <DialogTitle>{t("settings.backup.exportTitle")}</DialogTitle>
           </DialogHeader>
+          <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
+            {exportRows.map(([key, label, ariaLabel]) => (
+              <div
+                key={key}
+                className="flex min-h-10 items-center justify-between gap-3 px-3 py-2"
+              >
+                <span className="text-sm text-default">{label}</span>
+                <Switch
+                  checked={options[key]}
+                  onCheckedChange={(value) => setOption(key, value)}
+                  ariaLabel={ariaLabel}
+                  disabled={busy !== null}
+                />
+              </div>
+            ))}
+          </div>
           {busy === "export" ? (
             <TransferProgress progress={progress} label={transferLabel} />
           ) : (
             <>
-              <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
-                {exportRows.map(([key, label, ariaLabel]) => (
-                  <div
-                    key={key}
-                    className="flex min-h-10 items-center justify-between gap-3 px-3 py-2"
-                  >
-                    <span className="text-sm text-default">{label}</span>
-                    <Switch
-                      checked={options[key]}
-                      onCheckedChange={(value) => setOption(key, value)}
-                      ariaLabel={ariaLabel}
-                      disabled={busy !== null}
-                    />
-                  </div>
-                ))}
-              </div>
               {error ? <p className="text-xs text-destructive">{error}</p> : null}
               <DialogFooter>
                 <Button variant="secondary" onClick={closeDialog}>

@@ -17,6 +17,7 @@ versioning — [SemVer](https://semver.org/).
 - Reader: font weight can be adjusted from Settings and quick reader settings
 - Buttons: loading keeps the original variant, disables the action, and replaces its icon with a spinner
 - Transfers: dictionary installs and backup ZIPs report live stages and percentages, while archive work stays off the UI thread and successful downloads show a compact confirmation toast
+- Dictionaries: lookup and installation are temporarily disabled while package delivery is fixed
 - Reader: Light pages use a balanced cool near-white for easier reading
 
 ## [1.3.1] - 2026-08-02

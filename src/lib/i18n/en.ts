@@ -158,6 +158,8 @@ export const en = {
       title: "Dictionaries",
       add: "Add",
       addTitle: "Add dictionary",
+      enabled: "Dictionary lookup",
+      enabledAria: "enable dictionary lookup",
       importZip: "Import ZIP",
       importHint: "Have a Yomitan ZIP?",
       install: "Install",

@@ -504,11 +504,16 @@ export async function replaceDictionary(
   const reportEvery = Math.max(1, Math.ceil(entries.length / 50));
   for (const [index, entry] of entries.entries()) {
     rawEntriesStore.put(entry);
-    if ((index + 1) % reportEvery === 0 || index === entries.length - 1) {
+    if (
+      (index + 1) % reportEvery === 0 &&
+      index + 1 < entries.length
+    ) {
       onProgress?.(index + 1, entries.length);
     }
   }
   await tx.done;
+  const completed = entries.length || 1;
+  onProgress?.(completed, completed);
 }
 
 export async function deleteDictionary(id: string): Promise<void> {

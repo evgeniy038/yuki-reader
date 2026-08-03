@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   DICTIONARY_CATALOG,
+  DICTIONARIES_ENABLED,
   importDictionaryArchive,
   installDictionaryFromUrl,
   loadAllDictionaries,
@@ -30,9 +31,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { DashRing } from "@/components/ui/dash-ring";
 import { ProgressRing } from "@/components/ui/progress-ring";
-import { SettingsBlock, SettingsGroup } from "./settings-group";
+import { SettingsBlock, SettingsGroup, SettingsRow } from "./settings-group";
 
 const DICTIONARY_PROGRESS_RANGES: Record<
   DictionaryProgressPhase,
@@ -44,11 +44,15 @@ const DICTIONARY_PROGRESS_RANGES: Record<
   save: [0.82, 1],
 };
 
-function dictionaryPercent(progress: DictionaryProgress | null): number | null {
-  if (!progress || progress.total <= 0) return null;
+function dictionaryPercent(progress: DictionaryProgress | null): number {
+  if (!progress) return 0;
   const [start, end] = DICTIONARY_PROGRESS_RANGES[progress.phase];
+  if (progress.total <= 0) return Math.round(start * 100);
   const fraction = Math.min(1, Math.max(0, progress.current / progress.total));
-  return Math.round((start + (end - start) * fraction) * 100);
+  const percent = Math.round((start + (end - start) * fraction) * 100);
+  return progress.phase === "save" && progress.current < progress.total
+    ? Math.min(99, percent)
+    : percent;
 }
 
 function DictionaryProgressIndicator({
@@ -59,7 +63,7 @@ function DictionaryProgressIndicator({
   label: string;
 }) {
   const percent = dictionaryPercent(progress);
-  const description = percent === null ? label : `${label}, ${percent}%`;
+  const description = `${label}, ${percent}%`;
   return (
     <div
       role="status"
@@ -67,14 +71,10 @@ function DictionaryProgressIndicator({
       title={description}
       className="size-9 shrink-0"
     >
-      <ProgressRing value={(percent ?? 0) / 100} className="size-9">
-        {percent === null ? (
-          <DashRing className="size-3.5 text-primary" />
-        ) : (
-          <span className="text-[9px] font-medium tabular-nums text-strong">
-            {percent}%
-          </span>
-        )}
+      <ProgressRing value={percent / 100} className="size-9">
+        <span className="text-[9px] font-medium tabular-nums text-strong">
+          {percent}%
+        </span>
       </ProgressRing>
     </div>
   );
@@ -119,6 +119,7 @@ export function DictionaryLibrarySection() {
   };
 
   const onImport = async (file: File) => {
+    if (!DICTIONARIES_ENABLED) return;
     const imported = await run(file.name, async () => {
       await importDictionaryArchive(
         new Uint8Array(await file.arrayBuffer()),
@@ -130,6 +131,7 @@ export function DictionaryLibrarySection() {
   };
 
   const installRecommended = async (item: (typeof DICTIONARY_CATALOG)[number]) => {
+    if (!DICTIONARIES_ENABLED) return;
     const installed = await run(item.id, () =>
       installDictionaryFromUrl(item, (next) => setProgress(next)),
     );
@@ -141,6 +143,7 @@ export function DictionaryLibrarySection() {
   };
 
   const toggle = (dictionary: DictionaryRecord, enabled: boolean) => {
+    if (!DICTIONARIES_ENABLED) return;
     void run(dictionary.id, () => updateDictionaryEnabled(dictionary.id, enabled));
   };
 
@@ -170,13 +173,21 @@ export function DictionaryLibrarySection() {
               setError(null);
               setAddOpen(true);
             }}
-            disabled={busy !== null}
+            disabled={busy !== null || !DICTIONARIES_ENABLED}
           >
             <Plus />
             {t("settings.dictionaries.add")}
           </Button>
         }
       >
+        <SettingsRow label={t("settings.dictionaries.enabled")}>
+          <Switch
+            checked={DICTIONARIES_ENABLED}
+            onCheckedChange={() => undefined}
+            ariaLabel={t("settings.dictionaries.enabledAria")}
+            disabled
+          />
+        </SettingsRow>
         <SettingsBlock>
           {dictionaries.length > 0 ? (
             <div className="-mx-4 -my-3 divide-y divide-subtle">
@@ -223,7 +234,7 @@ export function DictionaryLibrarySection() {
                       ariaLabel={t("settings.dictionaries.toggle", {
                         title: dictionary.title,
                       })}
-                      disabled={busy !== null}
+                      disabled={busy !== null || !DICTIONARIES_ENABLED}
                     />
                     <Button
                       variant="ghost"
@@ -296,7 +307,7 @@ export function DictionaryLibrarySection() {
                   ) : (
                     <Button
                       size="sm"
-                      disabled={busy !== null}
+                      disabled={busy !== null || !DICTIONARIES_ENABLED}
                       onClick={() => void installRecommended(item)}
                     >
                       {busy === item.id ? null : <DownloadSimple />}
@@ -337,7 +348,7 @@ export function DictionaryLibrarySection() {
                 size="sm"
                 className="!shadow-none"
                 onClick={() => inputRef.current?.click()}
-                disabled={busy !== null}
+                disabled={busy !== null || !DICTIONARIES_ENABLED}
               >
                 <FileArrowUp />
                 {t("settings.dictionaries.importZip")}
