@@ -13,7 +13,10 @@ import type {
 // are rewritten to a dummy data-URL that carries the resource path as a token;
 // at render time the UI swaps those tokens for blob object-URLs. File lookup
 // is case-insensitive (many epubs have mismatched case between OPF hrefs and
-// zip entries). This keeps the core browser-free and node-testable.
+// zip entries) and percent-tolerant: hrefs are URI references, so they are
+// decoded before matching, and zip entries are also indexed under their
+// decoded names for the reverse direction. This keeps the core browser-free
+// and node-testable.
 
 const DUMMY_BASE = "data:image/gif;yuki:";
 const DUMMY_SUFFIX = ";base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
@@ -81,6 +84,24 @@ function dirOf(path: string): string {
   return slash === -1 ? "" : path.slice(0, slash);
 }
 
+// Hrefs in the OPF, NCX/nav and chapter HTML are URI references: percent-
+// decoding maps them to actual zip paths ("chapter%201.xhtml" ->
+// "chapter 1.xhtml"). A malformed sequence (a literal '%' in a name, e.g.
+// "100%.xhtml") must not throw — keep the raw form.
+function decodePath(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+// Resolve an href against its base directory into a normalized zip path.
+function resolvePath(dir: string, href: string): string {
+  const decoded = decodePath(href);
+  return normalize(dir ? `${dir}/${decoded}` : decoded);
+}
+
 function titleFromHtml(html: string): string | undefined {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   if (!match) return undefined;
@@ -146,7 +167,7 @@ function rewriteImages(
 ): string {
   const resolve = (val: string): string => {
     if (/^(data:|https?:|#|mailto:)/i.test(val)) return val;
-    const resolved = normalize(chapterDir ? `${chapterDir}/${val}` : val);
+    const resolved = resolvePath(chapterDir, val);
     return resourcePaths.has(resolved) ? dummy(resolved) : val;
   };
   const replaceAttr = (
@@ -216,10 +237,14 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
   const rawFiles = unzipSync(bytes);
 
   // Case-insensitive file lookup: many epubs have mismatched case between OPF
-  // hrefs and actual zip entry paths.
+  // hrefs and actual zip entry paths. Entries are additionally indexed under
+  // their percent-decoded names, so a plain href still finds an entry written
+  // in encoded form by a broken exporter.
   const lowerMap = new Map<string, string>();
   for (const key of Object.keys(rawFiles)) {
     lowerMap.set(key.toLowerCase(), key);
+    const decoded = decodePath(key).toLowerCase();
+    if (!lowerMap.has(decoded)) lowerMap.set(decoded, key);
   }
   const findBytes = (path: string): Uint8Array | undefined => {
     return rawFiles[path] ?? rawFiles[lowerMap.get(path.toLowerCase()) ?? ""];
@@ -263,7 +288,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
     const href = getStr(item, "href");
     const mt = getStr(item, "media-type");
     if (!href || !mt) continue;
-    const resolved = normalize(opfDirPath ? `${opfDirPath}/${href}` : href);
+    const resolved = resolvePath(opfDirPath, href);
     const isImage = mt.startsWith("image/");
     const isCss = mt === "text/css";
     if (isImage || (!isCss && mimeFromExt(resolved))) {
@@ -338,7 +363,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
   // Build cover object with MIME fixup
   let cover: { mime: string; bytes: Uint8Array } | undefined;
   if (coverHref) {
-    const resolved = normalize(opfDirPath ? `${opfDirPath}/${coverHref}` : coverHref);
+    const resolved = resolvePath(opfDirPath, coverHref);
     const u8 = findBytes(resolved);
     if (u8) {
       const mime = fixMime(coverMime ?? "", resolved, u8);
@@ -358,7 +383,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
     if (!idref) continue;
     const href = hrefById.get(idref);
     if (!href) continue;
-    const resolved = normalize(opfDirPath ? `${opfDirPath}/${href}` : href);
+    const resolved = resolvePath(opfDirPath, href);
     const raw = read(resolved);
     if (raw === "") continue;
     const html = stripSvgSize(rewriteImages(raw, dirOf(resolved), resourcePaths));
@@ -373,7 +398,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
     const id = getStr(item, "id");
     const href = getStr(item, "href");
     if (id && href) {
-      idByResolvedPath.set(normalize(opfDirPath ? `${opfDirPath}/${href}` : href), id);
+      idByResolvedPath.set(resolvePath(opfDirPath, href), id);
     }
   }
   const rawToc: RawTocEntry[] = [];
@@ -386,9 +411,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
   );
   const tocItem = navItem ?? ncxItem;
   const tocHref = tocItem ? getStr(tocItem, "href") : undefined;
-  const tocResolved = tocHref
-    ? normalize(opfDirPath ? `${opfDirPath}/${tocHref}` : tocHref)
-    : "";
+  const tocResolved = tocHref ? resolvePath(opfDirPath, tocHref) : "";
   const tocRaw = tocResolved === "" ? "" : read(tocResolved);
   if (tocRaw !== "") {
     if (navItem) {
@@ -410,7 +433,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
   const tocResolvedEntries: TocEntry[] = [];
   for (const { label, src } of rawToc) {
     const clean = src.split("#")[0]!;
-    const resolved = normalize(tocDir ? `${tocDir}/${clean}` : clean);
+    const resolved = resolvePath(tocDir, clean);
     const chapterId = idByResolvedPath.get(resolved);
     const trimmed = label.replace(/\s+/g, " ").trim();
     if (chapterId && trimmed !== "") {
