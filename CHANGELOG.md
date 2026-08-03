@@ -16,7 +16,7 @@ versioning — [SemVer](https://semver.org/).
 - Reader: Light pages use a warmer white for easier reading
 - Reader: font weight can be adjusted from Settings and quick reader settings
 - Buttons: loading keeps the original variant, disables the action, and replaces its icon with a spinner
-- Reader: Light pages use a slightly deeper cool near-white for easier reading
+- Reader: Light pages use a balanced cool near-white for easier reading
 
 ## [1.3.1] - 2026-08-02
 
