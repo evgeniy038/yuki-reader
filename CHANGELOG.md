@@ -3,9 +3,12 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
-## [1.3.2] - 2026-08-02
+## [1.3.2] - 2026-08-03
 
-- Progress transfer: compact export/import actions support customizable Yuki backups and ttsu backup ZIPs; OCR models are never included
+- Progress transfer: export/import live in clear Settings rows with icon tiles, and imports validate the entire backup before touching the library — a broken ZIP can't leave data half-restored
+- Progress transfer: live progress now names the actual work ("Book 3 of 12 · Page 145 of 226"), and a stalled transfer fails with a clear error instead of spinning forever
+- Progress transfer: long exports and imports can be cancelled — export stops instantly, import stops after the current book, keeping the library consistent
+- Progress transfer: customizable Yuki backups and ttsu backup ZIPs; OCR models are never included; successful imports confirm with a toast before the app reloads
 - Dictionaries: keep installed dictionaries in a compact list, then add Yomitan-compatible ZIPs or recommended English-English, English-Russian and Japanese-English packages from a modal
 - Settings: dictionary installation now uses a flat list with compact, borderless ZIP import controls
 - Novels: page turns now respond to arrow keys and scrolling, not clicks on the reading surface
@@ -19,6 +22,7 @@ versioning — [SemVer](https://semver.org/).
 - Transfers: dictionary installs and backup ZIPs report live stages and percentages, while archive work stays off the UI thread and successful downloads show a compact confirmation toast
 - Dictionaries: lookup and installation are temporarily disabled while package delivery is fixed
 - Reader: Light pages use a balanced cool near-white for easier reading
+- Library: EPUB books whose internal links are percent-encoded (spaces or non-ASCII characters in file names) no longer import as empty
 
 ## [1.3.1] - 2026-08-02
 
