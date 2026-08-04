@@ -33,3 +33,6 @@ Thumbs.db
 
 # local browser state
 artifacts/local/browser/
+
+# agent worktrees
+.worktrees/
