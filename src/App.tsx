@@ -204,6 +204,7 @@ export default function App() {
             path="stats"
             element={
               <StatsView
+                books={shelf.books}
                 goalBook={goalBook}
                 goalBookOptions={shelf.books.map((book) => ({
                   id: book.id,

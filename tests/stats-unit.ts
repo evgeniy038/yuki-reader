@@ -6,13 +6,19 @@ import { strict as assert } from "node:assert";
 import {
   applyBookDelta,
   applyDelta,
+  bookPace,
+  dailyMinutesSeries,
   dayKey,
+  estimateDaysLeft,
   goalTarget,
   heatLevel,
   isActiveDay,
+  movingAverage,
   shiftDay,
   speedOf,
+  speedSeries,
   streaks,
+  topBookInWindow,
   totals,
   type DailyStats,
 } from "../src/core/stats.ts";
@@ -208,6 +214,153 @@ function day(date: string, patch: Partial<DailyStats> = {}): DailyStats {
   assert.equal(goalTarget(percent, 0), null);
   assert.equal(goalTarget({ ...percent, percent: 1 }, 50), 1); // floors at 1
   console.log("  ✓ goalTarget: chars flat, percent of volume, null without book");
+}
+
+// --- dailyMinutesSeries: window anchored at today, missing days are zero ---
+{
+  const today = "2026-07-28";
+  assert.deepEqual(
+    dailyMinutesSeries(
+      [
+        day("2026-07-27", { timeMs: 30 * 60_000 }),
+        day("2026-07-28", { timeMs: 90 * 60_000 }),
+      ],
+      3,
+      today,
+    ),
+    [
+      { key: "2026-07-26", minutes: 0 },
+      { key: "2026-07-27", minutes: 30 },
+      { key: "2026-07-28", minutes: 90 },
+    ],
+  );
+  // Empty input → flat zeros, still one point per day.
+  assert.deepEqual(dailyMinutesSeries([], 2, today), [
+    { key: "2026-07-27", minutes: 0 },
+    { key: "2026-07-28", minutes: 0 },
+  ]);
+  // Days outside the window are ignored.
+  assert.ok(
+    dailyMinutesSeries([day("2026-07-01", { timeMs: 60_000 })], 3, today).every(
+      (p) => p.minutes === 0,
+    ),
+  );
+  console.log("  ✓ dailyMinutesSeries: window, missing days zero, old days ignored");
+}
+
+// --- movingAverage: trailing window, partial heads, zero guards -------------
+{
+  assert.deepEqual(movingAverage([], 7), []);
+  assert.deepEqual(movingAverage([10, 20, 30], 2), [10, 15, 25]);
+  // Window longer than the series: partial averages, no division blowups.
+  assert.deepEqual(movingAverage([4, 8], 5), [4, 6]);
+  assert.deepEqual(movingAverage([0, 0, 0], 2), [0, 0, 0]);
+  // A sub-1 window degrades to the identity, not a crash.
+  assert.deepEqual(movingAverage([3, 5], 0), [3, 5]);
+  console.log("  ✓ movingAverage: partial heads, long window, zeros");
+}
+
+// --- speedSeries: speedOf rules per day, gaps skip, pages fallback ----------
+{
+  const today = "2026-07-28";
+  assert.deepEqual(
+    speedSeries(
+      [
+        day("2026-07-27", { chars: 6000, timeMs: 3_600_000 }),
+        day("2026-07-28", { chars: 500, timeMs: 30_000 }), // <1 min — skipped
+      ],
+      2,
+      today,
+    ),
+    { kind: "chars", points: [{ key: "2026-07-27", perHour: 6000 }] },
+  );
+  // Page-only days report pages/h.
+  assert.deepEqual(
+    speedSeries(
+      [day("2026-07-28", { chars: 0, pages: 30, timeMs: 3_600_000 })],
+      1,
+      today,
+    ),
+    { kind: "pages", points: [{ key: "2026-07-28", perHour: 30 }] },
+  );
+  // No qualifying day → null (empty input, or only sub-minute samples).
+  assert.equal(speedSeries([], 14, today), null);
+  assert.equal(
+    speedSeries([day("2026-07-28", { chars: 100, timeMs: 10_000 })], 1, today),
+    null,
+  );
+  console.log("  ✓ speedSeries: chars/h, pages/h fallback, null without a minute");
+}
+
+// --- topBookInWindow: most volume wins, pages break char-less ties ----------
+{
+  const today = "2026-07-28";
+  const days = [
+    day("2026-07-27", {
+      perBook: {
+        b1: { chars: 100, pages: 0, timeMs: 1000 },
+        b2: { chars: 300, pages: 0, timeMs: 1000 },
+      },
+    }),
+    day("2026-07-28", { perBook: { b1: { chars: 250, pages: 0, timeMs: 1000 } } }),
+  ];
+  assert.equal(topBookInWindow(days, 2, today), "b1"); // 350 vs 300
+  // A char-less (PDF) library falls back to pages.
+  assert.equal(
+    topBookInWindow(
+      [day("2026-07-28", { chars: 0, perBook: { p1: { chars: 0, pages: 4, timeMs: 1000 } } })],
+      1,
+      today,
+    ),
+    "p1",
+  );
+  // Slices outside the window don't count.
+  assert.equal(
+    topBookInWindow([day("2026-07-01", { perBook: { b9: { chars: 999, pages: 0, timeMs: 1000 } } })], 2, today),
+    null,
+  );
+  assert.equal(topBookInWindow([], 14, today), null);
+  console.log("  ✓ topBookInWindow: max volume, pages fallback, window bounds");
+}
+
+// --- bookPace: window totals + average speed for one book -------------------
+{
+  const today = "2026-07-28";
+  const days = [
+    day("2026-07-27", { perBook: { b1: { chars: 6000, pages: 0, timeMs: 3_600_000 } } }),
+    day("2026-07-28", { perBook: { b1: { chars: 3000, pages: 0, timeMs: 1_800_000 } } }),
+    // Outside the 2-day window — must not leak into the totals.
+    day("2026-07-20", { perBook: { b1: { chars: 99_999, pages: 0, timeMs: 3_600_000 } } }),
+  ];
+  assert.deepEqual(bookPace(days, "b1", 2, today), {
+    chars: 9000,
+    pages: 0,
+    timeMs: 5_400_000,
+    activeDays: 2,
+    speed: { kind: "chars", perHour: 6000 }, // 9000 chars over 1.5 h
+  });
+  // A book with no slices in the window → null.
+  assert.equal(bookPace(days, "missing", 2, today), null);
+  assert.equal(bookPace([], "b1", 14, today), null);
+  console.log("  ✓ bookPace: window totals, active days, null for unknown books");
+}
+
+// --- estimateDaysLeft: extrapolation with hard guards -----------------------
+{
+  // 9000 read at 40% → 13 500 left, at 4 500 a day → 3 days.
+  assert.equal(estimateDaysLeft(9000, 0.4, 4500), 3);
+  // Rounds UP to full days: 1000 left at 600 a day → 2.
+  assert.equal(estimateDaysLeft(1000, 0.5, 600), 2);
+  // Nothing left to speak of still floors at one day.
+  assert.equal(estimateDaysLeft(1000, 0.99, 5000), 1);
+  // Guards: nothing read, unset progress, effectively finished, dead pace.
+  assert.equal(estimateDaysLeft(0, 0.4, 4500), null);
+  assert.equal(estimateDaysLeft(9000, 0, 4500), null);
+  assert.equal(estimateDaysLeft(9000, -1, 4500), null);
+  assert.equal(estimateDaysLeft(9000, 0.995, 4500), null);
+  assert.equal(estimateDaysLeft(9000, 1, 4500), null);
+  assert.equal(estimateDaysLeft(9000, 0.4, 0), null);
+  console.log("  ✓ estimateDaysLeft: extrapolation, ceil, zero-division guards");
 }
 
 console.log("stats-unit: all checks passed");

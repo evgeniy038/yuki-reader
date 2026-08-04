@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChartLine } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,6 +9,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { DashRing } from "@/components/ui/dash-ring";
+import type { Book } from "@/core/library";
 import { loadStats, type DailyStats } from "@/core/storage";
 import { dayKey, streaks, totals } from "@/core/stats";
 import { speedLabel } from "@/lib/format";
@@ -20,6 +21,7 @@ import {
   PageTitle,
 } from "./page-shell";
 import { SummarySection } from "./summary-section";
+import { ChartsSection } from "./charts-section";
 import { ActivityHeatmap } from "./activity-heatmap";
 import { GoalSection, type GoalBookOption } from "./goal-section";
 
@@ -30,16 +32,24 @@ import { GoalSection, type GoalBookOption } from "./goal-section";
 // mount-time loading is enough. The page keeps the settings width (max-w-lg)
 // and rhythm.
 export function StatsView({
+  books,
   goalBook,
   goalBookOptions,
   onGoalBookChange,
 }: {
+  books: Book[];
   goalBook?: GoalBook;
   goalBookOptions: GoalBookOption[];
   onGoalBookChange: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const [days, setDays] = useState<DailyStats[] | null>(null);
+  // Per-book day slices key books by id; the heatmap tooltip resolves names
+  // through this map and silently drops books that are no longer on the shelf.
+  const bookTitles = useMemo(
+    () => new Map(books.map((book) => [book.id, book.title])),
+    [books],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -84,7 +94,8 @@ export function StatsView({
               total={totals(days)}
               todaySpeed={today ? speedLabel(today) : null}
             />
-            <ActivityHeatmap days={days} todayKey={todayKey} />
+            <ChartsSection days={days} books={books} todayKey={todayKey} />
+            <ActivityHeatmap days={days} todayKey={todayKey} bookTitles={bookTitles} />
             <GoalSection
               todayChars={today?.chars ?? 0}
               todayPages={today?.pages ?? 0}
