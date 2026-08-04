@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
 import type { DailyStats } from "@/core/storage";
@@ -6,7 +6,6 @@ import {
   bookPace,
   dailyMinutesSeries,
   estimateDaysLeft,
-  movingAverage,
   shiftDay,
   speedOf,
   speedSeries,
@@ -18,9 +17,9 @@ import i18n from "@/lib/i18n";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
 
-// The last-two-weeks charts: minutes per day with a moving average, reading
-// speed, and the current book's pace with an ETA. All hand-rolled SVG — no
-// chart library. Charts stretch to the card width via
+// The last-two-weeks charts: minutes per day in an ordered-dither texture,
+// reading speed, and the current book's pace with an ETA. All hand-rolled
+// SVG — no chart library. Charts stretch to the card width via
 // preserveAspectRatio="none"; strokes opt out of the stretch with
 // vector-effect, and the speed dots are round-capped zero-length strokes (a
 // filled shape would distort). Day letters live in HTML under the SVG —
@@ -119,13 +118,12 @@ function ChartHeader({ label, value }: { label: string; value?: string }) {
 
 function MinutesChart({ points }: { points: { key: string; minutes: number }[] }) {
   const { t } = useTranslation();
+  // Pattern ids must not collide across instances; useId can contain
+  // characters url(#...) dislikes, so strip them.
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const max = Math.max(...points.map((p) => p.minutes));
   const w = points.length * SLOT;
   const y = (v: number) => H - (v / max) * (H - TOP);
-  const average = movingAverage(
-    points.map((p) => p.minutes),
-    7,
-  );
   return (
     <div className="relative">
       <svg
@@ -135,6 +133,20 @@ function MinutesChart({ points }: { points: { key: string; minutes: number }[] }
         role="img"
         aria-label={t("stats.charts.minutesAria")}
       >
+        <defs>
+          {/* Ordered dither, 2×2 Bayer: ordinary days run the 50% checker,
+              the biggest day the denser 75% — the accent is texture, not a
+              second color. */}
+          <pattern id={`${uid}-a`} width="4" height="4" patternUnits="userSpaceOnUse">
+            <rect x={0} y={0} width={2} height={2} fill="var(--color-primary)" />
+            <rect x={2} y={2} width={2} height={2} fill="var(--color-primary)" />
+          </pattern>
+          <pattern id={`${uid}-b`} width="4" height="4" patternUnits="userSpaceOnUse">
+            <rect x={0} y={0} width={2} height={2} fill="var(--color-primary)" />
+            <rect x={2} y={2} width={2} height={2} fill="var(--color-primary)" />
+            <rect x={2} y={0} width={2} height={2} fill="var(--color-primary)" />
+          </pattern>
+        </defs>
         {/* Quarter grid + baseline: structure, so a sparse week still reads
             as a chart and not as a bug. */}
         {[0.25, 0.5, 0.75].map((f) => (
@@ -167,23 +179,10 @@ function MinutesChart({ points }: { points: { key: string; minutes: number }[] }
               width={BAR}
               height={H - y(p.minutes)}
               rx={2}
-              fill="var(--color-primary)"
-              opacity={p.minutes === max ? 0.95 : 0.45}
+              fill={`url(#${uid}-${p.minutes === max ? "b" : "a"})`}
             />
           ) : null,
         )}
-        <polyline
-          points={average
-            .map((v, i) => `${i * SLOT + SLOT / 2},${y(v)}`)
-            .join(" ")}
-          fill="none"
-          stroke="var(--ds-content-strong)"
-          opacity={0.55}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
       </svg>
       <HoverZones
         dayKeys={points.map((p) => p.key)}
