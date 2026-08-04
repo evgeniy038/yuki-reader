@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BookFormat } from "@/core/library";
 import { addStatsDelta } from "@/core/storage";
 import { useLatest } from "@/lib/use-latest";
@@ -9,11 +9,11 @@ import { useLatest } from "@/lib/use-latest";
 //     point; fast flipping (in either direction) never moves it, and a
 //     pending dwell dies with the session instead of committing on exit.
 //   Active-time heartbeat (5s) — time accrues only while the app is visible
-//     and the last activity (turn, wheel, key, click) is fresh. A session
-//     under the 10s warmup is a peek visit: nothing it piled up reaches the
-//     stats log. Volume counts per page: a dwelled page's characters count
-//     once per session, so flipping back never subtracts and re-reading
-//     within a session is free.
+//     and the last activity (turn, wheel, key, click, mouse move) is fresh.
+//     A session under the 10s warmup is a peek visit: nothing it piled up
+//     reaches the stats log. Volume counts per page: a dwelled page's
+//     characters count once per session, so flipping back never subtracts
+//     and re-reading within a session is free.
 
 // A page becomes the bookmark only after 3s of dwelling on it.
 const BOOKMARK_DWELL_MS = 3000;
@@ -22,6 +22,12 @@ const STATS_WARMUP_MS = 10_000;
 const STATS_FLUSH_MS = 1500;
 const HEARTBEAT_MS = 5000;
 const ACTIVITY_IDLE_MS = 60_000;
+// Pointer moves fire continuously while scanning with a hover dictionary —
+// bump the activity stamp at most this often, not per event.
+const ACTIVITY_POINTER_MS = 5000;
+// A move of more than 5% of the book between consecutive position reports is
+// a jump, not reading: the position before it becomes the return target.
+const JUMP_DELTA = 0.05;
 
 interface Session {
   activeMs: number;
@@ -59,6 +65,12 @@ export function useReadingSession({
   const dwellRef = useRef(0);
   const onBookmarkRef = useLatest(onBookmark);
   const formatRef = useLatest(format);
+  // The position before the last jump — offered as a return point until the
+  // reader comes back, another jump supersedes it, or the session resets.
+  const [jumpBack, setJumpBack] = useState<{ progress: number } | null>(null);
+  // Last reported progress; null until the session's baseline report lands
+  // (the first report after start/reset is a baseline, never a jump).
+  const prevProgressRef = useRef<number | null>(null);
 
   // Warmup gate: a session starts counting only after 10s of active time —
   // shorter visits are peeks and nothing they piled up reaches the log.
@@ -84,6 +96,10 @@ export function useReadingSession({
   const updateProgress = (progress: number, absolute: number, pageChars: number) => {
     lastActivityRef.current = Date.now();
     if (!bookId) return;
+    const prevProgress = prevProgressRef.current;
+    prevProgressRef.current = progress;
+    if (prevProgress !== null && Math.abs(progress - prevProgress) > JUMP_DELTA)
+      setJumpBack({ progress: prevProgress });
     const id = bookId;
     window.clearTimeout(dwellRef.current);
     dwellRef.current = window.setTimeout(() => {
@@ -108,16 +124,27 @@ export function useReadingSession({
     const now = Date.now();
     lastActivityRef.current = now;
     lastStatsFlushRef.current = now;
+    prevProgressRef.current = null;
+    setJumpBack(null);
   };
+
+  const clearJumpBack = useCallback(() => setJumpBack(null), []);
 
   useEffect(() => {
     if (!bookId) return;
     const markActivity = () => {
       lastActivityRef.current = Date.now();
     };
+    // Hover-dictionary readers scan with the mouse alone — no wheel, keys or
+    // clicks — so movement counts too, throttled to one stamp per 5s.
+    const markPointerActivity = () => {
+      if (Date.now() - lastActivityRef.current < ACTIVITY_POINTER_MS) return;
+      lastActivityRef.current = Date.now();
+    };
     window.addEventListener("wheel", markActivity, { passive: true });
     window.addEventListener("keydown", markActivity);
     window.addEventListener("pointerdown", markActivity, { passive: true });
+    window.addEventListener("pointermove", markPointerActivity, { passive: true });
     const heartbeat = window.setInterval(() => {
       const now = Date.now();
       if (document.visibilityState !== "visible") return;
@@ -131,6 +158,7 @@ export function useReadingSession({
       window.removeEventListener("wheel", markActivity);
       window.removeEventListener("keydown", markActivity);
       window.removeEventListener("pointerdown", markActivity);
+      window.removeEventListener("pointermove", markPointerActivity);
       // A pending dwell dies with the session: the bookmark stays where the
       // reader actually lingered, not where they flipped through last. The
       // cleanup flush covers every reader exit, so no pending time is lost.
@@ -140,5 +168,5 @@ export function useReadingSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
-  return { updateProgress, resetSession };
+  return { updateProgress, resetSession, jumpBack, clearJumpBack };
 }

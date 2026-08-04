@@ -243,6 +243,8 @@ export const en = {
     jump: "Go",
     jumpPercent: "Reading position (%)",
     jumpPage: "Page",
+    // Return-to-position banner (accidental jump undo).
+    returnToPosition: "Return to {{percent}}%",
   },
   drop: "Drop to open",
   ocr: {

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Language } from "@/core/library";
 import type { Chapter, EpubResource, TocEntry } from "@/core/reading";
@@ -156,6 +156,7 @@ export function ReadingView({
   panel = null,
   onPanelChange,
   onProgress,
+  jumpRequest,
 }: {
   chapters: Chapter[];
   language?: Language;
@@ -174,6 +175,9 @@ export function ReadingView({
       on the current page. Fires on every page turn and every relayout — the
       consumer debounces these into a dwell. */
   onProgress?: (progress: number, absolute: number, pageChars: number) => void;
+  /** Outside return request: jump to this fraction of the book when the
+      token changes after mount (the token present at mount never fires). */
+  jumpRequest?: { progress: number; token: number };
 }) {
   const { t } = useTranslation();
   const vertical = language === "ja";
@@ -589,6 +593,17 @@ export function ReadingView({
     renderSectionRef.current?.(index, { kind: "start" });
     onPanelChange?.(null);
   };
+
+  // An outside return request lands here: only a token change AFTER mount
+  // jumps — a token already present at mount (a stale request from a
+  // previous visit) never fires.
+  const jumpTokenRef = useRef(jumpRequest?.token);
+  useEffect(() => {
+    if (!jumpRequest || jumpRequest.token === jumpTokenRef.current) return;
+    jumpTokenRef.current = jumpRequest.token;
+    jumpToPercent(jumpRequest.progress * 100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpRequest]);
 
   const tocEntries = useMemo(() => {
     if (!toc || !model) return [];
