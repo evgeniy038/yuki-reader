@@ -119,13 +119,13 @@ export function BookTile({
   // as an absolutely-positioned sibling over the cover's top-right corner.
   // It is ONE morphing element, not two skins: unpinned, the ribbon's
   // notched tip peeks from under the cover's top edge — and the CLOSER the
-  // pointer gets, the further it peeks (proximity drives --peek, the 150ms
-  // transition smooths every retarget). Pinning drops the ribbon to full
-  // length on a springy overshoot and fades the icon in; unpinning retracts
-  // it. All motion is a transform on a promoted layer (no scale — a
-  // squashing ribbon reads as a glitch); the hit area is a full 48px
-  // square. The clip window is 12px taller than the ribbon so neither the
-  // spring's overshoot nor the press tug is ever cut flat.
+  // pointer gets, the further it peeks (proximity drives --peek, the 300ms
+  // ease smooths every retarget). Pinning drops the ribbon to full length
+  // on a light spring (a barely-there settle, never a visible dip below
+  // the cover's edge); unpinning retracts it. All motion is a transform on
+  // a promoted layer (no scale — a squashing ribbon reads as a glitch); the
+  // hit area is a full 48px square. The clip window is 12px taller than the
+  // ribbon so neither the spring's settle nor the press tug is cut flat.
   const pinButtonRef = useRef<HTMLButtonElement | null>(null);
   const ribbonRef = useRef<HTMLSpanElement | null>(null);
   const peekFrameRef = useRef(0);
@@ -150,11 +150,10 @@ export function BookTile({
     // Remove (not zero) so the focus-visible variant can drive --peek again.
     ribbonRef.current?.style.removeProperty("--peek");
   };
-  // Pressing the unpinned pin tugs the ribbon past full reach — the
-  // commitment beat before the click pins it.
+  // Pressing the unpinned pin tugs the ribbon a hair past full reach.
   const handlePinPress = () => {
     if (!book.favorite)
-      ribbonRef.current?.style.setProperty("--peek", "1.2");
+      ribbonRef.current?.style.setProperty("--peek", "1.25");
   };
   const pinControl = onToggleFavorite ? (
     <button
@@ -175,10 +174,10 @@ export function BookTile({
       <span className="absolute right-2.5 top-0 block h-12 w-7 overflow-hidden">
         <span
           ref={ribbonRef}
-          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform ${
+          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
             book.favorite
-              ? "translate-y-0 duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active/pin:translate-y-[3px]"
-              : "pin-peek duration-150 ease-out group-focus-visible/pin:[--peek:1]"
+              ? "translate-y-0 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:translate-y-[3px]"
+              : "pin-peek ease-out group-focus-visible/pin:[--peek:1]"
           }`}
         >
           <Bookmark
