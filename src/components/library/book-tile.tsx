@@ -1,6 +1,13 @@
 import type { Book } from "@/core/library";
 import { readingStateOf } from "@/core/library";
-import { BookOpen, Image, Info, PencilSimple, Trash } from "@phosphor-icons/react";
+import {
+  BookOpen,
+  Image,
+  Info,
+  PencilSimple,
+  Star,
+  Trash,
+} from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -67,6 +74,25 @@ export function BookTile({
             className="absolute inset-0 grid place-items-center rounded-media bg-black/45 backdrop-blur-[2px]"
           >
             <DashRing className="size-6 text-white" />
+          </div>
+        ) : null}
+        {book.progress > 0 ? (
+          <div
+            data-book-progress=""
+            className="absolute inset-x-1 bottom-1 h-1 rounded-pill bg-scrim"
+          >
+            <div
+              className="h-full rounded-pill bg-primary-gradient"
+              style={{ width: `${Math.min(1, book.progress) * 100}%` }}
+            />
+          </div>
+        ) : null}
+        {book.favorite ? (
+          <div
+            data-book-favorite=""
+            className="absolute right-1 top-1 grid size-5 place-items-center rounded-pill bg-scrim"
+          >
+            <Star weight="fill" className="size-3 text-white" />
           </div>
         ) : null}
       </div>

@@ -45,6 +45,8 @@ export interface BookRecord {
   addedAt: number;
   /** Last time the book was opened or read. Absent = never opened. */
   lastReadAt?: number;
+  /** Pinned to the top of its shelf section. */
+  favorite?: boolean;
 }
 
 /** Manga volume sidecar record: page metadata in reading order. The page
@@ -252,6 +254,7 @@ export async function updateBookMeta(
       | "format"
       | "series"
       | "volumeIndex"
+      | "favorite"
     >
   >,
 ): Promise<void> {

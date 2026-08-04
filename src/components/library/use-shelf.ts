@@ -117,6 +117,7 @@ export function useShelf(demoMode: boolean) {
             volumeIndex: record.volumeIndex,
             addedAt: record.addedAt,
             lastReadAt: record.lastReadAt,
+            favorite: record.favorite,
           });
         }
         setBooks(loaded);
@@ -473,6 +474,16 @@ export function useShelf(demoMode: boolean) {
     void updateBookMeta(id, { cover });
   };
 
+  const toggleFavorite = (id: string) => {
+    const target = books.find((book) => book.id === id);
+    if (!target) return;
+    const favorite = !target.favorite;
+    setBooks((prev) =>
+      prev.map((book) => (book.id === id ? { ...book, favorite } : book)),
+    );
+    void updateBookMeta(id, { favorite });
+  };
+
   return {
     books,
     setBooks,
@@ -494,5 +505,6 @@ export function useShelf(demoMode: boolean) {
     moveSeries,
     setVolumeOrder,
     changeCover,
+    toggleFavorite,
   };
 }

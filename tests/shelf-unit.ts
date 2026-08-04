@@ -66,6 +66,35 @@ function book(patch: Partial<Book>): Book {
   );
 }
 
+// --- sort: favorites lead the section in every sort mode -------------------
+{
+  const modes = ["recent", "title", "author", "added", "progress"] as const;
+  for (const mode of modes) {
+    const pinned = book({ title: "pin", favorite: true, addedAt: 1, progress: 0.1 });
+    const rest = [
+      book({ title: "a", addedAt: 5, lastReadAt: 9, progress: 0.9, author: "x" }),
+      book({ title: "b", addedAt: 6, lastReadAt: 8, progress: 0.2, author: "y" }),
+      book({ title: "c", addedAt: 7, lastReadAt: 7, progress: 0.5, author: "z" }),
+    ];
+    const sorted = sortBooks([...rest, pinned], mode);
+    assert.equal(sorted[0]?.favorite, true, `${mode}: favorite leads`);
+    assert.deepEqual(
+      sorted.slice(1).map((x) => x.id),
+      sortBooks(rest, mode).map((x) => x.id),
+      `${mode}: the unpinned keep the chosen order`,
+    );
+  }
+  // The pinned block itself follows the chosen sort.
+  const p1 = book({ title: "p1", favorite: true, addedAt: 10 });
+  const p2 = book({ title: "p2", favorite: true, addedAt: 20 });
+  const plain = book({ title: "x", addedAt: 30 });
+  assert.deepEqual(
+    sortBooks([plain, p1, p2], "added").map((x) => x.title),
+    ["p2", "p1", "x"],
+    "favorites block is ordered by the same criteria",
+  );
+}
+
 // --- grouping: ja → en → other, empties dropped ---------------------------
 {
   const ja = book({ title: "和", language: "ja" });
@@ -83,6 +112,29 @@ function book(patch: Partial<Book>): Book {
     groupByLanguage([ja]).map((g) => g.id),
     ["ja"],
     "empty groups are omitted (no headers on a single-language shelf)",
+  );
+}
+
+// --- grouping: manual section order ----------------------------------------
+{
+  const ja = book({ title: "和", language: "ja" });
+  const en = book({ title: "EN", language: "en" });
+  const none = book({ title: "??" });
+  const all = [ja, en, none];
+  assert.deepEqual(
+    groupByLanguage(all, ["en", "ja", "other"]).map((g) => g.id),
+    ["en", "ja", "other"],
+    "a saved order reorders the sections",
+  );
+  assert.deepEqual(
+    groupByLanguage(all, ["other"]).map((g) => g.id),
+    ["other", "ja", "en"],
+    "partial order: listed first, the rest keep their default order",
+  );
+  assert.deepEqual(
+    groupByLanguage(all, ["en", "zz", "other"]).map((g) => g.id),
+    ["en", "other", "ja"],
+    "unknown ids in the saved order are ignored",
   );
 }
 
@@ -159,6 +211,14 @@ function book(patch: Partial<Book>): Book {
     1,
     "series matching is case-insensitive",
   );
+  // One pinned volume puts the star badge on the whole series tile.
+  const favVol = book({ format: "manga", series: "Fav", volumeIndex: 1, favorite: true });
+  const plainVol = book({ format: "manga", series: "Fav", volumeIndex: 2 });
+  const favSeries = buildShelfItems([plainVol, favVol])[0];
+  assert.equal(favSeries?.kind, "series");
+  if (favSeries?.kind === "series") {
+    assert.equal(favSeries.favorite, true, "any pinned volume pins the series badge");
+  }
 }
 
 console.log("SHELF UNIT: PASS");
