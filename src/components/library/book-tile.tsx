@@ -8,7 +8,7 @@ import {
   PencilSimple,
   Trash,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -56,19 +56,6 @@ export function BookTile({
   onToggleFavorite?: () => void;
 }) {
   const { t } = useTranslation();
-  // Flip the ribbon in only on a real pin action during this tile's life —
-  // never on mount, or every library visit would replay it for every pin.
-  const [justPinned, setJustPinned] = useState(false);
-  const prevFavoriteRef = useRef(book.favorite);
-  useEffect(() => {
-    if (book.favorite && !prevFavoriteRef.current) setJustPinned(true);
-    prevFavoriteRef.current = book.favorite;
-  }, [book.favorite]);
-  // Unpin lets the ribbon swing back over the edge before the state flips —
-  // the exit mirrors the entrance path, faster.
-  const [leaving, setLeaving] = useState(false);
-  const leaveTimerRef = useRef(0);
-  useEffect(() => () => window.clearTimeout(leaveTimerRef.current), []);
   const state = readingStateOf(book);
   const stateLabel =
     state === "finished"
@@ -124,48 +111,48 @@ export function BookTile({
     );
   }
   // The pin control can't nest inside the tile's own <button>, so it rides
-  // as an absolutely-positioned sibling over the cover's top-right corner:
-  // a hover-revealed outline bookmark when unpinned, the ribbon itself when
-  // pinned — the ribbon is the unpin button. The hit area is a full 48px
-  // square; the visuals are smaller and centered inside it.
-  const handlePinClick = () => {
-    if (!onToggleFavorite) return;
-    if (!book.favorite) {
-      onToggleFavorite();
-      return;
-    }
-    setLeaving(true);
-    leaveTimerRef.current = window.setTimeout(() => {
-      setLeaving(false);
-      onToggleFavorite();
-    }, 200);
-  };
+  // as an absolutely-positioned sibling over the cover's top-right corner.
+  // It is ONE morphing element, not two skins: unpinned, the ribbon's
+  // notched tip peeks from under the cover's top edge on hover; pinning
+  // slides it down to full length while the muted wash fades off the
+  // gradient — the bookmark literally slips into the book. Unpinning
+  // retracts it. All motion is a transform on a promoted layer (no scale —
+  // a squashing ribbon reads as a glitch); the hit area is a full 48px
+  // square, the visible ribbon is clipped by an overflow-hidden window.
   const pinControl = onToggleFavorite ? (
     <button
       type="button"
       data-book-favorite=""
       aria-label={t(book.favorite ? "library.menu.unpin" : "library.menu.pin")}
       aria-pressed={book.favorite}
-      onClick={handlePinClick}
-      className={`absolute right-0 top-0 z-10 flex h-12 w-12 cursor-pointer items-start justify-center pin-toggle-transition active:scale-90 ${
-        book.favorite
-          ? "opacity-100"
-          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-      }`}
+      onClick={onToggleFavorite}
+      className="group/pin absolute right-0 top-0 z-10 h-12 w-12 cursor-pointer"
     >
-      {book.favorite ? (
+      <span className="absolute right-2.5 top-0 block h-9 w-7 overflow-hidden">
         <span
-          className={`block h-9 w-7 bg-primary-gradient bookmark-ribbon ${
-            leaving ? "bookmark-flip-out" : justPinned ? "bookmark-flip" : ""
+          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
+            book.favorite
+              ? "translate-y-0 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:translate-y-[3px]"
+              : "-translate-y-full ease-out group-hover:-translate-y-[20px] group-focus-visible/pin:-translate-y-[20px] group-active/pin:-translate-y-[16px]"
           }`}
         >
-          <Bookmark weight="fill" className="mx-auto mt-1.5 size-4 text-white" />
+          {/* Muted wash over the gradient; fading it out is what "inks"
+              the ribbon on pin — background-image can't transition. */}
+          <span
+            className={`absolute inset-0 bg-scrim transition-opacity duration-200 ${
+              book.favorite ? "opacity-0" : "opacity-100"
+            }`}
+          />
+          <Bookmark
+            weight="fill"
+            className={`relative mx-auto mt-1.5 block size-4 text-white transition-[opacity,transform] duration-200 ${
+              book.favorite
+                ? "translate-y-0 opacity-100 delay-100"
+                : "-translate-y-1 opacity-0"
+            }`}
+          />
         </span>
-      ) : (
-        <span className="mt-1.5 grid size-9 place-items-center rounded-full bg-scrim">
-          <Bookmark weight="bold" className="size-5 text-white" />
-        </span>
-      )}
+      </span>
     </button>
   ) : null;
   return (

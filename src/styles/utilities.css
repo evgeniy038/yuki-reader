@@ -112,61 +112,6 @@
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
 }
 
-/* The flip-in plays once when the ribbon is pinned: it swings over the top
-   edge from behind the cover, slightly slanted as if tossed in, straightens,
-   and settles with a damped wobble. perspective() inside the transform makes
-   the rotateX read as a real flip — without it the ribbon just squashes. */
-@keyframes bookmark-flip {
-  0% {
-    transform: perspective(200px) rotateX(-100deg) rotateZ(-9deg);
-    opacity: 0;
-  }
-  30% {
-    transform: perspective(200px) rotateX(32deg) rotateZ(3deg);
-    opacity: 1;
-  }
-  50% {
-    transform: perspective(200px) rotateX(-14deg) rotateZ(-1.5deg);
-  }
-  68% {
-    transform: perspective(200px) rotateX(7deg) rotateZ(0.75deg);
-  }
-  84% {
-    transform: perspective(200px) rotateX(-3deg) rotateZ(0deg);
-  }
-  100% {
-    transform: perspective(200px) rotateX(0deg);
-  }
-}
-@utility bookmark-flip {
-  transform-origin: top center;
-  animation: bookmark-flip 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* Unpin mirrors the entrance path, faster: the ribbon swings back up over
-   the edge it came from. */
-@keyframes bookmark-flip-out {
-  0% {
-    transform: perspective(200px) rotateX(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: perspective(200px) rotateX(-95deg);
-    opacity: 0;
-  }
-}
-@utility bookmark-flip-out {
-  transform-origin: top center;
-  animation: bookmark-flip-out 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-/* The cover pin toggle: hover-reveal fade plus the press spring on scale. */
-@utility pin-toggle-transition {
-  transition:
-    opacity 150ms ease-out,
-    scale var(--duration-press) var(--ease-press);
-}
-
 /* Dynamic spinner: steady rotation + slower eased rotation + arc-length
    morph, so every cycle looks slightly different. */
 @keyframes spin-linear {

@@ -75,7 +75,7 @@ function CellBody({
       <span className="text-default tabular-nums">
         {[
           formatDuration(day.timeMs),
-          day.chars > 0 ? t("stats.cell.chars", { count: day.chars }) : null,
+          day.chars > 0 ? t("stats.cell.charsShort", { count: day.chars }) : null,
           day.pages > 0 ? t("stats.cell.pages", { count: day.pages }) : null,
         ]
           .filter(Boolean)
@@ -96,7 +96,7 @@ function CellBody({
           <span className="shrink-0 text-default">
             {`— ${
               book.amount.chars > 0
-                ? t("stats.cell.chars", { count: book.amount.chars })
+                ? t("stats.cell.charsShort", { count: book.amount.chars })
                 : t("stats.cell.pages", { count: book.amount.pages })
             }`}
           </span>

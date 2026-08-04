@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
 import type { DailyStats } from "@/core/storage";
@@ -7,8 +7,11 @@ import {
   dailyMinutesSeries,
   estimateDaysLeft,
   movingAverage,
+  shiftDay,
+  speedOf,
   speedSeries,
   topBookInWindow,
+  totals,
 } from "@/core/stats";
 import { formatDuration } from "@/lib/format";
 import i18n from "@/lib/i18n";
@@ -16,15 +19,17 @@ import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
 
 // The last-two-weeks charts: minutes per day with a moving average, reading
-// speed, and the current book's pace with an ETA. All hand-rolled SVG — the
-// dithered fills are plain dot patterns, no chart library. Charts stretch to
-// the card width via preserveAspectRatio="none"; strokes opt out of the
-// stretch with vector-effect, and the speed dots are round-capped
-// zero-length strokes (a filled shape would distort). Every chart column is
-// a hover zone with a tooltip — the SVG itself carries no pointer logic.
+// speed, and the current book's pace with an ETA. All hand-rolled SVG — no
+// chart library. Charts stretch to the card width via
+// preserveAspectRatio="none"; strokes opt out of the stretch with
+// vector-effect, and the speed dots are round-capped zero-length strokes (a
+// filled shape would distort). Day letters live in HTML under the SVG —
+// text inside a non-uniformly stretched SVG would squash. Every chart
+// column is a hover zone with a tooltip — the SVG itself carries no
+// pointer logic.
 const WINDOW = 14;
 const SLOT = 22; // viewBox units per day
-const BAR = 12; // bar width
+const BAR = 14; // bar width
 const H = 100; // viewBox height
 const TOP = 12; // headroom so peaks and dots keep clear of the edge
 
@@ -35,6 +40,26 @@ function dayLabel(key: string): string {
     day: "numeric",
     month: "short",
   }).format(new Date(`${key}T12:00:00`));
+}
+
+// Weekday letters under a chart, one per day column. The SVG slots span the
+// full width with no side padding, so equal flex columns line up with them.
+function DayAxis({ dayKeys }: { dayKeys: string[] }) {
+  const fmt = new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", {
+    weekday: "narrow",
+  });
+  return (
+    <div className="flex" aria-hidden="true">
+      {dayKeys.map((key) => (
+        <span
+          key={key}
+          className="flex-1 text-center text-[10px] leading-none text-muted-content"
+        >
+          {fmt.format(new Date(`${key}T12:00:00`))}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 // One invisible hover zone per day slot, laid over the SVG in percents so it
@@ -94,9 +119,6 @@ function ChartHeader({ label, value }: { label: string; value?: string }) {
 
 function MinutesChart({ points }: { points: { key: string; minutes: number }[] }) {
   const { t } = useTranslation();
-  // Pattern ids must not collide across instances; useId can contain
-  // characters url(#...) dislikes, so strip them.
-  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const max = Math.max(...points.map((p) => p.minutes));
   const w = points.length * SLOT;
   const y = (v: number) => H - (v / max) * (H - TOP);
@@ -109,23 +131,24 @@ function MinutesChart({ points }: { points: { key: string; minutes: number }[] }
       <svg
         viewBox={`0 0 ${w} ${H}`}
         preserveAspectRatio="none"
-        className="h-24 w-full"
+        className="h-28 w-full"
         role="img"
         aria-label={t("stats.charts.minutesAria")}
       >
-        <defs>
-          {/* Ordered dither: staggered dot pairs; the max day doubles up. */}
-          <pattern id={`${uid}-a`} width="5" height="5" patternUnits="userSpaceOnUse">
-            <circle cx="1.5" cy="1.5" r="1.4" fill="var(--color-primary)" opacity="0.55" />
-            <circle cx="4" cy="4" r="1.4" fill="var(--color-primary)" opacity="0.55" />
-          </pattern>
-          <pattern id={`${uid}-b`} width="5" height="5" patternUnits="userSpaceOnUse">
-            <circle cx="1.5" cy="1.5" r="1.4" fill="var(--color-primary)" opacity="0.95" />
-            <circle cx="4" cy="4" r="1.4" fill="var(--color-primary)" opacity="0.95" />
-            <circle cx="4" cy="1.5" r="1" fill="var(--color-primary)" opacity="0.6" />
-            <circle cx="1.5" cy="4" r="1" fill="var(--color-primary)" opacity="0.6" />
-          </pattern>
-        </defs>
+        {/* Quarter grid + baseline: structure, so a sparse week still reads
+            as a chart and not as a bug. */}
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line
+            key={f}
+            x1={0}
+            y1={y(max * f)}
+            x2={w}
+            y2={y(max * f)}
+            stroke="var(--ds-border-subtle)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
         <line
           x1={0}
           y1={H}
@@ -143,8 +166,9 @@ function MinutesChart({ points }: { points: { key: string; minutes: number }[] }
               y={y(p.minutes)}
               width={BAR}
               height={H - y(p.minutes)}
-              rx={1.5}
-              fill={`url(#${uid}-${p.minutes === max ? "b" : "a"})`}
+              rx={2}
+              fill="var(--color-primary)"
+              opacity={p.minutes === max ? 0.95 : 0.45}
             />
           ) : null,
         )}
@@ -153,8 +177,9 @@ function MinutesChart({ points }: { points: { key: string; minutes: number }[] }
             .map((v, i) => `${i * SLOT + SLOT / 2},${y(v)}`)
             .join(" ")}
           fill="none"
-          stroke="var(--color-primary)"
-          strokeWidth={2}
+          stroke="var(--ds-content-strong)"
+          opacity={0.55}
+          strokeWidth={1.5}
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
@@ -188,26 +213,45 @@ function SpeedChart({
   const slotOf = new Map(dayKeys.map((key, i) => [key, i]));
   const max = Math.max(...series.points.map((p) => p.perHour));
   const w = dayKeys.length * SLOT;
-  const y = (v: number) => TOP + (1 - v / max) * (H - TOP * 2);
+  // sqrt scale: one binge day must not flatten every other day into the
+  // baseline. The tooltip still reports the true number — the axis only
+  // decides where points sit.
+  const y = (v: number) => TOP + (1 - Math.sqrt(v / max)) * (H - TOP * 2);
   const x = (key: string) => (slotOf.get(key) ?? 0) * SLOT + SLOT / 2;
+  const line = series.points.map((p) => `${x(p.key)},${y(p.perHour)}`);
+  const area = `M ${line[0]!.split(",")[0]},${H} L ${line.join(" L ")} L ${line[line.length - 1]!.split(",")[0]},${H} Z`;
   return (
     <div className="relative">
       <svg
         viewBox={`0 0 ${w} ${H}`}
         preserveAspectRatio="none"
-        className="h-24 w-full"
+        className="h-28 w-full"
         role="img"
         aria-label={t("stats.charts.speedAria")}
       >
+        <line
+          x1={0}
+          y1={H}
+          x2={w}
+          y2={H}
+          stroke="var(--ds-border-subtle)"
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+        />
         {series.points.length > 1 ? (
-          <polyline
-            points={series.points.map((p) => `${x(p.key)},${y(p.perHour)}`).join(" ")}
-            fill="none"
-            stroke="var(--ds-content-muted)"
-            opacity={0.5}
-            strokeWidth={1}
-            vectorEffect="non-scaling-stroke"
-          />
+          <>
+            <path d={area} fill="var(--color-primary)" opacity={0.08} />
+            <polyline
+              points={line.join(" ")}
+              fill="none"
+              stroke="var(--color-primary)"
+              opacity={0.85}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </>
         ) : null}
         {series.points.map((p) => (
           <line
@@ -217,7 +261,7 @@ function SpeedChart({
             x2={x(p.key) + 0.01}
             y2={y(p.perHour)}
             stroke="var(--color-primary)"
-            strokeWidth={5}
+            strokeWidth={6}
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
           />
@@ -259,6 +303,12 @@ export function ChartsSection({
   const topId = topBookInWindow(days, WINDOW, todayKey);
   const book = topId ? books.find((b) => b.id === topId) : undefined;
   const pace = topId && book ? bookPace(days, topId, WINDOW, todayKey) : null;
+  // The headline speed is the window aggregate (total volume / total time) —
+  // one binge day's number as THE speed would flatter and mislead.
+  const windowStart = shiftDay(todayKey, -(WINDOW - 1));
+  const avgSpeed = speedOf(
+    totals(days.filter((d) => d.date >= windowStart && d.date <= todayKey)),
+  );
 
   // Same emptiness spirit as the heatmap: nothing read, nothing to draw.
   if (maxMinutes <= 0 && !speed && !(book && pace)) return null;
@@ -281,18 +331,26 @@ export function ChartsSection({
               <div className="flex flex-col gap-2">
                 <ChartHeader label={t("stats.charts.minutes")} />
                 <MinutesChart points={minutes} />
+                <DayAxis dayKeys={minutes.map((p) => p.key)} />
               </div>
             ) : null}
             {speed ? (
               <div className="flex flex-col gap-2">
                 <ChartHeader
                   label={t("stats.charts.speed")}
-                  value={t(
-                    speed.kind === "chars" ? "stats.speedChars" : "stats.speedPages",
-                    { count: speed.points[speed.points.length - 1]!.perHour },
-                  )}
+                  value={
+                    avgSpeed
+                      ? t(
+                          avgSpeed.kind === "chars"
+                            ? "stats.speedChars"
+                            : "stats.speedPages",
+                          { count: avgSpeed.perHour },
+                        )
+                      : undefined
+                  }
                 />
                 <SpeedChart series={speed} dayKeys={minutes.map((p) => p.key)} />
+                <DayAxis dayKeys={minutes.map((p) => p.key)} />
               </div>
             ) : null}
             {book && pace ? (
