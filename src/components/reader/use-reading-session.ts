@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { BookFormat } from "@/core/library";
 import { addStatsDelta } from "@/core/storage";
 import { useLatest } from "@/lib/use-latest";
@@ -25,9 +25,6 @@ const ACTIVITY_IDLE_MS = 60_000;
 // Pointer moves fire continuously while scanning with a hover dictionary —
 // bump the activity stamp at most this often, not per event.
 const ACTIVITY_POINTER_MS = 5000;
-// A move of more than 5% of the book between consecutive position reports is
-// a jump, not reading: the position before it becomes the return target.
-const JUMP_DELTA = 0.05;
 
 interface Session {
   activeMs: number;
@@ -65,12 +62,6 @@ export function useReadingSession({
   const dwellRef = useRef(0);
   const onBookmarkRef = useLatest(onBookmark);
   const formatRef = useLatest(format);
-  // The position before the last jump — offered as a return point until the
-  // reader comes back, another jump supersedes it, or the session resets.
-  const [jumpBack, setJumpBack] = useState<{ progress: number } | null>(null);
-  // Last reported progress; null until the session's baseline report lands
-  // (the first report after start/reset is a baseline, never a jump).
-  const prevProgressRef = useRef<number | null>(null);
 
   // Warmup gate: a session starts counting only after 10s of active time —
   // shorter visits are peeks and nothing they piled up reaches the log.
@@ -96,10 +87,6 @@ export function useReadingSession({
   const updateProgress = (progress: number, absolute: number, pageChars: number) => {
     lastActivityRef.current = Date.now();
     if (!bookId) return;
-    const prevProgress = prevProgressRef.current;
-    prevProgressRef.current = progress;
-    if (prevProgress !== null && Math.abs(progress - prevProgress) > JUMP_DELTA)
-      setJumpBack({ progress: prevProgress });
     const id = bookId;
     window.clearTimeout(dwellRef.current);
     dwellRef.current = window.setTimeout(() => {
@@ -124,11 +111,7 @@ export function useReadingSession({
     const now = Date.now();
     lastActivityRef.current = now;
     lastStatsFlushRef.current = now;
-    prevProgressRef.current = null;
-    setJumpBack(null);
   };
-
-  const clearJumpBack = useCallback(() => setJumpBack(null), []);
 
   useEffect(() => {
     if (!bookId) return;
@@ -168,5 +151,5 @@ export function useReadingSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
-  return { updateProgress, resetSession, jumpBack, clearJumpBack };
+  return { updateProgress, resetSession };
 }

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
 import { DICTIONARIES_ENABLED } from "@/core/dictionaries";
 import {
@@ -27,8 +26,6 @@ export function ReaderScreen({
   settings,
   onSettingsChange,
   onProgress,
-  jumpBack,
-  onJumpBackClear,
   onExit,
 }: {
   book: Book;
@@ -36,14 +33,8 @@ export function ReaderScreen({
   settings: ReadingSettings;
   onSettingsChange: (settings: ReadingSettings) => void;
   onProgress: (progress: number, absolute: number, pageChars: number) => void;
-  /** The position before the last jump, offered as a return point; null =
-      no offer. Owned by the reading session. */
-  jumpBack: { progress: number } | null;
-  /** Dismiss the return offer (user returned or it expired). */
-  onJumpBackClear: () => void;
   onExit: () => void;
 }) {
-  const { t } = useTranslation();
   // Reader side panels (TOC / search) — one at a time, owned here so the
   // chrome buttons and the views stay in sync.
   const [panel, setPanel] = useState<ReaderPanelMode>(null);
@@ -53,20 +44,7 @@ export function ReaderScreen({
   // Only the PDF view knows whether the document has an outline (post-load),
   // so it reports up and the chrome's TOC button follows.
   const [pdfHasOutline, setPdfHasOutline] = useState(false);
-  // The return jump fired at the active view: the token makes it one-shot —
-  // a view only reacts to a token change after its own mount.
-  const [jumpRequest, setJumpRequest] = useState<{
-    progress: number;
-    token: number;
-  } | null>(null);
   const readerRef = useRef<HTMLDivElement>(null);
-
-  // The return offer expires on its own; a fresh jump restarts the clock.
-  useEffect(() => {
-    if (!jumpBack) return;
-    const timer = window.setTimeout(onJumpBackClear, 10_000);
-    return () => window.clearTimeout(timer);
-  }, [jumpBack, onJumpBackClear]);
 
   // One Escape for the whole reader, innermost layer first: settings popover,
   // then side panel, then exit — but PDF never exits on Escape.
@@ -82,13 +60,12 @@ export function ReaderScreen({
     if (book.format === "epub" || book.format === "manga") onExit();
   });
 
-  // Book switch (or exit) closes the panels and settings, forgets the old
-  // outline flag and drops any un-fired return request.
+  // Book switch (or exit) closes the panels and settings and forgets the old
+  // outline flag.
   useEffect(() => {
     setPanel(null);
     setSettingsOpen(false);
     setPdfHasOutline(false);
-    setJumpRequest(null);
   }, [book.id]);
 
   // The reading surface's own custom properties: both book views and the
@@ -122,7 +99,6 @@ export function ReaderScreen({
             onPanelChange={setPanel}
             onOutlineChange={setPdfHasOutline}
             onProgress={onProgress}
-            jumpRequest={jumpRequest ?? undefined}
           />
         ) : book.format === "manga" ? (
           <MangaReadingView
@@ -130,7 +106,6 @@ export function ReaderScreen({
             initialProgress={book.progress}
             mangaFirstPageAsCover={settings.mangaFirstPageAsCover}
             onProgress={onProgress}
-            jumpRequest={jumpRequest ?? undefined}
           />
         ) : (
           <ReadingView
@@ -145,7 +120,6 @@ export function ReaderScreen({
             panel={panel}
             onPanelChange={setPanel}
             onProgress={onProgress}
-            jumpRequest={jumpRequest ?? undefined}
           />
         )}
       </div>
@@ -172,29 +146,6 @@ export function ReaderScreen({
         rootRef={readerRef}
         enabled={DICTIONARIES_ENABLED && book.format !== "pdf"}
       />
-      {jumpBack ? (
-        // data-jump-back is the test seam (smokes read the offered percent
-        // off it) — keep it verbatim.
-        <div data-jump-back="" className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2 animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-          <button
-            type="button"
-            onClick={() => {
-              setJumpRequest((prev) => ({
-                progress: jumpBack.progress,
-                token: (prev?.token ?? 0) + 1,
-              }));
-              onJumpBackClear();
-            }}
-            className="cursor-pointer rounded-pill border border-subtle bg-raised px-3.5 py-2 text-sm shadow-floating btn-transition hover:bg-hover-surface"
-          >
-            <span className="text-muted-content">
-              {t("reader.returnToPosition", {
-                percent: Math.round(jumpBack.progress * 100),
-              })}
-            </span>
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

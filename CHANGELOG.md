@@ -6,7 +6,6 @@ versioning — [SemVer](https://semver.org/).
 ## [1.3.4] - 2026-08-04
 
 - Reader: reading with a hover dictionary finally counts as reading — mouse movement keeps the clock running, so scanned minutes no longer vanish from your stats
-- Reader: jumped somewhere by accident? A small "Return to X%" pill floats up for a few seconds — one click takes you back, and it works both ways
 - Library: covers now show a small progress ring, so you can see how far each book is without opening it
 - Library: pin a book right from its cover — hover and the bookmark's tip peeks over the edge, one click and the ribbon slides into place — or from the right-click menu; pinned books lead their section in every sort order
 - Library: language sections can be dragged into your own order; the order sticks, and it travels with your backups

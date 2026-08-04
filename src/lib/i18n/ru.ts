@@ -268,8 +268,6 @@ export const ru: Messages = {
     jump: "Перейти",
     jumpPercent: "Позиция чтения (%)",
     jumpPage: "Страница",
-    // Return-to-position banner (accidental jump undo).
-    returnToPosition: "Вернуться к {{percent}}%",
   },
   drop: "Отпустите, чтобы открыть",
   ocr: {

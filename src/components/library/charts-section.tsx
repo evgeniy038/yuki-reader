@@ -336,7 +336,6 @@ export function ChartsSection({
                   }
                 />
                 <SpeedChart series={speed} dayKeys={minutes.map((p) => p.key)} />
-                <DayAxis dayKeys={minutes.map((p) => p.key)} />
               </div>
             ) : null}
             {book && pace ? (
@@ -355,21 +354,9 @@ export function ChartsSection({
                     </span>
                   </div>
                   <div className="text-xs text-muted-content tabular-nums">
-                    {[
-                      pace.speed
-                        ? t(
-                            pace.speed.kind === "chars"
-                              ? "stats.speedChars"
-                              : "stats.speedPages",
-                            { count: pace.speed.perHour },
-                          )
-                        : null,
-                      eta !== null
-                        ? t("stats.charts.etaDays", { count: eta })
-                        : t("stats.charts.etaUnknown"),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {eta !== null
+                      ? t("stats.charts.etaDays", { count: eta })
+                      : t("stats.charts.etaUnknown")}
                   </div>
                 </div>
               </div>

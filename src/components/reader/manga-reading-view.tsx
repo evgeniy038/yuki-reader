@@ -76,7 +76,6 @@ export function MangaReadingView({
   initialProgress = 0,
   mangaFirstPageAsCover = true,
   onProgress,
-  jumpRequest,
 }: {
   bookId: string;
   initialProgress?: number;
@@ -85,9 +84,6 @@ export function MangaReadingView({
   /** Fraction read + absolute position (first visible page, 1-based) + how
       many pages the visible set holds. */
   onProgress?: (progress: number, absolute: number, pageCount: number) => void;
-  /** Outside return request: jump to this fraction of the volume when the
-      token changes after mount (the token present at mount never fires). */
-  jumpRequest?: { progress: number; token: number };
 }) {
   const { t } = useTranslation();
   const outerRef = useRef<HTMLDivElement>(null);
@@ -313,22 +309,6 @@ export function MangaReadingView({
     setPage(target);
     resetZoomPan();
   };
-
-  // An outside return request lands here: only a token change AFTER mount
-  // jumps — a token already present at mount (a stale request from a
-  // previous visit) never fires.
-  const jumpTokenRef = useRef(jumpRequest?.token);
-  useEffect(() => {
-    if (!jumpRequest || jumpRequest.token === jumpTokenRef.current) return;
-    jumpTokenRef.current = jumpRequest.token;
-    goTo(
-      Math.min(
-        numPagesRef.current,
-        Math.max(1, Math.round(jumpRequest.progress * (numPagesRef.current - 1)) + 1),
-      ),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jumpRequest]);
 
   usePagingInput({
     targetRef: outerRef,

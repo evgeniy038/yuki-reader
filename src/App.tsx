@@ -90,7 +90,7 @@ export default function App() {
   const openedData = openedId ? shelf.dataRef.current.get(openedId) : undefined;
 
   // Bookmark dwell, active-time heartbeat, warmup gate — see the hook.
-  const { updateProgress, resetSession, jumpBack, clearJumpBack } = useReadingSession({
+  const { updateProgress, resetSession } = useReadingSession({
     bookId: openedId,
     format: openedBook?.format,
     onBookmark: (id, progress) => {
@@ -170,8 +170,6 @@ export default function App() {
           settings={readingSettings}
           onSettingsChange={setReadingSettings}
           onProgress={updateProgress}
-          jumpBack={jumpBack}
-          onJumpBackClear={clearJumpBack}
           onExit={() =>
             // A manga volume exits to its series, not all the way to the shelf.
             openedBook.format === "manga" && openedBook.series
