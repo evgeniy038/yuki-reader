@@ -113,12 +113,13 @@ export function BookTile({
   // The pin control can't nest inside the tile's own <button>, so it rides
   // as an absolutely-positioned sibling over the cover's top-right corner.
   // It is ONE morphing element, not two skins: unpinned, the ribbon's
-  // notched tip peeks from under the cover's top edge on hover; pinning
-  // slides it down to full length while the muted wash fades off the
-  // gradient — the bookmark literally slips into the book. Unpinning
-  // retracts it. All motion is a transform on a promoted layer (no scale —
-  // a squashing ribbon reads as a glitch); the hit area is a full 48px
-  // square, the visible ribbon is clipped by an overflow-hidden window.
+  // notched tip peeks from under the cover's top edge on hover — already
+  // the primary gradient, the bookmark is visibly THERE; pinning slides it
+  // down to full length and fades the icon in. Unpinning retracts it. All
+  // motion is a transform on a promoted layer (no scale — a squashing
+  // ribbon reads as a glitch); the hit area is a full 48px square. The
+  // clip window is 4px taller than the ribbon so the spring's overshoot
+  // below the resting point is never cut flat.
   const pinControl = onToggleFavorite ? (
     <button
       type="button"
@@ -128,7 +129,7 @@ export function BookTile({
       onClick={onToggleFavorite}
       className="group/pin absolute right-0 top-0 z-10 h-12 w-12 cursor-pointer"
     >
-      <span className="absolute right-2.5 top-0 block h-9 w-7 overflow-hidden">
+      <span className="absolute right-2.5 top-0 block h-10 w-7 overflow-hidden">
         <span
           className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
             book.favorite
@@ -136,16 +137,9 @@ export function BookTile({
               : "-translate-y-full ease-out group-hover:-translate-y-[20px] group-focus-visible/pin:-translate-y-[20px] group-active/pin:-translate-y-[16px]"
           }`}
         >
-          {/* Muted wash over the gradient; fading it out is what "inks"
-              the ribbon on pin — background-image can't transition. */}
-          <span
-            className={`absolute inset-0 bg-scrim transition-opacity duration-200 ${
-              book.favorite ? "opacity-0" : "opacity-100"
-            }`}
-          />
           <Bookmark
             weight="fill"
-            className={`relative mx-auto mt-1.5 block size-4 text-white transition-[opacity,transform] duration-200 ${
+            className={`relative mx-auto top-1.5 block size-4 text-white transition-[opacity,transform] duration-200 ${
               book.favorite
                 ? "translate-y-0 opacity-100 delay-100"
                 : "-translate-y-1 opacity-0"
