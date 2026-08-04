@@ -89,7 +89,7 @@ async function main(): Promise<void> {
   await page.waitForTimeout(1_000);
   // The reader chrome auto-hides when idle and only reveals near the top
   // edge (clientY < 40) — wake it with a mouse move there.
-  await page.mouse.move(720, 10);
+  await page.mouse.move(720, 5);
   await page.waitForTimeout(300);
   await page.click('button[aria-label="Back to the shelf"]');
   await page.waitForSelector("[data-book-id]", { timeout: 10_000 });

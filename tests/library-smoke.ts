@@ -187,7 +187,7 @@ async function main(): Promise<void> {
   }
   // The bookmark (and with it the tile's percent) commits after a 3s dwell.
   await page.waitForTimeout(3_500);
-  await page.mouse.move(720, 10); // wake the auto-hidden chrome (top edge only)
+  await page.mouse.move(720, 5); // wake the auto-hidden chrome (top edge only)
   await page.waitForTimeout(500);
   await page.click('button[aria-label="Back to the shelf"]');
   await page.waitForTimeout(800);

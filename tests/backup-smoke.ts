@@ -101,7 +101,7 @@ async function main(): Promise<void> {
     await page.waitForTimeout(200);
   }
   await page.waitForTimeout(3_500); // bookmark dwell
-  await page.mouse.move(720, 10);
+  await page.mouse.move(720, 5);
   await page.waitForTimeout(500);
   await page.click('button[aria-label="Back to the shelf"]');
   await page.waitForTimeout(1_000);
