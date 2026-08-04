@@ -7,8 +7,8 @@ versioning — [SemVer](https://semver.org/).
 
 - Reader: reading with a hover dictionary finally counts as reading — mouse movement keeps the clock running, so scanned minutes no longer vanish from your stats
 - Library: covers now show a small progress ring, so you can see how far each book is without opening it
-- Library: pin a book right from its cover — hover and the bookmark's tip peeks over the edge, one click and the ribbon slides into place — or from the right-click menu; pinned books lead their section in every sort order
-- Library: language sections can be dragged into your own order; the order sticks, and it travels with your backups
+- Library: pin a book right from its cover — the bookmark's tip leans out to meet your cursor, closer means further, and one click drops the ribbon into place on a little spring — or from the right-click menu; pinned books lead their section in every sort order
+- Library: language sections can be dragged into your own order — the section steps aside as you lift it and a dashed slot travels with your cursor to show exactly where it lands; the order sticks, and it travels with your backups
 - Stats: new charts — minutes per day, your reading speed over the last two weeks, and the current book's pace with an honest "days left" estimate; weekday letters keep the days grounded, and every column answers a hover with exact numbers
 - Stats: the activity heatmap now sits with the charts in one Statistics section, and every day opens a proper tooltip — the day's time, characters read, and the books you actually read that day, covers included
 

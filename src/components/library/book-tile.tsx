@@ -9,6 +9,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -20,6 +21,10 @@ import {
 import { DashRing } from "@/components/ui/dash-ring";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { BookCover } from "./book-cover";
+
+// How far from the pin's hit area the unpinned ribbon starts answering the
+// pointer, px.
+const PEEK_RADIUS = 112;
 
 // A book on the shelf: cover, title, author, reading state (percent while
 // reading, "Finished" at the end, silence for a fresh book). Click opens;
@@ -113,28 +118,67 @@ export function BookTile({
   // The pin control can't nest inside the tile's own <button>, so it rides
   // as an absolutely-positioned sibling over the cover's top-right corner.
   // It is ONE morphing element, not two skins: unpinned, the ribbon's
-  // notched tip peeks from under the cover's top edge on hover — already
-  // the primary gradient, the bookmark is visibly THERE; pinning slides it
-  // down to full length and fades the icon in. Unpinning retracts it. All
-  // motion is a transform on a promoted layer (no scale — a squashing
-  // ribbon reads as a glitch); the hit area is a full 48px square. The
-  // clip window is 4px taller than the ribbon so the spring's overshoot
-  // below the resting point is never cut flat.
+  // notched tip peeks from under the cover's top edge — and the CLOSER the
+  // pointer gets, the further it peeks (proximity drives --peek, the 150ms
+  // transition smooths every retarget). Pinning drops the ribbon to full
+  // length on a springy overshoot and fades the icon in; unpinning retracts
+  // it. All motion is a transform on a promoted layer (no scale — a
+  // squashing ribbon reads as a glitch); the hit area is a full 48px
+  // square. The clip window is 12px taller than the ribbon so neither the
+  // spring's overshoot nor the press tug is ever cut flat.
+  const pinButtonRef = useRef<HTMLButtonElement | null>(null);
+  const ribbonRef = useRef<HTMLSpanElement | null>(null);
+  const peekFrameRef = useRef(0);
+  const handlePeekMove = (event: React.PointerEvent) => {
+    if (!onToggleFavorite || book.favorite) return;
+    const { clientX, clientY } = event;
+    cancelAnimationFrame(peekFrameRef.current);
+    peekFrameRef.current = requestAnimationFrame(() => {
+      const button = pinButtonRef.current;
+      const ribbon = ribbonRef.current;
+      if (!button || !ribbon) return;
+      const rect = button.getBoundingClientRect();
+      const dx = Math.max(rect.left - clientX, 0, clientX - rect.right);
+      const dy = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
+      const t = Math.min(1, Math.max(0, 1 - Math.hypot(dx, dy) / PEEK_RADIUS));
+      // smoothstep: the tip answers gently from afar, decisively up close.
+      ribbon.style.setProperty("--peek", (t * t * (3 - 2 * t)).toFixed(3));
+    });
+  };
+  const handlePeekLeave = () => {
+    cancelAnimationFrame(peekFrameRef.current);
+    // Remove (not zero) so the focus-visible variant can drive --peek again.
+    ribbonRef.current?.style.removeProperty("--peek");
+  };
+  // Pressing the unpinned pin tugs the ribbon past full reach — the
+  // commitment beat before the click pins it.
+  const handlePinPress = () => {
+    if (!book.favorite)
+      ribbonRef.current?.style.setProperty("--peek", "1.2");
+  };
   const pinControl = onToggleFavorite ? (
     <button
       type="button"
+      ref={pinButtonRef}
       data-book-favorite=""
       aria-label={t(book.favorite ? "library.menu.unpin" : "library.menu.pin")}
       aria-pressed={book.favorite}
-      onClick={onToggleFavorite}
+      onPointerDown={handlePinPress}
+      onClick={() => {
+        // Clear the inline peek: the pinned classes ignore it, and after an
+        // UNPIN the proximity handler must start from a clean slate.
+        ribbonRef.current?.style.removeProperty("--peek");
+        onToggleFavorite();
+      }}
       className="group/pin absolute right-0 top-0 z-10 h-12 w-12 cursor-pointer"
     >
-      <span className="absolute right-2.5 top-0 block h-10 w-7 overflow-hidden">
+      <span className="absolute right-2.5 top-0 block h-12 w-7 overflow-hidden">
         <span
-          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
+          ref={ribbonRef}
+          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform ${
             book.favorite
-              ? "translate-y-0 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:translate-y-[3px]"
-              : "-translate-y-full ease-out group-hover:-translate-y-[20px] group-focus-visible/pin:-translate-y-[20px] group-active/pin:-translate-y-[16px]"
+              ? "translate-y-0 duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active/pin:translate-y-[3px]"
+              : "pin-peek duration-150 ease-out group-focus-visible/pin:[--peek:1]"
           }`}
         >
           <Bookmark
@@ -150,7 +194,11 @@ export function BookTile({
     </button>
   ) : null;
   return (
-    <div className="group relative">
+    <div
+      className="group relative transition-transform active:scale-98"
+      onPointerMove={handlePeekMove}
+      onPointerLeave={handlePeekLeave}
+    >
       <ContextMenu>
         <ContextMenuTrigger
           render={
@@ -158,8 +206,8 @@ export function BookTile({
               type="button"
               onClick={onOpen}
               aria-disabled={busy || undefined}
-              className={`group flex w-full flex-col text-left transition-transform ${
-                busy ? "cursor-default" : "cursor-pointer active:scale-98"
+              className={`group flex w-full flex-col text-left ${
+                busy ? "cursor-default" : "cursor-pointer"
               }`}
               data-book-id={book.id}
             />

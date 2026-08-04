@@ -12,16 +12,12 @@ import { cn } from "@/lib/utils";
 import { BookCover } from "./book-cover";
 import { GRID_CLASSES } from "./library-grid";
 
-// HTML5 drag-reorder of a group-level header (same idiom as the manga page
-// volume grid): the caller owns the order, the header only reports events.
-// `dropIndicator` marks where the dragged section would land.
+// HTML5 drag-reorder of a group-level header: the caller owns the order and
+// the visuals (ghost slot + FLIP slide), the header only reports the
+// source-side events. Drop targets are the whole sections, wired by the
+// caller.
 export interface HeaderDrag {
-  dragging: boolean;
-  dropIndicator: "top" | "bottom" | null;
-  onDragStart: () => void;
-  onDragOver: (event: DragEvent<HTMLElement>) => void;
-  onDragLeave: () => void;
-  onDrop: (event: DragEvent<HTMLElement>) => void;
+  onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
 }
 
@@ -117,14 +113,8 @@ function ShelfSectionHeader({
       aria-expanded={!collapsed}
       draggable={drag !== undefined}
       onDragStart={drag?.onDragStart}
-      onDragOver={drag?.onDragOver}
-      onDragLeave={drag?.onDragLeave}
-      onDrop={drag?.onDrop}
       onDragEnd={drag?.onDragEnd}
-      className={cn(
-        "group relative flex cursor-pointer items-center",
-        drag?.dragging && "opacity-50",
-      )}
+      className="group relative flex cursor-pointer items-center"
     >
       <CaretDown
         weight="bold"
@@ -145,20 +135,8 @@ function ShelfSectionHeader({
       ) : null}
     </button>
   );
-  const indicator = drag?.dropIndicator ? (
-    <span
-      aria-hidden
-      className={cn(
-        "pointer-events-none absolute inset-x-0 h-px bg-primary",
-        drag.dropIndicator === "top" ? "-top-2" : "-bottom-2",
-      )}
-    />
-  ) : null;
   return level === "group" ? (
-    <h2 className="relative mb-4 text-sm text-default tabular-nums">
-      {button}
-      {indicator}
-    </h2>
+    <h2 className="relative mb-4 text-sm text-default tabular-nums">{button}</h2>
   ) : (
     <h3 className="mb-3 text-xs text-muted-content">{button}</h3>
   );

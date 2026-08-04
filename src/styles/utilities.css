@@ -112,6 +112,15 @@
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
 }
 
+/* Unpinned pin ribbon: how far the notched tip peeks over the cover's top
+   edge — 0 hides the whole 36px ribbon, 1 shows the 16px tip. The tile's
+   proximity handler and the pin's press drive --peek inline (the transition
+   smooths every retarget); keyboard focus uses the variant class, which is
+   why the handlers always REMOVE the inline value instead of zeroing it. */
+@utility pin-peek {
+  transform: translateY(calc(-36px + var(--peek, 0) * 16px));
+}
+
 /* Dynamic spinner: steady rotation + slower eased rotation + arc-length
    morph, so every cycle looks slightly different. */
 @keyframes spin-linear {
