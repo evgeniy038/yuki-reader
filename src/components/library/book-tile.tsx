@@ -23,8 +23,9 @@ import { ProgressRing } from "@/components/ui/progress-ring";
 import { BookCover } from "./book-cover";
 
 // How far from the pin's hit area the unpinned ribbon starts answering the
-// pointer, px.
-const PEEK_RADIUS = 112;
+// pointer, px — tight on purpose: the tip should stir only when the cursor
+// heads for the corner, not from across the tile.
+const PEEK_RADIUS = 64;
 
 // A book on the shelf: cover, title, author, reading state (percent while
 // reading, "Finished" at the end, silence for a fresh book). Click opens;
@@ -119,7 +120,7 @@ export function BookTile({
   // as an absolutely-positioned sibling over the cover's top-right corner.
   // It is ONE morphing element, not two skins: unpinned, the ribbon's
   // notched tip peeks from under the cover's top edge — and the CLOSER the
-  // pointer gets, the further it peeks (proximity drives --peek, the 300ms
+  // pointer gets, the further it peeks (proximity drives --peek, the 200ms
   // ease smooths every retarget). Pinning drops the ribbon to full length
   // on a light spring (a barely-there settle, never a visible dip below
   // the cover's edge); unpinning retracts it. All motion is a transform on
@@ -174,7 +175,7 @@ export function BookTile({
       <span className="absolute right-2.5 top-0 block h-12 w-7 overflow-hidden">
         <span
           ref={ribbonRef}
-          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
+          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-200 ${
             book.favorite
               ? "translate-y-0 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:translate-y-[3px]"
               : "pin-peek ease-out group-focus-visible/pin:[--peek:1]"
@@ -194,7 +195,10 @@ export function BookTile({
   ) : null;
   return (
     <div
-      className="group relative transition-transform active:scale-98"
+      // origin-top: the press scale contracts the tile TOWARD its top edge,
+      // so the pinned ribbon's flush seam with the cover is the fixed point
+      // — it can't ride down off the corner mid-press.
+      className="group relative transition-transform origin-top active:scale-98"
       onPointerMove={handlePeekMove}
       onPointerLeave={handlePeekLeave}
     >
