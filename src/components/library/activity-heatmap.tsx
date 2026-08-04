@@ -1,14 +1,17 @@
 import { useTranslation } from "react-i18next";
 import type { DailyStats } from "@/core/storage";
+import type { BookAmount } from "@/core/stats";
 import { heatLevel, heatmapWeeks } from "@/core/stats";
 import { formatDuration } from "@/lib/format";
 import i18n from "@/lib/i18n";
+import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
 
 // GitHub-style activity heatmap: half a year of weeks, columns stretching to
 // the card width (flex-1, square cells) — no dead space at the sides.
 // Intensity is by ACTIVE MINUTES — the only unit EPUB chars and PDF pages
-// share. Days past today in the current week stay blank.
+// share. Days past today in the current week stay blank. Cells carry a rich
+// tooltip (date, time, volume, top books) instead of the native title.
 const HEAT_WEEKS = 26;
 
 // Literal class list — Tailwind must see every heat level in source.
@@ -20,11 +23,17 @@ const HEAT_CLASSES = [
   "bg-heat-4",
 ];
 
-function cellTitle(key: string, day: DailyStats | undefined): string {
-  const label = new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", {
+function dateLabel(key: string): string {
+  return new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", {
     day: "numeric",
     month: "short",
   }).format(new Date(`${key}T12:00:00`));
+}
+
+// The cell's accessible name doubles as the tooltip headline — date first,
+// then time and volume, same order as the tooltip card.
+function cellLabel(key: string, day: DailyStats | undefined): string {
+  const label = dateLabel(key);
   if (!day) return i18n.t("stats.cell.empty", { date: label });
   const parts = [
     formatDuration(day.timeMs),
@@ -34,12 +43,68 @@ function cellTitle(key: string, day: DailyStats | undefined): string {
   return `${label} — ${parts.join(", ")}`;
 }
 
+/** Up to three books of the day, heaviest first; unknown ids are dropped. */
+function topBooks(
+  perBook: Record<string, BookAmount> | undefined,
+  bookTitles: Map<string, string>,
+): { id: string; title: string; amount: BookAmount }[] {
+  return Object.entries(perBook ?? {})
+    .filter(([id]) => bookTitles.has(id))
+    .map(([id, amount]) => ({ id, title: bookTitles.get(id)!, amount }))
+    .sort(
+      (a, b) =>
+        b.amount.chars + b.amount.pages - (a.amount.chars + a.amount.pages),
+    )
+    .slice(0, 3);
+}
+
+function CellBody({
+  day,
+  date,
+  bookTitles,
+}: {
+  day: DailyStats;
+  date: string;
+  bookTitles: Map<string, string>;
+}) {
+  const { t } = useTranslation();
+  const books = topBooks(day.perBook, bookTitles);
+  return (
+    <span className="flex max-w-56 flex-col gap-1">
+      <span className="text-strong">{date}</span>
+      <span className="text-muted-content tabular-nums">
+        {[
+          formatDuration(day.timeMs),
+          day.chars > 0 ? t("stats.cell.chars", { count: day.chars }) : null,
+          day.pages > 0 ? t("stats.cell.pages", { count: day.pages }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </span>
+      {books.map((book) => (
+        <span key={book.id} className="flex items-baseline gap-1 tabular-nums">
+          <span className="truncate text-default">{book.title}</span>
+          <span className="shrink-0 text-muted-content">
+            {`— ${
+              book.amount.chars > 0
+                ? t("stats.cell.chars", { count: book.amount.chars })
+                : t("stats.cell.pages", { count: book.amount.pages })
+            }`}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function ActivityHeatmap({
   days,
   todayKey,
+  bookTitles,
 }: {
   days: DailyStats[];
   todayKey: string;
+  bookTitles: Map<string, string>;
 }) {
   const { t } = useTranslation();
   const byDate = new Map(days.map((d) => [d.date, d]));
@@ -48,27 +113,44 @@ export function ActivityHeatmap({
   return (
     <SettingsGroup title={t("stats.activity")}>
       <SettingsBlock>
-        <div
-          className="flex gap-0.5"
-          role="img"
-          aria-label={t("stats.activityAria")}
-        >
-          {weeks.map((week) => (
-            <div key={week[0]!.key} className="flex flex-1 flex-col gap-0.5">
-              {week.map(({ key, future }) =>
-                future ? (
-                  <div key={key} className="aspect-square" />
-                ) : (
-                  <div
-                    key={key}
-                    title={cellTitle(key, byDate.get(key))}
-                    className={`aspect-square rounded-heat ${HEAT_CLASSES[heatLevel(byDate.get(key)?.timeMs ?? 0)]}`}
-                  />
-                ),
-              )}
-            </div>
-          ))}
-        </div>
+        {/* One shared provider: once a tooltip is open, moving across the
+            grid opens the next one instantly. */}
+        <TooltipProvider delay={50}>
+          <div
+            className="flex gap-0.5"
+            role="img"
+            aria-label={t("stats.activityAria")}
+          >
+            {weeks.map((week) => (
+              <div key={week[0]!.key} className="flex flex-1 flex-col gap-0.5">
+                {week.map(({ key, future }) => {
+                  if (future) return <div key={key} className="aspect-square" />;
+                  const day = byDate.get(key);
+                  const date = dateLabel(key);
+                  return (
+                    <Tooltip
+                      key={key}
+                      trigger={
+                        <div
+                          className={`aspect-square rounded-heat ${HEAT_CLASSES[heatLevel(day?.timeMs ?? 0)]}`}
+                          tabIndex={0}
+                          aria-label={cellLabel(key, day)}
+                        />
+                      }
+                      content={
+                        day ? (
+                          <CellBody day={day} date={date} bookTitles={bookTitles} />
+                        ) : (
+                          t("stats.cell.empty", { date })
+                        )
+                      }
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </TooltipProvider>
       </SettingsBlock>
     </SettingsGroup>
   );

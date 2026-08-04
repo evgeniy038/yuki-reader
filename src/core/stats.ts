@@ -173,6 +173,147 @@ export function heatmapWeeks(todayKey: string, weeks: number): HeatCell[][] {
   return grid;
 }
 
+// --- Chart series (the /stats charts section) ------------------------------
+// Every series spans `n` calendar days ENDING at `todayKey` (inclusive);
+// days without a record count as zero / skip. The anchor defaults to the
+// real today — tests pass an explicit key.
+
+/** Active minutes per day; missing days are 0. */
+export function dailyMinutesSeries(
+  days: DailyStats[],
+  n: number,
+  todayKey = dayKey(Date.now()),
+): { key: string; minutes: number }[] {
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const series: { key: string; minutes: number }[] = [];
+  for (let back = n - 1; back >= 0; back -= 1) {
+    const key = shiftDay(todayKey, -back);
+    series.push({ key, minutes: (byDate.get(key)?.timeMs ?? 0) / 60_000 });
+  }
+  return series;
+}
+
+/** Trailing moving average; leading points average a partial window. */
+export function movingAverage(values: number[], window: number): number[] {
+  const w = Math.max(1, Math.floor(window));
+  const out: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    sum += values[i]!;
+    if (i >= w) sum -= values[i - w]!;
+    out.push(sum / Math.min(i + 1, w));
+  }
+  return out;
+}
+
+/**
+ * Reading speed per qualifying day (a minute of active time and up, same
+ * rule as speedOf). `kind` follows the latest point — chars/h for text
+ * reading, pages/h when only pages moved. Null when no day qualifies.
+ */
+export function speedSeries(
+  days: DailyStats[],
+  n: number,
+  todayKey = dayKey(Date.now()),
+): { kind: "chars" | "pages"; points: { key: string; perHour: number }[] } | null {
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const points: { key: string; perHour: number }[] = [];
+  let kind: "chars" | "pages" = "chars";
+  for (let back = n - 1; back >= 0; back -= 1) {
+    const key = shiftDay(todayKey, -back);
+    const day = byDate.get(key);
+    if (!day) continue;
+    const speed = speedOf(day);
+    if (!speed) continue;
+    points.push({ key, perHour: speed.perHour });
+    kind = speed.kind;
+  }
+  if (points.length === 0) return null;
+  return { kind, points };
+}
+
+/** The book with the most read volume in the window; null when none. */
+export function topBookInWindow(
+  days: DailyStats[],
+  n: number,
+  todayKey = dayKey(Date.now()),
+): string | null {
+  const start = shiftDay(todayKey, -(n - 1));
+  const sums = new Map<string, { chars: number; pages: number }>();
+  for (const day of days) {
+    if (day.date < start || day.date > todayKey || !day.perBook) continue;
+    for (const [id, amount] of Object.entries(day.perBook)) {
+      const sum = sums.get(id) ?? { chars: 0, pages: 0 };
+      sum.chars += amount.chars;
+      sum.pages += amount.pages;
+      sums.set(id, sum);
+    }
+  }
+  let top: string | null = null;
+  let topChars = 0;
+  let topPages = 0;
+  for (const [id, sum] of sums) {
+    if (sum.chars > topChars || (sum.chars === topChars && sum.pages > topPages)) {
+      top = id;
+      topChars = sum.chars;
+      topPages = sum.pages;
+    }
+  }
+  return top;
+}
+
+export interface BookPace {
+  chars: number;
+  pages: number;
+  timeMs: number;
+  /** Window days when the book contributed readable volume. */
+  activeDays: number;
+  /** Average speed over the window totals; null under a minute. */
+  speed: { kind: "chars" | "pages"; perHour: number } | null;
+}
+
+/** One book's totals over the window; null when it has no slices there. */
+export function bookPace(
+  days: DailyStats[],
+  bookId: string,
+  n: number,
+  todayKey = dayKey(Date.now()),
+): BookPace | null {
+  const start = shiftDay(todayKey, -(n - 1));
+  const total: BookAmount = { chars: 0, pages: 0, timeMs: 0 };
+  let activeDays = 0;
+  let seen = false;
+  for (const day of days) {
+    if (day.date < start || day.date > todayKey) continue;
+    const slice = day.perBook?.[bookId];
+    if (!slice) continue;
+    seen = true;
+    total.chars += slice.chars;
+    total.pages += slice.pages;
+    total.timeMs += slice.timeMs;
+    if (slice.chars + slice.pages > 0) activeDays += 1;
+  }
+  if (!seen) return null;
+  return { ...total, activeDays, speed: speedOf(total) };
+}
+
+/**
+ * Days left at the current pace: the remaining volume extrapolated from
+ * progress, divided by the per-active-day amount. Null when the estimate
+ * means nothing (nothing read, progress unset, effectively finished, or a
+ * dead pace). Always at least one day when there is anything left.
+ */
+export function estimateDaysLeft(
+  readAmount: number,
+  progress: number,
+  amountPerActiveDay: number,
+): number | null {
+  if (readAmount <= 0 || amountPerActiveDay <= 0) return null;
+  if (progress <= 0 || progress >= 0.995) return null;
+  const remaining = (readAmount * (1 - progress)) / progress;
+  return Math.max(1, Math.ceil(remaining / amountPerActiveDay));
+}
+
 // --- Daily goal (localStorage, same pattern as reading-settings.ts) -------
 //
 // Two modes: a flat character count ("3 000 знаков в день") or a percent of
