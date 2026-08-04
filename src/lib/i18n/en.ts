@@ -34,6 +34,8 @@ export const en = {
       rename: "Rename",
       cover: "Change cover",
       delete: "Delete",
+      pin: "Pin",
+      unpin: "Unpin",
     },
     empty: {
       title: "Nothing here yet",
@@ -52,6 +54,7 @@ export const en = {
     },
     duplicate: "“{{title}}” is already in the library",
     openError: "Couldn't open the file",
+    reorderSection: "Reorder section",
   },
   details: {
     title: "About the book",

@@ -175,6 +175,7 @@ const SETTINGS_KEYS = [
   "yuki:stats-goal",
   "yuki-shelf-sort",
   "yuki-shelf-collapsed",
+  "yuki-shelf-group-order",
 ] as const;
 
 function json(value: unknown): Uint8Array {

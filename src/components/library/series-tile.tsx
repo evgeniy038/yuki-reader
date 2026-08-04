@@ -1,6 +1,6 @@
 import type { ShelfItem } from "@/core/library";
 import { readingStateOf, type Book } from "@/core/library";
-import { BookOpen, PencilSimple, Trash } from "@phosphor-icons/react";
+import { BookOpen, PencilSimple, Star, Trash } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -59,11 +59,30 @@ export function SeriesTile({
         }
       >
         <div
-          className={`rounded-media transition-shadow group-hover:shadow-floating ${
+          className={`relative rounded-media transition-shadow group-hover:shadow-floating ${
             flash ? "animate-pulse ring-2" : ""
           }`}
         >
           <BookCover book={pseudo} />
+          {item.progress > 0 ? (
+            <div
+              data-book-progress=""
+              className="absolute inset-x-1 bottom-1 h-1 rounded-pill bg-scrim"
+            >
+              <div
+                className="h-full rounded-pill bg-primary-gradient"
+                style={{ width: `${Math.min(1, item.progress) * 100}%` }}
+              />
+            </div>
+          ) : null}
+          {item.favorite ? (
+            <div
+              data-book-favorite=""
+              className="absolute right-1 top-1 grid size-5 place-items-center rounded-pill bg-scrim"
+            >
+              <Star weight="fill" className="size-3 text-white" />
+            </div>
+          ) : null}
         </div>
         <p className="mt-3 truncate text-sm text-strong" title={item.series}>
           {item.series}

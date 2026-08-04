@@ -6,8 +6,10 @@ import {
   buildShelfItems,
   groupByLanguage,
   loadShelfCollapsed,
+  loadShelfGroupOrder,
   loadShelfSort,
   saveShelfCollapsed,
+  saveShelfGroupOrder,
   saveShelfSort,
   sortBooks,
   SHELF_SORTS,
@@ -68,6 +70,7 @@ export function LibraryPage({
   onRenameBook,
   onDeleteBook,
   onChangeCover,
+  onToggleFavorite,
   onOpenSeries,
   onRenameSeries,
   onDeleteSeries,
@@ -83,6 +86,7 @@ export function LibraryPage({
   onRenameBook: (id: string, title: string) => void;
   onDeleteBook: (id: string) => void;
   onChangeCover: (id: string, cover: string) => void;
+  onToggleFavorite: (id: string) => void;
   onOpenSeries: (series: string) => void;
   onRenameSeries: (series: string, next: string) => void;
   onDeleteSeries: (series: string) => void;
@@ -92,6 +96,10 @@ export function LibraryPage({
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
     () => new Set(loadShelfCollapsed()),
   );
+  // Empty = the default ja → en → other order (nothing saved yet).
+  const [groupOrder, setGroupOrder] = useState<string[]>(
+    () => loadShelfGroupOrder() ?? [],
+  );
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -100,6 +108,9 @@ export function LibraryPage({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const coverTargetRef = useRef<string | null>(null);
+  const dragGroupRef = useRef<string | null>(null);
+  const [dragGroupId, setDragGroupId] = useState<string | null>(null);
+  const [dropGroupId, setDropGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     saveShelfSort(sort);
@@ -108,6 +119,10 @@ export function LibraryPage({
   useEffect(() => {
     saveShelfCollapsed([...collapsed]);
   }, [collapsed]);
+
+  useEffect(() => {
+    if (groupOrder.length > 0) saveShelfGroupOrder(groupOrder);
+  }, [groupOrder]);
 
   // Section ids: the language group ("ja") or a kind subsection inside it
   // ("ja:novels" / "ja:manga").
@@ -139,9 +154,36 @@ export function LibraryPage({
           item,
           language: item.kind === "series" ? item.language : item.book.language,
         })),
+        groupOrder.length > 0 ? groupOrder : undefined,
       ),
-    [items],
+    [items, groupOrder],
   );
+
+  // Drag one group header onto another: the dragged section takes the
+  // target's slot (the same splice idiom as the manga volume grid).
+  const reorderGroups = (targetId: string) => {
+    const fromId = dragGroupRef.current;
+    dragGroupRef.current = null;
+    setDragGroupId(null);
+    setDropGroupId(null);
+    if (!fromId || fromId === targetId) return;
+    const ids: string[] = groups.map((group) => group.id);
+    const from = ids.indexOf(fromId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, fromId);
+    setGroupOrder(ids);
+  };
+
+  // The slot the dragged section would actually land in — removal shifts
+  // later targets back one, so a downward drag lands BELOW the hovered one.
+  const dropIndicatorFor = (targetId: string): "top" | "bottom" | null => {
+    if (!dragGroupId || dropGroupId !== targetId || dragGroupId === targetId)
+      return null;
+    const ids: string[] = groups.map((group) => group.id);
+    return ids.indexOf(dragGroupId) < ids.indexOf(targetId) ? "bottom" : "top";
+  };
 
   const groupLabel = (id: "ja" | "en" | "other") =>
     id === "ja" ? "日本語" : id === "en" ? "English" : t("library.other");
@@ -274,6 +316,7 @@ export function LibraryPage({
                 onRename={setRenamingId}
                 onChangeCover={pickCoverFor}
                 onDelete={setDeletingId}
+                onToggleFavorite={onToggleFavorite}
                 onOpenSeries={onOpenSeries}
                 onRenameSeries={setRenamingSeries}
                 onDeleteSeries={setDeletingSeries}
@@ -301,6 +344,36 @@ export function LibraryPage({
                   collapsed={collapsed.has(group.id)}
                   onChange={(next) => toggleSection(group.id, next)}
                   items={visibleItems.length > 0 ? visibleItems : allItems}
+                  headerDrag={
+                    groups.length > 1
+                      ? {
+                          dragging: dragGroupId === group.id,
+                          dropIndicator: dropIndicatorFor(group.id),
+                          onDragStart: () => {
+                            dragGroupRef.current = group.id;
+                            setDragGroupId(group.id);
+                          },
+                          onDragOver: (event) => {
+                            event.preventDefault();
+                            setDropGroupId(group.id);
+                          },
+                          onDragLeave: () => {
+                            setDropGroupId((current) =>
+                              current === group.id ? null : current,
+                            );
+                          },
+                          onDrop: (event) => {
+                            event.preventDefault();
+                            reorderGroups(group.id);
+                          },
+                          onDragEnd: () => {
+                            dragGroupRef.current = null;
+                            setDragGroupId(null);
+                            setDropGroupId(null);
+                          },
+                        }
+                      : undefined
+                  }
                 >
                   {subs.map((sub, subIndex) =>
                     subs.length > 1 ? (

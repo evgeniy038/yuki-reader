@@ -45,6 +45,7 @@ await putBook(
     lastReadAt: 2000,
     contentHash: "hash-a",
     format: "epub",
+    favorite: true,
     bookCss: "p{}",
     resources: [
       { path: "OEBPS/img.jpg", mime: "image/jpeg", bytes: new Uint8Array([1, 2, 3]) },
@@ -67,7 +68,13 @@ await putMangaOcrRecords("m", new Map([[0, { blocks: [], engine: 1 }]]));
 await putStatsDay({ date: "2026-08-01", chars: 100, pages: 2, timeMs: 30000 });
 
 // --- 1. Full export → mutate the library → import restores everything. ------
-const full = await exportBackupInProcess({}, { "yuki-lang": "en" });
+const full = await exportBackupInProcess(
+  {},
+  {
+    "yuki-lang": "en",
+    "yuki-shelf-group-order": JSON.stringify(["en", "ja", "other"]),
+  },
+);
 await restoreBookProgress("a", 0);
 await deleteBook("b");
 
@@ -76,10 +83,15 @@ assert.equal(summary.books, 3);
 assert.equal(summary.progress, 3);
 assert.equal(summary.stats, 1);
 assert.equal(summary.settings?.["yuki-lang"], "en");
+assert.equal(
+  summary.settings?.["yuki-shelf-group-order"],
+  JSON.stringify(["en", "ja", "other"]),
+);
 
 const restoredA = (await findBook("a"))!;
 assert.equal(restoredA.progress, 0.42);
 assert.equal(restoredA.lastReadAt, 2000);
+assert.equal(restoredA.favorite, true, "favorite round-trips through the backup");
 assert.deepEqual([...(restoredA.resources?.[0]?.bytes ?? [])], [1, 2, 3]);
 
 const restoredB = (await findBook("b"))!;

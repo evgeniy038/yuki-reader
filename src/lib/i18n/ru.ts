@@ -32,6 +32,8 @@ export const ru: Messages = {
       rename: "Переименовать",
       cover: "Сменить обложку",
       delete: "Удалить",
+      pin: "Закрепить",
+      unpin: "Открепить",
     },
     empty: {
       title: "Пока пусто",
@@ -50,6 +52,7 @@ export const ru: Messages = {
     },
     duplicate: "«{{title}}» уже в библиотеке",
     openError: "не удалось открыть файл",
+    reorderSection: "Переставить раздел",
   },
   details: {
     title: "О книге",

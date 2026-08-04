@@ -260,6 +260,7 @@ export default function App() {
                 onRenameBook={shelf.renameBook}
                 onDeleteBook={shelf.removeBook}
                 onChangeCover={shelf.changeCover}
+                onToggleFavorite={shelf.toggleFavorite}
                 onOpenSeries={(series) =>
                   navigate(`/manga/${encodeURIComponent(normalizeSeriesKey(series))}`)
                 }

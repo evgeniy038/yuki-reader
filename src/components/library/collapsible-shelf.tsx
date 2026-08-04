@@ -1,10 +1,29 @@
-import { CaretDown } from "@phosphor-icons/react";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { CaretDown, DotsSixVertical } from "@phosphor-icons/react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { Book, ShelfItem } from "@/core/library";
 import { cn } from "@/lib/utils";
 import { BookCover } from "./book-cover";
 import { GRID_CLASSES } from "./library-grid";
+
+// HTML5 drag-reorder of a group-level header (same idiom as the manga page
+// volume grid): the caller owns the order, the header only reports events.
+// `dropIndicator` marks where the dragged section would land.
+export interface HeaderDrag {
+  dragging: boolean;
+  dropIndicator: "top" | "bottom" | null;
+  onDragStart: () => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDragLeave: () => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
+  onDragEnd: () => void;
+}
 
 // Collapsible shelf section: a caret header plus a body that folds into a
 // stack of the section's first covers. Clicking the caret or the stack
@@ -80,20 +99,32 @@ function ShelfSectionHeader({
   level,
   collapsed,
   onToggle,
+  drag,
   children,
 }: {
   level: "group" | "sub";
   collapsed: boolean;
   onToggle: () => void;
+  drag?: HeaderDrag;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   const button = (
     <button
       type="button"
       data-shelf-header
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className="group relative flex cursor-pointer items-center"
+      draggable={drag !== undefined}
+      onDragStart={drag?.onDragStart}
+      onDragOver={drag?.onDragOver}
+      onDragLeave={drag?.onDragLeave}
+      onDrop={drag?.onDrop}
+      onDragEnd={drag?.onDragEnd}
+      className={cn(
+        "group relative flex cursor-pointer items-center",
+        drag?.dragging && "opacity-50",
+      )}
     >
       <CaretDown
         weight="bold"
@@ -105,10 +136,29 @@ function ShelfSectionHeader({
       <span className="inline-block transition-[translate] duration-150 ease-out group-hover:translate-x-4 group-focus-within:translate-x-4">
         {children}
       </span>
+      {drag ? (
+        <DotsSixVertical
+          role="img"
+          aria-label={t("library.reorderSection")}
+          className="ml-1 size-3 text-muted-content opacity-0 transition-opacity group-hover:opacity-100"
+        />
+      ) : null}
     </button>
   );
+  const indicator = drag?.dropIndicator ? (
+    <span
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute inset-x-0 h-px bg-primary",
+        drag.dropIndicator === "top" ? "-top-2" : "-bottom-2",
+      )}
+    />
+  ) : null;
   return level === "group" ? (
-    <h2 className="mb-4 text-sm text-default tabular-nums">{button}</h2>
+    <h2 className="relative mb-4 text-sm text-default tabular-nums">
+      {button}
+      {indicator}
+    </h2>
   ) : (
     <h3 className="mb-3 text-xs text-muted-content">{button}</h3>
   );
@@ -121,6 +171,7 @@ export function CollapsibleShelf({
   onChange,
   items,
   className,
+  headerDrag,
   children,
 }: {
   level: "group" | "sub";
@@ -131,6 +182,8 @@ export function CollapsibleShelf({
       covers (the caller passes the visible ones). */
   items: ShelfItem[];
   className?: string;
+  /** Group-level only: makes the header a drag handle for section order. */
+  headerDrag?: HeaderDrag;
   children: ReactNode;
 }) {
   const [animating, setAnimating] = useState(false);
@@ -228,7 +281,12 @@ export function CollapsibleShelf({
 
   return (
     <div className={className}>
-      <ShelfSectionHeader level={level} collapsed={collapsed} onToggle={toggle}>
+      <ShelfSectionHeader
+        level={level}
+        collapsed={collapsed}
+        onToggle={toggle}
+        drag={level === "group" ? headerDrag : undefined}
+      >
         {label}
       </ShelfSectionHeader>
       <div ref={wrapRef} className="relative">

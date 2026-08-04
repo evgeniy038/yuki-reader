@@ -1,4 +1,7 @@
+import { Star } from "@phosphor-icons/react";
+import { useTranslation } from "react-i18next";
 import type { ShelfItem } from "@/core/library";
+import { ContextMenuItem } from "@/components/ui/context-menu";
 import { BookTile } from "./book-tile";
 import { SeriesTile } from "./series-tile";
 
@@ -16,6 +19,7 @@ export function LibraryGrid({
   onRename,
   onChangeCover,
   onDelete,
+  onToggleFavorite,
   onOpenSeries,
   onRenameSeries,
   onDeleteSeries,
@@ -28,10 +32,12 @@ export function LibraryGrid({
   onRename: (id: string) => void;
   onChangeCover: (id: string) => void;
   onDelete: (id: string) => void;
+  onToggleFavorite: (id: string) => void;
   onOpenSeries: (series: string) => void;
   onRenameSeries: (series: string) => void;
   onDeleteSeries: (series: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className={GRID_CLASSES}>
       {items.map((item) =>
@@ -58,6 +64,12 @@ export function LibraryGrid({
             onRename={() => onRename(item.book.id)}
             onChangeCover={() => onChangeCover(item.book.id)}
             onDelete={() => onDelete(item.book.id)}
+            menuExtra={
+              <ContextMenuItem onClick={() => onToggleFavorite(item.book.id)}>
+                <Star weight={item.book.favorite ? "fill" : "regular"} />
+                {t(item.book.favorite ? "library.menu.unpin" : "library.menu.pin")}
+              </ContextMenuItem>
+            }
           />
         ),
       )}

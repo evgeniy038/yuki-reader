@@ -23,6 +23,8 @@ export interface Book {
   addedAt: number;
   /** Last time the book was opened or read. Absent = never opened. */
   lastReadAt?: number;
+  /** Pinned to the top of its shelf section. */
+  favorite?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +72,12 @@ export function sortBooks(books: Book[], sort: ShelfSort): Book[] {
       sorted.sort((a, b) => b.progress - a.progress);
       break;
   }
-  return sorted;
+  // Favorites lead the section; the chosen sort still orders the pinned
+  // block and the rest (a stable partition keeps both intact).
+  return [
+    ...sorted.filter((book) => book.favorite),
+    ...sorted.filter((book) => !book.favorite),
+  ];
 }
 
 interface ShelfGroup<T> {
@@ -80,18 +87,31 @@ interface ShelfGroup<T> {
   items: T[];
 }
 
-// Shelf sections by language, in reading order: Japanese first, English
-// second, language-less books last. Empty sections are omitted; the caller
-// renders headers only when more than one group exists.
+// Shelf sections by language. Default order is reading order — Japanese
+// first, English second, language-less books last; a saved `order` (group
+// ids) overrides it, groups missing from it keep their default relative
+// order at the end. Empty sections are omitted; the caller renders headers
+// only when more than one group exists.
 export function groupByLanguage<T extends { language?: Language }>(
   items: T[],
+  order?: string[],
 ): ShelfGroup<T>[] {
   const groups: ShelfGroup<T>[] = [
     { id: "ja", items: items.filter((b) => b.language === "ja") },
     { id: "en", items: items.filter((b) => b.language === "en") },
     { id: "other", items: items.filter((b) => b.language === undefined) },
   ];
-  return groups.filter((group) => group.items.length > 0);
+  const nonEmpty = groups.filter((group) => group.items.length > 0);
+  if (!order) return nonEmpty;
+  const rank = new Map(order.map((id, index) => [id, index]));
+  // Stable sort: unranked groups keep their relative order at the end.
+  return [...nonEmpty].sort((a, b) => {
+    const rankA = rank.get(a.id);
+    const rankB = rank.get(b.id);
+    if (rankA === undefined) return rankB === undefined ? 0 : 1;
+    if (rankB === undefined) return -1;
+    return rankA - rankB;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +135,8 @@ export type ShelfItem =
       volumeCount: number;
       addedAt: number;
       lastReadAt?: number;
+      /** True when any volume is pinned — the star badge on the tile. */
+      favorite: boolean;
     };
 
 /** Pseudo-id of a series tile on the shelf — where duplicate flashes point. */
@@ -149,6 +171,7 @@ export function buildShelfItems(sortedBooks: Book[]): ShelfItem[] {
         volumeCount: 1,
         addedAt: book.addedAt,
         lastReadAt: book.lastReadAt,
+        favorite: book.favorite === true,
       });
       continue;
     }
@@ -166,6 +189,7 @@ export function buildShelfItems(sortedBooks: Book[]): ShelfItem[] {
     }
     item.addedAt = Math.max(item.addedAt, book.addedAt);
     item.lastReadAt = Math.max(item.lastReadAt ?? 0, book.lastReadAt ?? 0) || undefined;
+    item.favorite = item.favorite || book.favorite === true;
   }
   return items;
 }
@@ -233,4 +257,32 @@ export function loadShelfCollapsed(): string[] {
 
 export function saveShelfCollapsed(ids: string[]): void {
   window.localStorage.setItem(SHELF_COLLAPSED_KEY, JSON.stringify(ids));
+}
+
+// ---------------------------------------------------------------------------
+// Manual language-section order (localStorage). Null = the default
+// ja → en → other.
+
+const SHELF_GROUP_ORDER_KEY = "yuki-shelf-group-order";
+
+export function loadShelfGroupOrder(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SHELF_GROUP_ORDER_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const ids: string[] = [];
+    for (const entry of parsed) {
+      if (typeof entry !== "string") return null;
+      ids.push(entry);
+    }
+    return ids;
+  } catch {
+    return null;
+  }
+}
+
+export function saveShelfGroupOrder(order: string[]): void {
+  window.localStorage.setItem(SHELF_GROUP_ORDER_KEY, JSON.stringify(order));
 }
