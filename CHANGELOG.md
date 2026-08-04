@@ -3,6 +3,16 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.4] - 2026-08-04
+
+- Reader: reading with a hover dictionary finally counts as reading — mouse movement keeps the clock running, so scanned minutes no longer vanish from your stats
+- Reader: jumped somewhere by accident? A small "Return to X%" pill floats up for a few seconds — one click takes you back, and it works both ways
+- Library: covers now show a slim progress bar, so you can see how far each book is without opening it
+- Library: right-click a book to pin it — pinned books carry a star and lead their section in every sort order
+- Library: language sections can be dragged into your own order; the order sticks, and it travels with your backups
+- Stats: new charts — minutes per day with a weekly trend, your reading speed over the last two weeks, and the current book's pace with an honest "days left" estimate
+- Stats: heatmap days open a proper tooltip with the day's time, characters read, and the books you actually read that day
+
 ## [1.3.3] - 2026-08-03
 
 - Reader: the control pill no longer drops over words you're scanning — it reveals only at a deliberate touch of the very top edge, and the little pull tab is gone for good
