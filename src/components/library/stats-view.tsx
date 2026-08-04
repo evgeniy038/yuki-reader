@@ -45,9 +45,16 @@ export function StatsView({
   const { t } = useTranslation();
   const [days, setDays] = useState<DailyStats[] | null>(null);
   // Per-book day slices key books by id; the heatmap tooltip resolves names
-  // through this map and silently drops books that are no longer on the shelf.
-  const bookTitles = useMemo(
-    () => new Map(books.map((book) => [book.id, book.title])),
+  // and covers through this map and silently drops books that are no longer
+  // on the shelf.
+  const bookMeta = useMemo(
+    () =>
+      new Map(
+        books.map((book) => [
+          book.id,
+          { title: book.title, cover: book.cover },
+        ]),
+      ),
     [books],
   );
 
@@ -95,7 +102,7 @@ export function StatsView({
               todaySpeed={today ? speedLabel(today) : null}
             />
             <ChartsSection days={days} books={books} todayKey={todayKey} />
-            <ActivityHeatmap days={days} todayKey={todayKey} bookTitles={bookTitles} />
+            <ActivityHeatmap days={days} todayKey={todayKey} bookMeta={bookMeta} />
             <GoalSection
               todayChars={today?.chars ?? 0}
               todayPages={today?.pages ?? 0}

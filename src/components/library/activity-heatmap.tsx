@@ -46,11 +46,11 @@ function cellLabel(key: string, day: DailyStats | undefined): string {
 /** Up to three books of the day, heaviest first; unknown ids are dropped. */
 function topBooks(
   perBook: Record<string, BookAmount> | undefined,
-  bookTitles: Map<string, string>,
-): { id: string; title: string; amount: BookAmount }[] {
+  bookMeta: Map<string, { title: string; cover?: string }>,
+): { id: string; title: string; cover?: string; amount: BookAmount }[] {
   return Object.entries(perBook ?? {})
-    .filter(([id]) => bookTitles.has(id))
-    .map(([id, amount]) => ({ id, title: bookTitles.get(id)!, amount }))
+    .filter(([id]) => bookMeta.has(id))
+    .map(([id, amount]) => ({ id, ...bookMeta.get(id)!, amount }))
     .sort(
       (a, b) =>
         b.amount.chars + b.amount.pages - (a.amount.chars + a.amount.pages),
@@ -61,18 +61,18 @@ function topBooks(
 function CellBody({
   day,
   date,
-  bookTitles,
+  bookMeta,
 }: {
   day: DailyStats;
   date: string;
-  bookTitles: Map<string, string>;
+  bookMeta: Map<string, { title: string; cover?: string }>;
 }) {
   const { t } = useTranslation();
-  const books = topBooks(day.perBook, bookTitles);
+  const books = topBooks(day.perBook, bookMeta);
   return (
     <span className="flex max-w-56 flex-col gap-1">
       <span className="text-strong">{date}</span>
-      <span className="text-muted-content tabular-nums">
+      <span className="text-default tabular-nums">
         {[
           formatDuration(day.timeMs),
           day.chars > 0 ? t("stats.cell.chars", { count: day.chars }) : null,
@@ -82,9 +82,18 @@ function CellBody({
           .join(" · ")}
       </span>
       {books.map((book) => (
-        <span key={book.id} className="flex items-baseline gap-1 tabular-nums">
+        <span key={book.id} className="flex items-center gap-1.5 tabular-nums">
+          {book.cover ? (
+            <img
+              src={book.cover}
+              alt=""
+              className="w-5 shrink-0 rounded-sm aspect-2/3 object-cover"
+            />
+          ) : (
+            <span className="w-5 shrink-0 rounded-sm aspect-2/3 bg-muted-surface" />
+          )}
           <span className="truncate text-default">{book.title}</span>
-          <span className="shrink-0 text-muted-content">
+          <span className="shrink-0 text-default">
             {`— ${
               book.amount.chars > 0
                 ? t("stats.cell.chars", { count: book.amount.chars })
@@ -100,11 +109,11 @@ function CellBody({
 export function ActivityHeatmap({
   days,
   todayKey,
-  bookTitles,
+  bookMeta,
 }: {
   days: DailyStats[];
   todayKey: string;
-  bookTitles: Map<string, string>;
+  bookMeta: Map<string, { title: string; cover?: string }>;
 }) {
   const { t } = useTranslation();
   const byDate = new Map(days.map((d) => [d.date, d]));
@@ -139,7 +148,7 @@ export function ActivityHeatmap({
                       }
                       content={
                         day ? (
-                          <CellBody day={day} date={date} bookTitles={bookTitles} />
+                          <CellBody day={day} date={date} bookMeta={bookMeta} />
                         ) : (
                           t("stats.cell.empty", { date })
                         )

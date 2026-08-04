@@ -64,6 +64,7 @@ export function LibraryGrid({
             onRename={() => onRename(item.book.id)}
             onChangeCover={() => onChangeCover(item.book.id)}
             onDelete={() => onDelete(item.book.id)}
+            onToggleFavorite={() => onToggleFavorite(item.book.id)}
             menuExtra={
               <ContextMenuItem onClick={() => onToggleFavorite(item.book.id)}>
                 <Star weight={item.book.favorite ? "fill" : "regular"} />

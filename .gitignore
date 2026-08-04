@@ -36,3 +36,6 @@ artifacts/local/browser/
 
 # agent worktrees
 .worktrees/
+
+# playwright-cli local state
+.playwright-cli/

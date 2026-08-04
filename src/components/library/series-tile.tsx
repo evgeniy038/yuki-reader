@@ -1,6 +1,6 @@
 import type { ShelfItem } from "@/core/library";
 import { readingStateOf, type Book } from "@/core/library";
-import { BookOpen, PencilSimple, Star, Trash } from "@phosphor-icons/react";
+import { BookOpen, Bookmark, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -9,6 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { ProgressRing } from "@/components/ui/progress-ring";
 import { BookCover } from "./book-cover";
 
 type SeriesItem = Extract<ShelfItem, { kind: "series" }>;
@@ -67,21 +68,20 @@ export function SeriesTile({
           {item.progress > 0 ? (
             <div
               data-book-progress=""
-              className="absolute inset-x-1 bottom-1 h-1 rounded-pill bg-scrim"
+              className="absolute bottom-1.5 right-1.5 rounded-full bg-scrim p-1"
             >
-              <div
-                className="h-full rounded-pill bg-primary-gradient"
-                style={{ width: `${Math.min(1, item.progress) * 100}%` }}
-              />
+              <ProgressRing value={item.progress} className="size-6" />
             </div>
           ) : null}
           {item.favorite ? (
-            <div
+            // A volume pinned from its series page hangs the ribbon here;
+            // static (no flip) — the toggle lives on the volume tiles.
+            <span
               data-book-favorite=""
-              className="absolute right-1 top-1 grid size-5 place-items-center rounded-pill bg-scrim"
+              className="absolute right-2.5 top-0 block h-9 w-7 bg-primary-gradient bookmark-ribbon"
             >
-              <Star weight="fill" className="size-3 text-white" />
-            </div>
+              <Bookmark weight="fill" className="mx-auto mt-1.5 size-4 text-white" />
+            </span>
           ) : null}
         </div>
         <p className="mt-3 truncate text-sm text-strong" title={item.series}>

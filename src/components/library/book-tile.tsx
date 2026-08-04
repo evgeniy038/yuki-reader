@@ -2,13 +2,13 @@ import type { Book } from "@/core/library";
 import { readingStateOf } from "@/core/library";
 import {
   BookOpen,
+  Bookmark,
   Image,
   Info,
   PencilSimple,
-  Star,
   Trash,
 } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -18,6 +18,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { DashRing } from "@/components/ui/dash-ring";
+import { ProgressRing } from "@/components/ui/progress-ring";
 import { BookCover } from "./book-cover";
 
 // A book on the shelf: cover, title, author, reading state (percent while
@@ -39,6 +40,7 @@ export function BookTile({
   onRename,
   onChangeCover,
   onDelete,
+  onToggleFavorite,
 }: {
   book: Book;
   flash?: boolean;
@@ -50,8 +52,23 @@ export function BookTile({
   onRename?: () => void;
   onChangeCover?: () => void;
   onDelete?: () => void;
+  /** Shows the pin control on the cover (hover to pin; pinned = ribbon). */
+  onToggleFavorite?: () => void;
 }) {
   const { t } = useTranslation();
+  // Flip the ribbon in only on a real pin action during this tile's life —
+  // never on mount, or every library visit would replay it for every pin.
+  const [justPinned, setJustPinned] = useState(false);
+  const prevFavoriteRef = useRef(book.favorite);
+  useEffect(() => {
+    if (book.favorite && !prevFavoriteRef.current) setJustPinned(true);
+    prevFavoriteRef.current = book.favorite;
+  }, [book.favorite]);
+  // Unpin lets the ribbon swing back over the edge before the state flips —
+  // the exit mirrors the entrance path, faster.
+  const [leaving, setLeaving] = useState(false);
+  const leaveTimerRef = useRef(0);
+  useEffect(() => () => window.clearTimeout(leaveTimerRef.current), []);
   const state = readingStateOf(book);
   const stateLabel =
     state === "finished"
@@ -79,20 +96,9 @@ export function BookTile({
         {book.progress > 0 ? (
           <div
             data-book-progress=""
-            className="absolute inset-x-1 bottom-1 h-1 rounded-pill bg-scrim"
+            className="absolute bottom-1.5 right-1.5 rounded-full bg-scrim p-1"
           >
-            <div
-              className="h-full rounded-pill bg-primary-gradient"
-              style={{ width: `${Math.min(1, book.progress) * 100}%` }}
-            />
-          </div>
-        ) : null}
-        {book.favorite ? (
-          <div
-            data-book-favorite=""
-            className="absolute right-1 top-1 grid size-5 place-items-center rounded-pill bg-scrim"
-          >
-            <Star weight="fill" className="size-3 text-white" />
+            <ProgressRing value={book.progress} className="size-6" />
           </div>
         ) : null}
       </div>
@@ -117,24 +123,70 @@ export function BookTile({
       </div>
     );
   }
+  // The pin control can't nest inside the tile's own <button>, so it rides
+  // as an absolutely-positioned sibling over the cover's top-right corner:
+  // a hover-revealed outline bookmark when unpinned, the ribbon itself when
+  // pinned — the ribbon is the unpin button. The hit area is a full 48px
+  // square; the visuals are smaller and centered inside it.
+  const handlePinClick = () => {
+    if (!onToggleFavorite) return;
+    if (!book.favorite) {
+      onToggleFavorite();
+      return;
+    }
+    setLeaving(true);
+    leaveTimerRef.current = window.setTimeout(() => {
+      setLeaving(false);
+      onToggleFavorite();
+    }, 200);
+  };
+  const pinControl = onToggleFavorite ? (
+    <button
+      type="button"
+      data-book-favorite=""
+      aria-label={t(book.favorite ? "library.menu.unpin" : "library.menu.pin")}
+      aria-pressed={book.favorite}
+      onClick={handlePinClick}
+      className={`absolute right-0 top-0 z-10 flex h-12 w-12 cursor-pointer items-start justify-center pin-toggle-transition active:scale-90 ${
+        book.favorite
+          ? "opacity-100"
+          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+      }`}
+    >
+      {book.favorite ? (
+        <span
+          className={`block h-9 w-7 bg-primary-gradient bookmark-ribbon ${
+            leaving ? "bookmark-flip-out" : justPinned ? "bookmark-flip" : ""
+          }`}
+        >
+          <Bookmark weight="fill" className="mx-auto mt-1.5 size-4 text-white" />
+        </span>
+      ) : (
+        <span className="mt-1.5 grid size-9 place-items-center rounded-full bg-scrim">
+          <Bookmark weight="bold" className="size-5 text-white" />
+        </span>
+      )}
+    </button>
+  ) : null;
   return (
-    <ContextMenu>
-      <ContextMenuTrigger
-        render={
-          <button
-            type="button"
-            onClick={onOpen}
-            aria-disabled={busy || undefined}
-            className={`group flex w-full flex-col text-left transition-transform ${
-              busy ? "cursor-default" : "cursor-pointer active:scale-98"
-            }`}
-            data-book-id={book.id}
-          />
-        }
-      >
-        {content}
-      </ContextMenuTrigger>
-      <ContextMenuContent>
+    <div className="group relative">
+      <ContextMenu>
+        <ContextMenuTrigger
+          render={
+            <button
+              type="button"
+              onClick={onOpen}
+              aria-disabled={busy || undefined}
+              className={`group flex w-full flex-col text-left transition-transform ${
+                busy ? "cursor-default" : "cursor-pointer active:scale-98"
+              }`}
+              data-book-id={book.id}
+            />
+          }
+        >
+          {content}
+        </ContextMenuTrigger>
+        <ContextMenuContent>
         <ContextMenuItem onClick={onOpen}>
           <BookOpen />
           {t("library.menu.open")}
@@ -163,7 +215,9 @@ export function BookTile({
           <Trash />
           {t("library.menu.delete")}
         </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+        </ContextMenuContent>
+      </ContextMenu>
+      {pinControl}
+    </div>
   );
 }
