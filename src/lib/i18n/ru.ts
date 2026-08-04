@@ -241,7 +241,6 @@ export const ru: Messages = {
     jump: "Перейти",
     jumpPercent: "Позиция чтения (%)",
     jumpPage: "Страница",
-    showControls: "Показать управление чтением",
   },
   drop: "Отпустите, чтобы открыть",
   ocr: {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CaretDown, CaretLeft, CornersOut, Gear, List, MagnifyingGlass } from "@phosphor-icons/react";
+import { CaretLeft, CornersOut, Gear, List, MagnifyingGlass } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,24 +9,27 @@ import type { ReaderPanelMode } from "./reader-panel";
 import { ReaderSettingsPopover } from "./reader-settings-popover";
 
 const PILL_HIDE_MS = 1000;
-const HANDLE_HIDE_MS = 2000;
-const REVEAL_ZONE_PX = 64;
-const FULLSCREEN_REVEAL_ZONE_PX = 64;
+// Edge-only reveal: a thin strip hugging the top edge. Text never lives
+// there (page margin is far below), so scanning words near the top can't
+// trip it — every reveal is a deliberate edge throw, which by Fitt's law is
+// the easiest target on the screen.
+const REVEAL_ZONE_PX = 10;
+// Fullscreen: the edge is the system menu bar gesture — a few pixels are
+// enough to catch the intent as the cursor arrives.
+const FULLSCREEN_REVEAL_ZONE_PX = 4;
 
-// Auto-hiding control pill (mac-dock style): appears when the cursor nears the
-// top edge, taps the pull handle, or hovers the pill, slides away otherwise.
-// Holds exit / panels / settings / fullscreen. The settings popover is a
-// separate component — controlled via settingsOpen when passed, otherwise the
-// chrome owns the flag (an open popover pins the pill visible).
+// Auto-hiding control pill (mac-dock style): reveals only when the cursor
+// touches the very top edge — never from the page body, so hovering words at
+// the top of a column (dictionary popups included) stays undisturbed. Holds
+// exit / panels / settings / fullscreen. The settings popover is a separate
+// component — controlled via settingsOpen when passed, otherwise the chrome
+// owns the flag (an open popover pins the pill visible).
 // Everything here is ABSOLUTE inside the reader root (relative, exactly
 // viewport-sized): no fixed-position layers in the chrome at all.
-// FULLSCREEN: the top strip of the screen belongs to the system — the macOS
-// menu bar (~33px, and Chrome's own exit control) drops over the page's top
-// while the cursor is up there, and hits in that strip go to the system, not
-// the page. So in fullscreen the pill parks just BELOW the bar (44px) and the
-// reveal zone starts under it — the cursor never has to touch the top edge.
-// The pull handle stays at the very top: when the bar is down it's covered
-// (invisible, untargetable anyway); the rest of the time it works.
+// FULLSCREEN: the top edge belongs to the system — touching it drops the
+// macOS menu bar over the page while the cursor is up there. That is the
+// same combined gesture Safari uses (bar + toolbar drop together), so the
+// pill parks just BELOW the bar (44px) and reveals from the same edge touch.
 export function ReaderChrome({
   onExit,
   settings,
@@ -60,7 +63,6 @@ export function ReaderChrome({
   onSettingsOpenChange?: (open: boolean) => void;
 }) {
   const [pillVisible, setPillVisible] = useState(true);
-  const [handleVisible, setHandleVisible] = useState(false);
   const [settingsOpenInternal, setSettingsOpenInternal] = useState(false);
   const settingsOpen = settingsOpenProp ?? settingsOpenInternal;
   const { t } = useTranslation();
@@ -69,7 +71,6 @@ export function ReaderChrome({
   const pillVisibleRef = useRef(true);
   const settingsOpenRef = useRef(false);
   const pillHideTimer = useRef<number | undefined>(undefined);
-  const handleHideTimer = useRef<number | undefined>(undefined);
   // In fullscreen the top strip is the system's (see the header comment):
   // the pill drops below it and reveals from a lower zone.
   const fullscreen = useFullscreen();
@@ -83,12 +84,6 @@ export function ReaderChrome({
     fullscreenRef.current = fullscreen;
   }, [fullscreen]);
 
-  const scheduleHandleHide = () => {
-    if (handleHideTimer.current) window.clearTimeout(handleHideTimer.current);
-    handleHideTimer.current = window.setTimeout(() => {
-      setHandleVisible(false);
-    }, HANDLE_HIDE_MS);
-  };
   const hidePill = (force = false) => {
     if (
       !pillVisibleRef.current ||
@@ -97,8 +92,6 @@ export function ReaderChrome({
       return;
     pillVisibleRef.current = false;
     setPillVisible(false);
-    setHandleVisible(true);
-    scheduleHandleHide();
   };
   const schedulePillHide = () => {
     if (pillHideTimer.current) window.clearTimeout(pillHideTimer.current);
@@ -109,10 +102,8 @@ export function ReaderChrome({
   };
   const showPill = () => {
     if (pillHideTimer.current) window.clearTimeout(pillHideTimer.current);
-    if (handleHideTimer.current) window.clearTimeout(handleHideTimer.current);
     pillVisibleRef.current = true;
     setPillVisible(true);
-    setHandleVisible(false);
     if (!hovering.current && !settingsOpenRef.current) schedulePillHide();
   };
 
@@ -126,8 +117,6 @@ export function ReaderChrome({
   useEffect(() => {
     schedulePillHide();
     const onMove = (event: MouseEvent) => {
-      // Fullscreen: reveal from a compact zone hugging the parked pill — the
-      // cursor never has to enter the system-owned top strip.
       const revealY = fullscreenRef.current
         ? FULLSCREEN_REVEAL_ZONE_PX
         : REVEAL_ZONE_PX;
@@ -145,8 +134,6 @@ export function ReaderChrome({
     document.addEventListener("click", onDocumentClick, true);
     return () => {
       if (pillHideTimer.current) window.clearTimeout(pillHideTimer.current);
-      if (handleHideTimer.current)
-        window.clearTimeout(handleHideTimer.current);
       window.removeEventListener("mousemove", onMove);
       document.removeEventListener("click", onDocumentClick, true);
     };
@@ -165,23 +152,6 @@ export function ReaderChrome({
 
   return (
     <div ref={chromeRef}>
-      <button
-        type="button"
-        onMouseEnter={showPill}
-        onClick={showPill}
-        aria-label={t("reader.showControls")}
-        title={t("reader.showControls")}
-        tabIndex={handleVisible ? 0 : -1}
-        className={cn(
-          "absolute left-1/2 top-0 z-40 flex -translate-x-1/2 cursor-pointer items-center justify-center rounded-b-md border border-t-0 border-subtle bg-raised px-2.5 pb-0.5 text-muted-content shadow-floating transition-opacity duration-200 hover:text-strong",
-          handleVisible
-            ? "pointer-events-auto opacity-100"
-            : "pointer-events-none opacity-0",
-        )}
-      >
-        <CaretDown weight="bold" className="size-3" />
-      </button>
-
       <div
         onMouseEnter={() => {
           hovering.current = true;

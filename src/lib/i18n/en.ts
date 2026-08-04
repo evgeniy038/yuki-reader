@@ -243,7 +243,6 @@ export const en = {
     jump: "Go",
     jumpPercent: "Reading position (%)",
     jumpPage: "Page",
-    showControls: "Show reader controls",
   },
   drop: "Drop to open",
   ocr: {

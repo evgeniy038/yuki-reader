@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.3] - 2026-08-03
+
+- Reader: the control pill no longer drops over words you're scanning — it reveals only at a deliberate touch of the very top edge, and the little pull tab is gone for good
+
 ## [1.3.2] - 2026-08-03
 
 - Progress transfer: export/import live in clear Settings rows with icon tiles, and imports validate the entire backup before touching the library — a broken ZIP can't leave data half-restored
