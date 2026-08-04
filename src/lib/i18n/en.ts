@@ -129,7 +129,6 @@ export const en = {
       noBook: "Open a book — a percent goal scales with its volume",
     },
     charts: {
-      title: "Charts",
       minutes: "Minutes per day",
       minutesAria: "Active reading minutes per day for the last two weeks",
       speed: "Reading speed",

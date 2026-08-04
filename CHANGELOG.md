@@ -10,8 +10,8 @@ versioning — [SemVer](https://semver.org/).
 - Library: covers now show a small progress ring, so you can see how far each book is without opening it
 - Library: pin a book right from its cover — hover and the bookmark's tip peeks over the edge, one click and the ribbon slides into place — or from the right-click menu; pinned books lead their section in every sort order
 - Library: language sections can be dragged into your own order; the order sticks, and it travels with your backups
-- Stats: new charts — dithered minutes per day, your reading speed over the last two weeks, and the current book's pace with an honest "days left" estimate; weekday letters keep the days grounded, and every column answers a hover with exact numbers
-- Stats: heatmap days open a proper tooltip with the day's time, characters read, and the books you actually read that day — covers included
+- Stats: new charts — minutes per day, your reading speed over the last two weeks, and the current book's pace with an honest "days left" estimate; weekday letters keep the days grounded, and every column answers a hover with exact numbers
+- Stats: the activity heatmap now sits with the charts in one Statistics section, and every day opens a proper tooltip — the day's time, characters read, and the books you actually read that day, covers included
 
 ## [1.3.3] - 2026-08-03
 

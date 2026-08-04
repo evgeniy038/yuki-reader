@@ -22,7 +22,6 @@ import {
 } from "./page-shell";
 import { SummarySection } from "./summary-section";
 import { ChartsSection } from "./charts-section";
-import { ActivityHeatmap } from "./activity-heatmap";
 import { GoalSection, type GoalBookOption } from "./goal-section";
 
 // Statistics page — the habit surface: today's numbers, a streak, the
@@ -101,8 +100,12 @@ export function StatsView({
               total={totals(days)}
               todaySpeed={today ? speedLabel(today) : null}
             />
-            <ChartsSection days={days} books={books} todayKey={todayKey} />
-            <ActivityHeatmap days={days} todayKey={todayKey} bookMeta={bookMeta} />
+            <ChartsSection
+              days={days}
+              books={books}
+              todayKey={todayKey}
+              bookMeta={bookMeta}
+            />
             <GoalSection
               todayChars={today?.chars ?? 0}
               todayPages={today?.pages ?? 0}

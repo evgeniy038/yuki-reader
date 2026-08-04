@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
 import type { DailyStats } from "@/core/storage";
@@ -15,17 +15,18 @@ import {
 import { formatDuration } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
+import { ActivityHeatmap } from "./activity-heatmap";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
 
-// The last-two-weeks charts: minutes per day in an ordered-dither texture,
-// reading speed, and the current book's pace with an ETA. All hand-rolled
-// SVG — no chart library. Charts stretch to the card width via
-// preserveAspectRatio="none"; strokes opt out of the stretch with
-// vector-effect, and the speed dots are round-capped zero-length strokes (a
-// filled shape would distort). Day letters live in HTML under the SVG —
-// text inside a non-uniformly stretched SVG would squash. Every chart
-// column is a hover zone with a tooltip — the SVG itself carries no
-// pointer logic.
+// The "Statistics" section: minutes per day, reading speed, the current
+// book's pace with an ETA, and the half-year activity heatmap at the
+// bottom. All hand-rolled SVG — no chart library. Charts stretch to the
+// card width via preserveAspectRatio="none"; strokes opt out of the
+// stretch with vector-effect, and the speed dots are round-capped
+// zero-length strokes (a filled shape would distort). Day letters live in
+// HTML under the SVG — text inside a non-uniformly stretched SVG would
+// squash. Every chart column is a hover zone with a tooltip — the SVG
+// itself carries no pointer logic.
 const WINDOW = 14;
 const SLOT = 22; // viewBox units per day
 const BAR = 14; // bar width
@@ -118,9 +119,6 @@ function ChartHeader({ label, value }: { label: string; value?: string }) {
 
 function MinutesChart({ points }: { points: { key: string; minutes: number }[] }) {
   const { t } = useTranslation();
-  // Pattern ids must not collide across instances; useId can contain
-  // characters url(#...) dislikes, so strip them.
-  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const max = Math.max(...points.map((p) => p.minutes));
   const w = points.length * SLOT;
   const y = (v: number) => H - (v / max) * (H - TOP);
@@ -133,20 +131,6 @@ function MinutesChart({ points }: { points: { key: string; minutes: number }[] }
         role="img"
         aria-label={t("stats.charts.minutesAria")}
       >
-        <defs>
-          {/* Ordered dither, 2×2 Bayer: ordinary days run the 50% checker,
-              the biggest day the denser 75% — the accent is texture, not a
-              second color. */}
-          <pattern id={`${uid}-a`} width="4" height="4" patternUnits="userSpaceOnUse">
-            <rect x={0} y={0} width={2} height={2} fill="var(--color-primary)" />
-            <rect x={2} y={2} width={2} height={2} fill="var(--color-primary)" />
-          </pattern>
-          <pattern id={`${uid}-b`} width="4" height="4" patternUnits="userSpaceOnUse">
-            <rect x={0} y={0} width={2} height={2} fill="var(--color-primary)" />
-            <rect x={2} y={2} width={2} height={2} fill="var(--color-primary)" />
-            <rect x={2} y={0} width={2} height={2} fill="var(--color-primary)" />
-          </pattern>
-        </defs>
         {/* Quarter grid + baseline: structure, so a sparse week still reads
             as a chart and not as a bug. */}
         {[0.25, 0.5, 0.75].map((f) => (
@@ -179,7 +163,8 @@ function MinutesChart({ points }: { points: { key: string; minutes: number }[] }
               width={BAR}
               height={H - y(p.minutes)}
               rx={2}
-              fill={`url(#${uid}-${p.minutes === max ? "b" : "a"})`}
+              fill="var(--color-primary)"
+              opacity={p.minutes === max ? 0.95 : 0.45}
             />
           ) : null,
         )}
@@ -290,10 +275,12 @@ export function ChartsSection({
   days,
   books,
   todayKey,
+  bookMeta,
 }: {
   days: DailyStats[];
   books: Book[];
   todayKey: string;
+  bookMeta: Map<string, { title: string; cover?: string }>;
 }) {
   const { t } = useTranslation();
   const minutes = dailyMinutesSeries(days, WINDOW, todayKey);
@@ -320,10 +307,10 @@ export function ChartsSection({
   }
 
   return (
-    <SettingsGroup title={t("stats.charts.title")}>
+    <SettingsGroup title={t("stats.title")}>
       <SettingsBlock>
-        {/* One provider for both charts: sweeping across days and charts
-            switches tooltips instantly. */}
+        {/* One provider for the whole section: sweeping across days, charts
+            and heatmap cells switches tooltips instantly. */}
         <TooltipProvider delay={50}>
           <div className="flex flex-col gap-5">
             {maxMinutes > 0 ? (
@@ -387,6 +374,12 @@ export function ChartsSection({
                 </div>
               </div>
             ) : null}
+            {/* The heatmap closes the section — the long view after the
+                two-week detail. */}
+            <div className="flex flex-col gap-2">
+              <ChartHeader label={t("stats.activity")} />
+              <ActivityHeatmap days={days} todayKey={todayKey} bookMeta={bookMeta} />
+            </div>
           </div>
         </TooltipProvider>
       </SettingsBlock>
