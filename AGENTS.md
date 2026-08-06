@@ -12,9 +12,12 @@ pnpm, never npm (`preinstall` enforces it).
 - Install: `pnpm install`
 - Dev server: `pnpm dev` → http://localhost:1420
 - Type check: `pnpm typecheck`
-- Unit tests: `pnpm test` — node-side smokes via tsx (epub parser,
-  dictionaries, backup round-trip on fake-indexeddb)
+- Unit tests: `pnpm test` — node-side smokes via tsx (epub parser and
+  resources, dictionaries, backup round-trip on fake-indexeddb, shelf,
+  stats, book-css)
 - Focused: `pnpm test:epub` / `pnpm test:dictionaries` / `pnpm test:backup`
+  / `pnpm test:shelf` / `pnpm test:stats` / `pnpm test:book-css` /
+  `pnpm test:resources`
 - Browser e2e: `pnpm test:backup-smoke` (plus test:layout, test:position,
   test:library, test:ocr-download) — real Chrome via playwright-core
   against the dev server; needs YUKI*TEST*\* fixture env vars, see
@@ -29,7 +32,10 @@ never claim it passed.
 
 - `src/core/` — browser-free domain logic: book parsing (epub/pdf/manga),
   backup, storage over IndexedDB, dictionaries, OCR. Must stay runnable in
-  node: unit tests import it directly.
+  node: unit tests import it directly. Big domains live in submodules
+  (`core/storage/`, `core/backup/`, `core/dictionaries/`, `core/ocr/`) —
+  the flat files at the old paths are facades with exact re-exports, so
+  import paths stay stable.
 - `src/components/` — React UI. `src/components/ui/` holds the primitives
   (Button, Dialog, Switch); use them before inventing new ones.
 - `src/lib/` — shared helpers (i18n).
@@ -51,6 +57,13 @@ never claim it passed.
   asserts, no fake-green. A bug fix adds a regression fixture.
 - Minimal diffs: no compatibility shims, no speculative abstractions, no
   drive-by reformatting.
+- No file grows past ~400 lines: split bigger ones along natural seams
+  (helpers, hooks, sub-views) and keep the old import path a facade of
+  exact re-exports — importers don't move.
+- Heavy second layers load lazily: routes beyond the shelf (`/stats`,
+  `/settings`, `/manga/:key`) and the PDF reader are `React.lazy` +
+  `Suspense`; pdfjs enters the bundle only via `await import` on the PDF
+  path — never in the entry chunk.
 - No new dependencies without asking first.
 - No git mutations (commit/push/reset) unless the user explicitly asks.
 - Browser checks: never edit `src/` while one is running — vite

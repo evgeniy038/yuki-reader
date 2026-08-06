@@ -33,17 +33,29 @@ every page starts at the same offset from the card edge; `PageTitle`
 make sense in this section (sort and "Add book" for the Library — both
 hidden on the empty shelf, where the empty state carries the add action);
 filters go before the button. A section inside a page keeps its action in the section
-header. Section subtitles share one `PageSectionTitle`. An empty section
-shows an **empty state** — one pattern across pages: centered icon, title,
-one line of description, and an accent action button.
+header. Section subtitles are plain `h2` (`text-sm text-default`) with
+subsections one step down (`h3`, `text-xs text-muted-content`) — no dedicated
+component. An empty section shows an **empty state** — one pattern across
+pages: centered icon, title, one line of description, and an accent action
+button.
 
 - **Library** — the default section, the whole catalog: title with a counter,
   sort and "Add book" in the header, language sections. No search or filters
   by decision — minimalism wins. Import doesn't open the book: a batch lands
-  at once, opening happens from the tile.
+  at once, opening happens from the tile. A book can be **pinned** (the
+  bookmark ribbon on the cover's top-right corner, or the context menu):
+  pinned books lead their shelf section and carry the gradient ribbon. Each
+  language section collapses into a **folded stack** of covers (the section
+  header carries the caret; a folded section of mixed novels and manga folds
+  as one, manga subsections fold on their own), and sections reorder by
+  dragging the header — the order is remembered.
 - **Statistics** — the reading-habit section (same width and rhythm as
-  Settings): today's summary (characters, time, streak, totals), a half-year
-  activity **heatmap** (cells stretch to the card width; intensity by active
+  Settings): today's summary (characters, time, streak, totals), then the
+  **charts** card — minutes per day (bars, two-week window), **reading
+  speed** over the same window (characters per hour; pages per hour for
+  PDF) and the current book's pace (volume read and days left at that
+  speed) — and below it the half-year activity **heatmap** (cells stretch
+  to the card width; intensity by active
   minutes per day — the only measure shared by EPUB characters and PDF
   pages), and the **daily goal** — a progress ring (ProgressRing) and two
   count modes: flat characters or **percent of a book** — the goal book is
@@ -72,8 +84,15 @@ one line of description, and an accent action button.
   the furigana/language header and the text — is a bordered inset pane
   inside the card (SettingsBlock), fixed height, no masks; no hairline after
   the pane — the pane itself is the boundary; then "label + control" rows of
-  one height: font, size, line height, page margins) and
-  **About yuki** — build version and changelog, collapsed at the very bottom
+  one height: font, size, line height, page margins),
+  **Dictionaries** — the Yomitan-dictionary library: install from the
+  catalog or import a ZIP, reorder and toggle installed dictionaries
+  (currently parked: lookup and installation are disabled while package
+  delivery is fixed — the group shows, the actions sleep), **Progress** —
+  the backup group: everything (books, reading progress, stats, settings,
+  dictionaries) exports as one ZIP and restores back — from a Yuki backup
+  or a ttsu one — with honest per-item progress and a working cancel;
+  and **About yuki** — build version and changelog, collapsed at the very bottom
   of the page; the only source of entries is `CHANGELOG.md` (in English) —
   the group is built from it: a version is a one-liner with a short
   description, the full text expands on tap, bullet lead-ins ("Library: …")

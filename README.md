@@ -2,13 +2,15 @@
 
 **[yukireader.app](https://yukireader.app/)**
 
-A quiet offline-first reader for Japanese novels (EPUB) and English books
-(PDF). Runs in the browser, works fully offline after the first visit —
-library, progress and stats stay local in IndexedDB.
+A quiet offline-first reader for Japanese novels (EPUB), English books
+(PDF) and manga (zip/cbz/folders, with on-device OCR for scans). Runs in
+the browser, works fully offline after the first visit — library, progress
+and stats stay local in IndexedDB.
 
 - EPUB: vertical/horizontal layout, glyph-safe pagination, furigana
 - PDF: two-page spreads, page background follows the reading theme
-- Reading stats, automatic bookmarks, EN/RU interface
+- Manga: series of volumes, right-to-left spreads, OCR text boxes on hover
+- Reading stats and charts, automatic bookmarks, backup/restore, EN/RU interface
 
 ![Library](screenshots/library.png)
 
@@ -23,7 +25,7 @@ library, progress and stats stay local in IndexedDB.
 pnpm install
 pnpm dev        # http://localhost:1420
 pnpm build      # production build to dist/
-pnpm test       # parser smokes
+pnpm test       # node-side smokes: epub, dictionaries, backup, shelf, stats, css
 ```
 
 ## Release
