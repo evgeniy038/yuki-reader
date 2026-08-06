@@ -1,5 +1,4 @@
 import { parseEpub } from "./epub";
-import { importPdf } from "./pdf";
 import { detectLanguage, type BookFormat, type Language } from "./library";
 import { deriveToc, type Chapter, type EpubResource, type TocEntry } from "./reading";
 
@@ -51,7 +50,9 @@ export async function importBookFile(file: File): Promise<ImportedFile> {
     // PDF: pages are rendered straight from the stored bytes at read time.
     // Import keeps only a text sample (language + dup hash), the page count,
     // and a cover render — no reflowed text, so ugly PDFs (scans, formulas,
-    // layouts) survive untouched.
+    // layouts) survive untouched. pdf.js (~350 kB min) loads on demand here:
+    // importing an EPUB never pays for it.
+    const { importPdf } = await import("./pdf");
     const parsed = await importPdf(bytes);
     return finalize(file, {
       format: "pdf",

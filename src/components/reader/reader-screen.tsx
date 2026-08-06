@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Book } from "@/core/library";
 import { DICTIONARIES_ENABLED } from "@/core/dictionaries";
@@ -8,13 +8,38 @@ import {
   type ReadingSettings,
 } from "@/core/reading-settings";
 import type { OpenedData } from "@/components/library/use-shelf";
+import { DashRing } from "@/components/ui/dash-ring";
 import { useEscapeKey } from "@/lib/use-escape-key";
 import { ReadingView } from "./reading-view";
-import { PdfReadingView } from "./pdf-reading-view";
 import { MangaReadingView } from "./manga-reading-view";
 import { ReaderChrome } from "./reader-chrome";
 import type { ReaderPanelMode } from "./reader-panel";
 import { DictionaryLookupLayer } from "./dictionary-popup";
+
+// The PDF view pulls in pdf.js (~350 kB min) — code-split, so only opening
+// an actual PDF pays for it. Declared at module level: a lazy component
+// created inside render would reset its state on every re-render.
+const PdfReadingView = lazy(() =>
+  import("./pdf-reading-view").then((module) => ({
+    default: module.PdfReadingView,
+  })),
+);
+
+// While the PDF chunk streams in, paint the same surface the view itself
+// paints (reading-bg, centered) so the swap reads as loading, not a hole.
+function PdfViewFallback() {
+  return (
+    <div
+      className="grid h-full w-full place-items-center"
+      style={{ background: "var(--reading-bg, var(--ds-surface-canvas))" }}
+    >
+      <DashRing
+        className="size-6"
+        style={{ color: "var(--reading-muted, var(--ds-content-muted))" }}
+      />
+    </div>
+  );
+}
 
 // The full-screen reader: the book view (EPUB reflow or PDF pages) and the
 // auto-hiding chrome. Reader-only UI state
@@ -92,14 +117,16 @@ export function ReaderScreen({
         className="h-screen w-full"
       >
         {book.format === "pdf" && data.pdfBytes ? (
-          <PdfReadingView
-            pdfBytes={data.pdfBytes}
-            initialProgress={book.progress}
-            panel={panel}
-            onPanelChange={setPanel}
-            onOutlineChange={setPdfHasOutline}
-            onProgress={onProgress}
-          />
+          <Suspense fallback={<PdfViewFallback />}>
+            <PdfReadingView
+              pdfBytes={data.pdfBytes}
+              initialProgress={book.progress}
+              panel={panel}
+              onPanelChange={setPanel}
+              onOutlineChange={setPdfHasOutline}
+              onProgress={onProgress}
+            />
+          </Suspense>
         ) : book.format === "manga" ? (
           <MangaReadingView
             bookId={book.id}

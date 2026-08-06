@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Navigate,
@@ -23,11 +23,8 @@ import {
 import { saveProgress } from "@/core/storage";
 import { resumeMangaOcr } from "@/core/ocr/ocr";
 import { LibraryPage } from "@/components/library/library-page";
-import { MangaPage } from "@/components/library/manga-page";
 import { NavPill, type AppView } from "@/components/library/nav-pill";
 import { OcrQueuePanel } from "@/components/ocr-queue-panel";
-import { SettingsPage } from "@/components/library/settings-page";
-import { StatsView } from "@/components/library/stats-view";
 import { useShelf } from "@/components/library/use-shelf";
 import { useFileDrop } from "@/components/library/use-drag-drop";
 import { useGoalBook } from "@/components/library/use-goal-book";
@@ -35,6 +32,35 @@ import { ReaderScreen } from "@/components/reader/reader-screen";
 import { useReadingSession } from "@/components/reader/use-reading-session";
 import { DashRing } from "@/components/ui/dash-ring";
 import { demoModeRequested, useDemoBook } from "@/components/use-demo-mode";
+
+// Second-layer pages code-split off the shell: the library and the reader
+// (the app's main verbs) stay in the entry chunk; stats, settings and the
+// manga series page stream in on first visit. Declared at module level —
+// a lazy component created inside render resets state every re-render.
+const StatsView = lazy(() =>
+  import("@/components/library/stats-view").then((module) => ({
+    default: module.StatsView,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("@/components/library/settings-page").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+const MangaPage = lazy(() =>
+  import("@/components/library/manga-page").then((module) => ({
+    default: module.MangaPage,
+  })),
+);
+
+// Shown in the routed area while a second-layer page's chunk loads.
+function RouteFallback() {
+  return (
+    <div className="grid h-full place-items-center">
+      <DashRing className="size-6 text-muted-content" />
+    </div>
+  );
+}
 
 // The app shell: routing, the stores (shelf, reading settings) and
 // their wiring to screens. All book/session logic lives in the hooks and
@@ -164,45 +190,51 @@ export default function App() {
           <Route
             path="stats"
             element={
-              <StatsView
-                books={shelf.books}
-                goalBook={goalBook}
-                goalBookOptions={shelf.books.map((book) => ({
-                  id: book.id,
-                  title: book.title,
-                  cover: book.cover,
-                }))}
-                onGoalBookChange={setGoalBookId}
-              />
+              <Suspense fallback={<RouteFallback />}>
+                <StatsView
+                  books={shelf.books}
+                  goalBook={goalBook}
+                  goalBookOptions={shelf.books.map((book) => ({
+                    id: book.id,
+                    title: book.title,
+                    cover: book.cover,
+                  }))}
+                  onGoalBookChange={setGoalBookId}
+                />
+              </Suspense>
             }
           />
           <Route
             path="settings"
             element={
-              <SettingsPage
-                settings={readingSettings}
-                onSettingsChange={setReadingSettings}
-              />
+              <Suspense fallback={<RouteFallback />}>
+                <SettingsPage
+                  settings={readingSettings}
+                  onSettingsChange={setReadingSettings}
+                />
+              </Suspense>
             }
           />
           <Route
             path="manga/:seriesKey"
             element={
-              <MangaPage
-                books={shelf.books}
-                shelfReady={shelf.shelfReady}
-                error={shelf.error}
-                notice={shelf.notice}
-                onOpenBook={openBook}
-                onRenameBook={shelf.renameBook}
-                onDeleteBook={shelf.removeBook}
-                onRenameSeries={shelf.renameSeries}
-                onMoveVolume={shelf.moveVolumeToSeries}
-                onMoveSeries={shelf.moveSeries}
-                onDeleteSeries={shelf.removeSeries}
-                onReorder={shelf.setVolumeOrder}
-                onAddVolumes={shelf.importManga}
-              />
+              <Suspense fallback={<RouteFallback />}>
+                <MangaPage
+                  books={shelf.books}
+                  shelfReady={shelf.shelfReady}
+                  error={shelf.error}
+                  notice={shelf.notice}
+                  onOpenBook={openBook}
+                  onRenameBook={shelf.renameBook}
+                  onDeleteBook={shelf.removeBook}
+                  onRenameSeries={shelf.renameSeries}
+                  onMoveVolume={shelf.moveVolumeToSeries}
+                  onMoveSeries={shelf.moveSeries}
+                  onDeleteSeries={shelf.removeSeries}
+                  onReorder={shelf.setVolumeOrder}
+                  onAddVolumes={shelf.importManga}
+                />
+              </Suspense>
             }
           />
           <Route
