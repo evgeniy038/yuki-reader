@@ -78,9 +78,9 @@ export function SeriesTile({
             // static (no flip) — the toggle lives on the volume tiles.
             <span
               data-book-favorite=""
-              className="absolute right-2.5 top-0 block h-9 w-7 bg-primary-gradient bookmark-ribbon"
+              className="absolute right-2.5 top-0 block h-12 w-7 bg-primary-gradient bookmark-ribbon"
             >
-              <Bookmark weight="fill" className="mx-auto mt-1.5 size-4 text-white" />
+              <Bookmark weight="fill" className="relative top-1.5 mx-auto size-4 text-white" />
             </span>
           ) : null}
         </div>

@@ -116,10 +116,12 @@ export function BookTile({
   // above the cover and its notched tip slides out on tile hover — already
   // the primary gradient, the bookmark is visibly THERE; pinning drops it
   // to full length on a light spring and fades the icon in, unpinning
-  // retracts it. All motion is a transform on a promoted layer (no scale —
-  // a squashing ribbon reads as a glitch); the hit area is a full 56px
-  // square. The clip window is 4px taller than the ribbon so the spring's
-  // settle is never cut flat.
+  // retracts it. The pinned ribbon is TALL (48px — a real bookmark, not a
+  // stub) and rests 6px INTO the clip, its top reserve hidden above the
+  // cover's edge: the spring's settle can only reveal more ribbon, never
+  // open a gap at the seam. All motion is a transform on a promoted layer
+  // (no scale — a squashing ribbon reads as a glitch); the hit area is a
+  // full 56px square.
   const pinControl = onToggleFavorite ? (
     <button
       type="button"
@@ -129,12 +131,12 @@ export function BookTile({
       onClick={onToggleFavorite}
       className="group/pin absolute right-0 top-0 z-10 h-14 w-14 cursor-pointer outline-none"
     >
-      <span className="absolute right-2.5 top-0 block h-10 w-7 overflow-hidden">
+      <span className="absolute right-2.5 top-0 block h-[52px] w-7 overflow-hidden">
         <span
-          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
+          className={`relative block h-[54px] w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
             book.favorite
-              ? "translate-y-0 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:translate-y-[3px] group-focus-visible/pin:translate-y-[3px]"
-              : "-translate-y-full ease-out group-hover:-translate-y-[20px] group-focus-visible/pin:-translate-y-[20px] group-active/pin:-translate-y-[16px]"
+              ? "-translate-y-[6px] ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:-translate-y-[3px] group-focus-visible/pin:-translate-y-[3px]"
+              : "-translate-y-full ease-out group-hover:-translate-y-[38px] group-focus-visible/pin:-translate-y-[38px] group-active/pin:-translate-y-[34px]"
           }`}
         >
           <Bookmark
