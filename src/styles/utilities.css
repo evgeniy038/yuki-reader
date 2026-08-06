@@ -109,7 +109,7 @@
    V-notch. clip-path can't share rounded corners, so the top stays square —
    place it away from the cover's rounded corner. */
 @utility bookmark-ribbon {
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%);
 }
 
 /* Dynamic spinner: steady rotation + slower eased rotation + arc-length

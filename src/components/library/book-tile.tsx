@@ -116,12 +116,11 @@ export function BookTile({
   // above the cover and its notched tip slides out on tile hover — already
   // the primary gradient, the bookmark is visibly THERE; pinning drops it
   // to full length on a light spring and fades the icon in, unpinning
-  // retracts it. The pinned ribbon is TALL (48px — a real bookmark, not a
-  // stub) and rests 6px INTO the clip, its top reserve hidden above the
-  // cover's edge: the spring's settle can only reveal more ribbon, never
-  // open a gap at the seam. All motion is a transform on a promoted layer
-  // (no scale — a squashing ribbon reads as a glitch); the hit area is a
-  // full 56px square.
+  // retracts it. The pinned ribbon rests 13px INTO the clip — a hidden
+  // reserve above the cover's edge: the spring's settle can only reveal
+  // more ribbon, never open a gap at the seam. All motion is a transform
+  // on a promoted layer (no scale — a squashing ribbon reads as a glitch);
+  // the hit area is a full 56px square.
   const pinControl = onToggleFavorite ? (
     <button
       type="button"
@@ -135,13 +134,13 @@ export function BookTile({
         <span
           className={`relative block h-[54px] w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
             book.favorite
-              ? "-translate-y-[6px] ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:-translate-y-[3px] group-focus-visible/pin:-translate-y-[3px]"
-              : "-translate-y-full ease-out group-hover:-translate-y-[38px] group-focus-visible/pin:-translate-y-[38px] group-active/pin:-translate-y-[34px]"
+              ? "-translate-y-[13px] ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:-translate-y-[10px] group-focus-visible/pin:-translate-y-[10px]"
+              : "-translate-y-full ease-out group-hover:-translate-y-[30px] group-focus-visible/pin:-translate-y-[30px] group-active/pin:-translate-y-[26px]"
           }`}
         >
           <Bookmark
             weight="fill"
-            className={`relative mx-auto top-1.5 block size-4 text-white transition-[opacity,transform] duration-200 ${
+            className={`relative mx-auto top-[22px] block size-4 text-white transition-[opacity,transform] duration-200 ${
               book.favorite
                 ? "translate-y-0 opacity-100 delay-100"
                 : "-translate-y-1 opacity-0"
