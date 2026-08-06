@@ -1,13 +1,25 @@
 import { strFromU8, unzipSync } from "fflate";
-import { XMLParser } from "fast-xml-parser";
 import { mimeFromExtension } from "./mime";
 import type {
   Chapter,
   EpubMetadata,
   EpubResource,
   ParsedEpub,
-  TocEntry,
 } from "./reading";
+import {
+  asArray,
+  child,
+  decodePath,
+  dirOf,
+  getStr,
+  resolvePath,
+  rewriteImages,
+  stripSvgSize,
+  text,
+  titleFromHtml,
+  xml,
+} from "./epub-utils";
+import { parseToc } from "./epub-toc";
 
 // EPUB parser: container -> OPF -> spine chapters, plus packed images as bytes,
 // concatenated book CSS, and the cover. Image references inside chapter HTML
@@ -17,98 +29,8 @@ import type {
 // zip entries) and percent-tolerant: hrefs are URI references, so they are
 // decoded before matching, and zip entries are also indexed under their
 // decoded names for the reverse direction. This keeps the core browser-free
-// and node-testable.
-
-const DUMMY_BASE = "data:image/gif;yuki:";
-const DUMMY_SUFFIX = ";base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
-function dummy(path: string): string {
-  return `${DUMMY_BASE}${path}${DUMMY_SUFFIX}`;
-}
-
-const xml = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: "@_",
-  textNodeName: "#text",
-});
-
-function child(obj: unknown, name: string): unknown {
-  if (obj == null || typeof obj !== "object") return undefined;
-  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-    const colon = key.indexOf(":");
-    if ((colon === -1 ? key : key.slice(colon + 1)) === name) return value;
-  }
-  return undefined;
-}
-
-function attr(obj: unknown, name: string): unknown {
-  if (obj == null || typeof obj !== "object") return undefined;
-  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-    let k = key;
-    if (k.startsWith("@_")) k = k.slice(2);
-    const colon = k.indexOf(":");
-    if ((colon === -1 ? k : k.slice(colon + 1)) === name) return value;
-  }
-  return undefined;
-}
-
-function getStr(obj: unknown, name: string): string | undefined {
-  const value = attr(obj, name);
-  return typeof value === "string" ? value : undefined;
-}
-
-function asArray(value: unknown): unknown[] {
-  if (value == null) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-function text(value: unknown): string | undefined {
-  if (typeof value === "string") return value;
-  if (value && typeof value === "object" && "#text" in (value as object)) {
-    const t = (value as Record<string, unknown>)["#text"];
-    return typeof t === "string" ? t : undefined;
-  }
-  return undefined;
-}
-
-function normalize(path: string): string {
-  const parts: string[] = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") parts.pop();
-    else parts.push(segment);
-  }
-  return parts.join("/");
-}
-
-function dirOf(path: string): string {
-  const slash = path.lastIndexOf("/");
-  return slash === -1 ? "" : path.slice(0, slash);
-}
-
-// Hrefs in the OPF, NCX/nav and chapter HTML are URI references: percent-
-// decoding maps them to actual zip paths ("chapter%201.xhtml" ->
-// "chapter 1.xhtml"). A malformed sequence (a literal '%' in a name, e.g.
-// "100%.xhtml") must not throw — keep the raw form.
-function decodePath(path: string): string {
-  try {
-    return decodeURIComponent(path);
-  } catch {
-    return path;
-  }
-}
-
-// Resolve an href against its base directory into a normalized zip path.
-function resolvePath(dir: string, href: string): string {
-  const decoded = decodePath(href);
-  return normalize(dir ? `${dir}/${decoded}` : decoded);
-}
-
-function titleFromHtml(html: string): string | undefined {
-  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  if (!match) return undefined;
-  const plain = match[1]!.replace(/<[^>]+>/g, "").trim();
-  return plain === "" ? undefined : plain;
-}
+// and node-testable. XML/path/rewrite helpers live in epub-utils.ts, the TOC
+// pass (NCX/nav) in epub-toc.ts.
 
 // Infer image MIME from magic bytes (first few bytes of the file).
 function mimeFromMagic(bytes: Uint8Array): string | undefined {
@@ -135,81 +57,6 @@ function mimeFromMagic(bytes: Uint8Array): string | undefined {
 function fixMime(mime: string, path: string, bytes: Uint8Array): string {
   if (mime.startsWith("image/")) return mime;
   return mimeFromExtension(path) ?? mimeFromMagic(bytes) ?? "image/jpeg";
-}
-
-// Rewrite <img src> / <image href|xlink:href> that point at packed resources to
-// the dummy token URL; leave external / data / anchor refs untouched.
-function rewriteImages(
-  html: string,
-  chapterDir: string,
-  resourcePaths: Set<string>,
-): string {
-  const resolve = (val: string): string => {
-    if (/^(data:|https?:|#|mailto:)/i.test(val)) return val;
-    const resolved = resolvePath(chapterDir, val);
-    return resourcePaths.has(resolved) ? dummy(resolved) : val;
-  };
-  const replaceAttr = (
-    source: string,
-    tag: string,
-    attrPattern: string,
-  ): string =>
-    source.replace(
-      new RegExp(`(<${tag}\\b[^>]*?\\s${attrPattern}\\s*=\\s*)(["'])([^"']*?)\\2`, "gi"),
-      (_m, pre: string, q: string, val: string) => `${pre}${q}${resolve(val)}${q}`,
-    );
-  let out = html;
-  out = replaceAttr(out, "img", "src");
-  out = replaceAttr(out, "image", "(?:xlink:)?href");
-  return out;
-}
-
-// <svg> width/height attributes pin the intrinsic viewport size and fight the
-// reader's max-width/max-height constraints — drop them so CSS owns sizing.
-function stripSvgSize(html: string): string {
-  return html.replace(/<svg\b[^>]*>/gi, (tag) =>
-    tag
-      .replace(/\s(?:width|height)\s*=\s*"[^"]*"/gi, "")
-      .replace(/\s(?:width|height)\s*=\s*'[^']*'/gi, ""),
-  );
-}
-
-// --- Table of contents (EPUB2 NCX / EPUB3 nav document) --------------------
-
-interface RawTocEntry {
-  label: string;
-  src: string;
-}
-
-// All text under a parsed XML node (fast-xml-parser splits text into #text).
-function deepText(node: unknown): string {
-  if (typeof node === "string") return node;
-  if (typeof node === "number") return String(node);
-  if (node == null || typeof node !== "object") return "";
-  if (Array.isArray(node)) return node.map(deepText).join("");
-  return Object.entries(node as Record<string, unknown>)
-    .filter(([key]) => !key.startsWith("@_"))
-    .map(([, value]) => deepText(value))
-    .join("");
-}
-
-// NCX navMap: navPoints nest; reading order is the document order.
-function walkNcx(navPoints: unknown, out: RawTocEntry[]): void {
-  for (const navPoint of asArray(navPoints)) {
-    const src = getStr(child(navPoint, "content"), "src");
-    if (src) out.push({ label: deepText(child(navPoint, "navLabel")), src });
-    walkNcx(child(navPoint, "navPoint"), out);
-  }
-}
-
-// Nav document: <li><a href>…</a><ol>…</ol></li> nesting; same document order.
-function walkNavItems(items: unknown, out: RawTocEntry[]): void {
-  for (const li of asArray(items)) {
-    const anchor = child(li, "a");
-    const href = getStr(anchor, "href");
-    if (href) out.push({ label: deepText(anchor), src: href });
-    walkNavItems(child(child(li, "ol"), "li"), out);
-  }
 }
 
 export function parseEpub(bytes: Uint8Array): ParsedEpub {
@@ -369,61 +216,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
     chapters.push({ id: idref, title: titleFromHtml(html), html });
   }
 
-  // Table of contents: EPUB3 nav document first, else the EPUB2 NCX. Entries
-  // map to spine chapters by resolved file path; in-file anchors are dropped —
-  // a TOC jump lands at the section start.
-  const idByResolvedPath = new Map<string, string>();
-  for (const item of items) {
-    const id = getStr(item, "id");
-    const href = getStr(item, "href");
-    if (id && href) {
-      idByResolvedPath.set(resolvePath(opfDirPath, href), id);
-    }
-  }
-  const rawToc: RawTocEntry[] = [];
-  let tocDir = "";
-  const navItem = items.find((item) =>
-    (getStr(item, "properties") ?? "").split(/\s+/).includes("nav"),
-  );
-  const ncxItem = items.find(
-    (item) => getStr(item, "media-type") === "application/x-dtbncx+xml",
-  );
-  const tocItem = navItem ?? ncxItem;
-  const tocHref = tocItem ? getStr(tocItem, "href") : undefined;
-  const tocResolved = tocHref ? resolvePath(opfDirPath, tocHref) : "";
-  const tocRaw = tocResolved === "" ? "" : read(tocResolved);
-  if (tocRaw !== "") {
-    if (navItem) {
-      const navDoc = xml.parse(tocRaw);
-      const htmlEl = child(navDoc, "html") ?? navDoc;
-      const body = child(htmlEl, "body") ?? htmlEl;
-      for (const nav of asArray(child(body, "nav"))) {
-        // Only the reading-order nav (skip landmarks/page-list).
-        if (getStr(nav, "type") !== "toc") continue;
-        walkNavItems(child(child(nav, "ol"), "li"), rawToc);
-      }
-    } else {
-      const ncxDoc = xml.parse(tocRaw);
-      const ncx = child(ncxDoc, "ncx") ?? ncxDoc;
-      walkNcx(child(child(ncx, "navMap"), "navPoint"), rawToc);
-    }
-    tocDir = dirOf(tocResolved);
-  }
-  const tocResolvedEntries: TocEntry[] = [];
-  for (const { label, src } of rawToc) {
-    const clean = src.split("#")[0]!;
-    const resolved = resolvePath(tocDir, clean);
-    const chapterId = idByResolvedPath.get(resolved);
-    const trimmed = label.replace(/\s+/g, " ").trim();
-    if (chapterId && trimmed !== "") {
-      tocResolvedEntries.push({ label: trimmed, chapterId });
-    }
-  }
-  // Consecutive duplicates: nested points often repeat the parent's target.
-  const toc = tocResolvedEntries.filter(
-    (entry, index) =>
-      index === 0 || entry.chapterId !== tocResolvedEntries[index - 1]!.chapterId,
-  );
+  const toc = parseToc(items, opfDirPath, read);
 
   return { metadata, chapters, toc, cover, resources, bookCss };
 }

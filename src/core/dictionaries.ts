@@ -1,5 +1,3 @@
-import { strFromU8, unzipSync } from "fflate";
-import { escapeHtml } from "./escape-html";
 import {
   deleteDictionary as deleteStoredDictionary,
   loadAllDictionaries,
@@ -8,6 +6,23 @@ import {
   setDictionaryEnabled,
   setDictionaryOrder,
 } from "./storage";
+import {
+  entryKey,
+  normalizeDictionaryTerm,
+  parseYomitanDictionary,
+  randomId,
+} from "./dictionaries/yomitan";
+
+// Facade over the dictionaries/ modules: the Yomitan ZIP parser lives in
+// dictionaries/yomitan.ts, the glossary HTML rendering in
+// dictionaries/html.ts. This file keeps the records, catalog, import and
+// lookup flow; import paths of existing consumers stay unchanged.
+
+export {
+  normalizeDictionaryTerm,
+  parseYomitanDictionary,
+} from "./dictionaries/yomitan";
+export { dictionaryGlossaryHtml, sanitizeDictionaryHtml } from "./dictionaries/html";
 
 export interface DictionaryRecord {
   id: string;
@@ -100,125 +115,6 @@ function notifyDictionaryChange(): void {
   }
 }
 
-interface ParsedDictionary {
-  title: string;
-  revision?: string;
-  format?: number;
-  author?: string;
-  description?: string;
-  attribution?: string;
-  sourceUrl?: string;
-  language?: string;
-  entries: Omit<DictionaryEntryRecord, "dictionaryId" | "key">[];
-}
-
-function randomId(): string {
-  return crypto.randomUUID();
-}
-
-export function normalizeDictionaryTerm(term: string): string {
-  return term.normalize("NFKC").trim().toLocaleLowerCase();
-}
-
-function stringOr(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() !== "" ? value : undefined;
-}
-
-function parseIndex(bytes: Uint8Array): Record<string, unknown> {
-  const raw = JSON.parse(strFromU8(bytes)) as unknown;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error("Dictionary index.json is not an object");
-  }
-  return raw as Record<string, unknown>;
-}
-
-function bankNumber(path: string): number {
-  const match = path.match(/term_bank_(\d+)\.json$/i);
-  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
-}
-
-/** Parse the standard Yomitan ZIP shape. EPWING belongs in Yomitan Import. */
-export function parseYomitanDictionary(
-  archive: Uint8Array,
-  dictionaryId = randomId(),
-  onProgress?: DictionaryProgressListener,
-): ParsedDictionary & { id: string } {
-  // ponytail: unzipSync keeps large dictionaries in memory; move parsing to a
-  // worker/streaming ZIP reader if mobile imports hit the memory ceiling.
-  onProgress?.({ phase: "unpack", current: 0, total: 0 });
-  const files = unzipSync(archive);
-  onProgress?.({ phase: "unpack", current: 1, total: 1 });
-  const indexFile = files["index.json"];
-  if (!indexFile) throw new Error("Dictionary ZIP is missing index.json");
-  const index = parseIndex(indexFile);
-  const title = stringOr(index.title);
-  if (!title) throw new Error("Dictionary index.json is missing title");
-
-  const bankPaths = Object.keys(files)
-    .filter((path) => /(?:^|\/)term_bank_\d+\.json$/i.test(path))
-    .sort((a, b) => bankNumber(a) - bankNumber(b) || a.localeCompare(b));
-  if (bankPaths.length === 0) {
-    throw new Error("Dictionary ZIP has no term banks");
-  }
-
-  const entries: ParsedDictionary["entries"] = [];
-  onProgress?.({ phase: "index", current: 0, total: bankPaths.length });
-  for (const [bankIndex, path] of bankPaths.entries()) {
-    const raw = JSON.parse(strFromU8(files[path]!)) as unknown;
-    if (!Array.isArray(raw)) throw new Error(`Invalid term bank: ${path}`);
-    for (const row of raw) {
-      if (!Array.isArray(row) || typeof row[0] !== "string") continue;
-      const glossary = Array.isArray(row[5]) ? row[5] : [row[5]];
-      const rules = Array.isArray(row[3])
-        ? row[3].filter((rule): rule is string => typeof rule === "string")
-        : [];
-      const score = typeof row[4] === "number" ? row[4] : undefined;
-      const sequence = typeof row[6] === "number" ? row[6] : undefined;
-      entries.push({
-        term: row[0],
-        termKey: normalizeDictionaryTerm(row[0]),
-        ...(stringOr(row[1]) ? { reading: row[1] as string } : {}),
-        ...(stringOr(row[2]) ? { definitionTags: row[2] as string } : {}),
-        rules,
-        ...(score === undefined ? {} : { score }),
-        glossary,
-        ...(sequence === undefined ? {} : { sequence }),
-        ...(stringOr(row[7]) ? { termTags: row[7] as string } : {}),
-      });
-    }
-    onProgress?.({
-      phase: "index",
-      current: bankIndex + 1,
-      total: bankPaths.length,
-    });
-  }
-
-  return {
-    id: dictionaryId,
-    title,
-    ...(stringOr(index.revision ?? index.version)
-      ? { revision: String(index.revision ?? index.version) }
-      : {}),
-    ...(typeof index.format === "number" ? { format: index.format } : {}),
-    ...(stringOr(index.author) ? { author: index.author as string } : {}),
-    ...(stringOr(index.description)
-      ? { description: index.description as string }
-      : {}),
-    ...(stringOr(index.attribution)
-      ? { attribution: index.attribution as string }
-      : {}),
-    ...(stringOr(index.url) ? { sourceUrl: index.url as string } : {}),
-    ...(stringOr(index.language)
-      ? { language: index.language as string }
-      : {}),
-    entries,
-  };
-}
-
-function entryKey(dictionaryId: string, termKey: string, index: number): string {
-  return `${dictionaryId}\u0000${termKey}\u0000${String(index).padStart(12, "0")}`;
-}
-
 export interface DictionaryImportOptions {
   id?: string;
   sourceUrl?: string;
@@ -234,7 +130,7 @@ export interface DictionaryProgress {
   total: number;
 }
 
-type DictionaryProgressListener = (progress: DictionaryProgress) => void;
+export type DictionaryProgressListener = (progress: DictionaryProgress) => void;
 
 async function importDictionaryArchiveInProcess(
   archive: Uint8Array,
@@ -425,51 +321,4 @@ export async function removeDictionary(id: string) {
 export async function reorderDictionaries(ids: string[]) {
   await setDictionaryOrder(ids);
   notifyDictionaryChange();
-}
-
-function structuredContent(value: unknown): string {
-  if (typeof value === "string") return escapeHtml(value);
-  if (Array.isArray(value)) return value.map(structuredContent).join("");
-  if (!value || typeof value !== "object") return "";
-  const object = value as Record<string, unknown>;
-  if (typeof object.text === "string") return escapeHtml(object.text);
-  if (object.content !== undefined) {
-    const content = structuredContent(object.content);
-    const tag = typeof object.tag === "string" && /^[a-z][a-z0-9-]*$/i.test(object.tag)
-      ? object.tag
-      : "div";
-    return `<${tag}>${content}</${tag}>`;
-  }
-  return "";
-}
-
-/** Convert Yomitan glossary values to displayable HTML; the UI sanitizes it. */
-export function dictionaryGlossaryHtml(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(dictionaryGlossaryHtml).join("");
-  if (value && typeof value === "object") {
-    const object = value as Record<string, unknown>;
-    if (object.type === "structured-content") return structuredContent(object.content);
-    if (typeof object.text === "string") return escapeHtml(object.text);
-    if (object.content !== undefined) return structuredContent(object.content);
-  }
-  return escapeHtml(String(value ?? ""));
-}
-
-/** Keep useful dictionary markup while removing executable content/URLs. */
-export function sanitizeDictionaryHtml(html: string): string {
-  if (typeof DOMParser === "undefined") return escapeHtml(html);
-  const document = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
-  document.querySelectorAll("script, iframe, object, embed, form, link, meta, style, svg").forEach((node) => node.remove());
-  document.querySelectorAll("*").forEach((node) => {
-    for (const attribute of [...node.attributes]) {
-      const name = attribute.name.toLowerCase();
-      const value = attribute.value.trim().toLowerCase();
-      if (name.startsWith("on") || name === "style") node.removeAttribute(attribute.name);
-      if ((name === "href" || name === "src") && !/^(https?:|data:image\/)/.test(value)) {
-        node.removeAttribute(attribute.name);
-      }
-    }
-  });
-  return document.body.innerHTML;
 }
