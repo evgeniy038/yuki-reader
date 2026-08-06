@@ -112,7 +112,6 @@
   --container-6xl: 72rem;
 
   /* Misc tokens the official components reference. */
-  --tracking-widest: 0.1em;
   --blur-xs: 4px;
 
   /* shadcn semantic colors, mapped onto the yuki tokens. `primary` — the deep
@@ -157,8 +156,6 @@
 }
 
 :root {
-  color-scheme: light;
-
   /* Global tracking: -0.15px applied to all text via base layer. */
   --ds-tracking: -0.009375rem;
 

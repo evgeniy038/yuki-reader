@@ -217,7 +217,6 @@ export function GoalSection({
                         }}
                       >
                         <SelectTrigger
-                          size="sm"
                           aria-label={t("stats.goal.bookAria")}
                           className="max-w-44 px-1.5 text-xs"
                         >

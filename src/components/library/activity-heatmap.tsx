@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { DailyStats } from "@/core/storage";
-import type { BookAmount } from "@/core/stats";
+import type { DailyStats, BookAmount } from "@/core/stats";
 import { heatLevel, heatmapWeeks } from "@/core/stats";
 import { formatDuration } from "@/lib/format";
 import i18n from "@/lib/i18n";

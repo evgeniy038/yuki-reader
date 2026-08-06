@@ -30,17 +30,12 @@ const buttonVariants = cva(
           "text-default hover:bg-hover-surface hover:text-strong active:bg-active-surface aria-expanded:bg-hover-surface aria-expanded:text-strong aria-pressed:bg-hover-surface aria-pressed:text-strong",
         destructive:
           "border-0 bg-destructive/10 text-destructive shadow-destructive hover:bg-destructive/15 active:bg-destructive/20",
-        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        xs: "h-7 gap-1 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5",
         sm: "h-8 gap-1.5 px-2.5",
         default: "h-9 gap-1.5 px-3",
-        lg: "h-10 gap-1.5 px-3",
-        icon: "size-9",
         "icon-xs": "size-6.5 rounded-md [&_svg:not([class*='size-'])]:size-3.5",
         "icon-sm": "size-8",
-        "icon-lg": "size-10",
       },
       shape: {
         square: "",

@@ -1,5 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 import { XMLParser } from "fast-xml-parser";
+import { mimeFromExtension } from "./mime";
 import type {
   Chapter,
   EpubMetadata,
@@ -109,28 +110,6 @@ function titleFromHtml(html: string): string | undefined {
   return plain === "" ? undefined : plain;
 }
 
-// Infer image MIME from file extension when the OPF media-type is wrong/missing.
-function mimeFromExt(path: string): string | undefined {
-  const ext = path.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "png":
-      return "image/png";
-    case "gif":
-      return "image/gif";
-    case "webp":
-      return "image/webp";
-    case "svg":
-      return "image/svg+xml";
-    case "bmp":
-      return "image/bmp";
-    default:
-      return undefined;
-  }
-}
-
 // Infer image MIME from magic bytes (first few bytes of the file).
 function mimeFromMagic(bytes: Uint8Array): string | undefined {
   if (bytes.length < 4) return undefined;
@@ -155,7 +134,7 @@ function mimeFromMagic(bytes: Uint8Array): string | undefined {
 
 function fixMime(mime: string, path: string, bytes: Uint8Array): string {
   if (mime.startsWith("image/")) return mime;
-  return mimeFromExt(path) ?? mimeFromMagic(bytes) ?? "image/jpeg";
+  return mimeFromExtension(path) ?? mimeFromMagic(bytes) ?? "image/jpeg";
 }
 
 // Rewrite <img src> / <image href|xlink:href> that point at packed resources to
@@ -291,7 +270,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
     const resolved = resolvePath(opfDirPath, href);
     const isImage = mt.startsWith("image/");
     const isCss = mt === "text/css";
-    if (isImage || (!isCss && mimeFromExt(resolved))) {
+    if (isImage || (!isCss && mimeFromExtension(resolved))) {
       const u8 = findBytes(resolved);
       if (u8) {
         const mime = isImage ? mt : fixMime(mt, resolved, u8);
@@ -355,7 +334,7 @@ export function parseEpub(bytes: Uint8Array): ParsedEpub {
         coverHref = key.startsWith(opfDirPath + "/")
           ? key.slice(opfDirPath.length + 1)
           : key;
-        coverMime = mimeFromExt(key);
+        coverMime = mimeFromExtension(key);
         break;
       }
     }

@@ -33,8 +33,6 @@ export interface OpenedData {
   bookCss: string;
   /** Raw PDF bytes — the PDF reader renders pages straight from them. */
   pdfBytes?: Uint8Array;
-  /** Total pages (PDF only). */
-  pageCount?: number;
 }
 
 // The shelf: the book list plus the heavy per-book payloads (chapters, bytes).
@@ -101,24 +99,8 @@ export function useShelf(demoMode: boolean) {
             resources: record.resources ?? [],
             bookCss: record.bookCss ?? "",
             pdfBytes: record.pdfBytes,
-            pageCount: record.pageCount,
           });
-          loaded.push({
-            id: record.id,
-            title: record.title,
-            author: record.author,
-            language: record.language,
-            format: record.format,
-            progress: record.progress,
-            cover: record.cover,
-            contentHash: record.contentHash,
-            pageCount: record.pageCount,
-            series: record.series,
-            volumeIndex: record.volumeIndex,
-            addedAt: record.addedAt,
-            lastReadAt: record.lastReadAt,
-            favorite: record.favorite,
-          });
+          loaded.push({ ...record });
         }
         setBooks(loaded);
         setShelfReady(true);
@@ -198,7 +180,6 @@ export function useShelf(demoMode: boolean) {
         resources: imported.resources,
         bookCss: imported.bookCss,
         pdfBytes: imported.pdfBytes,
-        pageCount: imported.pageCount,
       });
       const book: Book = {
         id,
@@ -306,7 +287,6 @@ export function useShelf(demoMode: boolean) {
       chapters: [],
       resources: [],
       bookCss: "",
-      pageCount: volume.pages.length,
     });
     const book: Book = {
       id,
@@ -493,7 +473,6 @@ export function useShelf(demoMode: boolean) {
     notice,
     flashId,
     dataRef,
-    importFile,
     importFiles,
     importManga,
     openBook,

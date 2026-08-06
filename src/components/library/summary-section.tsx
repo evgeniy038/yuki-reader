@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { DailyStats } from "@/core/storage";
-import type { Streaks } from "@/core/stats";
+import type { DailyStats, Streaks } from "@/core/stats";
 import { formatDuration, formatNumber } from "@/lib/format";
 import { SettingsGroup, SettingsRow } from "./settings-group";
 

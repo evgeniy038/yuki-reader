@@ -15,7 +15,6 @@ import {
   DICTIONARIES_ENABLED,
   importDictionaryArchive,
   installDictionaryFromUrl,
-  loadAllDictionaries,
   removeDictionary,
   reorderDictionaries,
   updateDictionaryEnabled,
@@ -23,6 +22,7 @@ import {
   type DictionaryProgressPhase,
   type DictionaryRecord,
 } from "@/core/dictionaries";
+import { loadAllDictionaries } from "@/core/storage";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

@@ -3,7 +3,7 @@ import {
   type InferenceSession,
   type OcrEp,
 } from "./ort-runtime";
-import { downloadModelFiles, type OcrModelFiles } from "./download";
+import type { OcrModelFiles } from "./download";
 
 // OCR models: download (see download.ts) → inference sessions (here). The
 // bytes are handed to the worker pool, which builds its own sessions from
@@ -11,7 +11,6 @@ import { downloadModelFiles, type OcrModelFiles } from "./download";
 // parallel pages). Sessions also parallelize WITHIN a page via wasm threads,
 // but only where the app is cross-origin isolated (COOP/COEP headers);
 // elsewhere they fall back to one thread.
-export { downloadModelFiles, type OcrModelFiles };
 
 const EP_STORAGE_KEY = "yuki-ocr-ep";
 

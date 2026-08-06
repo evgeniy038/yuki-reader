@@ -1,6 +1,7 @@
 import { getDocument, GlobalWorkerOptions, TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { escapeHtml } from "./escape-html";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -27,10 +28,6 @@ export async function openPdf(bytes: Uint8Array): Promise<PdfDocument> {
     standardFontDataUrl: `${PDFJS_ASSETS}/standard_fonts/`,
   }).promise;
   return { doc, numPages: doc.numPages };
-}
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 interface PdfTextItem {

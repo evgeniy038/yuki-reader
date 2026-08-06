@@ -23,14 +23,6 @@ export function formatNumber(value: number): string {
   return numberFmt().format(value);
 }
 
-export function formatDateShort(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString(lng(), {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 export function formatDateLong(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(lng(), {
     day: "numeric",

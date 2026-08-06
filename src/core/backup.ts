@@ -1,4 +1,5 @@
 import { strFromU8, strToU8, unzipSync, Zip, ZipPassThrough } from "fflate";
+import { mimeFromExtension } from "./mime";
 import {
   DICTIONARIES_CHANGED_EVENT,
   importDictionaryArchive,
@@ -19,10 +20,10 @@ import {
   putStatsDay,
   restoreBookProgress,
   type BookRecord,
-  type DailyStats,
   type MangaOcrRecord,
   type MangaRecord,
 } from "./storage";
+import { applyBookDelta, type DailyStats } from "./stats";
 
 export interface BackupOptions {
   books: boolean;
@@ -40,7 +41,7 @@ export type BackupOperationProgressPhase =
 
 /** Which item is being processed right now — for the human-facing detail
     line ("Book 3 of 12 · page 145 of 226"), not for the bar. */
-export interface BackupOperationItem {
+interface BackupOperationItem {
   kind: "book" | "page";
   index: number;
   count: number;
@@ -53,7 +54,7 @@ export interface BackupOperationProgress {
   item?: BackupOperationItem;
 }
 
-export type BackupOperationProgressListener = (
+type BackupOperationProgressListener = (
   progress: BackupOperationProgress,
 ) => void;
 
@@ -208,21 +209,6 @@ function bytesAt(files: Record<string, Uint8Array>, path: unknown): Uint8Array {
   return files[path]!;
 }
 
-function pageMime(path: string): string {
-  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  return (
-    {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      webp: "image/webp",
-      gif: "image/gif",
-      avif: "image/avif",
-      bmp: "image/bmp",
-    } as Record<string, string>
-  )[ext] ?? "application/octet-stream";
-}
-
 function localSettings(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const result: Record<string, string> = {};
@@ -340,7 +326,7 @@ export async function exportBackupInProcess(
             if (!blob) throw new Error(`Manga page ${record.id}/${index} is missing`);
             const file = `books/${record.id}/pages/${index}.bin`;
             archive.add(file, new Uint8Array(await blob.arrayBuffer()));
-            pages.push({ file, mime: blob.type || pageMime(page.path) });
+            pages.push({ file, mime: blob.type || mimeFromExtension(page.path, "application/octet-stream") });
             completed += 1;
           }
           const ocr: MangaBackup["ocr"] = [];
@@ -427,7 +413,7 @@ export type BackupWorkerResponse =
 // dialog would spin forever. Silence longer than this is a hard failure.
 const BACKUP_STALL_TIMEOUT_MS = 120_000;
 
-export interface BackupWorkerTask {
+interface BackupWorkerTask {
   result: Promise<BackupWorkerResponse>;
   /** "terminate" kills the worker outright (export — nothing is written, so
       instant cancel is safe); "cooperative" asks the worker to stop at the
@@ -665,20 +651,17 @@ async function importTtsuBackup(
     };
     day.chars += row.chars;
     day.timeMs += row.timeMs;
+    let next = day;
     if (row.titleKey) {
       const target = booksByTitle.get(row.titleKey);
       if (target) {
-        const perBook = { ...day.perBook };
-        const amount = perBook[target.id] ?? { chars: 0, pages: 0, timeMs: 0 };
-        perBook[target.id] = {
-          chars: amount.chars + row.chars,
-          pages: amount.pages,
-          timeMs: amount.timeMs + row.timeMs,
-        };
-        day.perBook = perBook;
+        next = applyBookDelta(next, target.id, {
+          chars: row.chars,
+          timeMs: row.timeMs,
+        });
       }
     }
-    days.set(row.dateKey, day);
+    days.set(row.dateKey, next);
     completed += 1;
     onProgress?.({ phase: "restore", current: completed, total });
   }

@@ -1,4 +1,5 @@
 import { strFromU8, unzipSync } from "fflate";
+import { escapeHtml } from "./escape-html";
 import {
   deleteDictionary as deleteStoredDictionary,
   loadAllDictionaries,
@@ -48,7 +49,7 @@ export interface DictionaryLookup {
   entry: DictionaryEntryRecord;
 }
 
-export interface DictionaryCatalogItem {
+interface DictionaryCatalogItem {
   id: string;
   title: string;
   direction: "en-en" | "en-ru" | "ja-en";
@@ -99,7 +100,7 @@ function notifyDictionaryChange(): void {
   }
 }
 
-export interface ParsedDictionary {
+interface ParsedDictionary {
   title: string;
   revision?: string;
   format?: number;
@@ -112,7 +113,7 @@ export interface ParsedDictionary {
 }
 
 function randomId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `dictionary-${Date.now()}-${Math.random()}`;
+  return crypto.randomUUID();
 }
 
 export function normalizeDictionaryTerm(term: string): string {
@@ -233,7 +234,7 @@ export interface DictionaryProgress {
   total: number;
 }
 
-export type DictionaryProgressListener = (progress: DictionaryProgress) => void;
+type DictionaryProgressListener = (progress: DictionaryProgress) => void;
 
 async function importDictionaryArchiveInProcess(
   archive: Uint8Array,
@@ -271,13 +272,13 @@ async function importDictionaryArchiveInProcess(
   return record;
 }
 
-type DictionaryWorkerMessage = {
+export type DictionaryWorkerMessage = {
   type: "import";
   archive: ArrayBuffer;
   options: DictionaryImportOptions;
 };
 
-type DictionaryWorkerResponse =
+export type DictionaryWorkerResponse =
   | { type: "progress"; progress: DictionaryProgress }
   | { type: "done"; record: DictionaryRecord }
   | { type: "error"; message: string };
@@ -424,20 +425,6 @@ export async function removeDictionary(id: string) {
 export async function reorderDictionaries(ids: string[]) {
   await setDictionaryOrder(ids);
   notifyDictionaryChange();
-}
-
-export { loadAllDictionaries };
-
-const HTML_ESCAPE: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPE[char] ?? char);
 }
 
 function structuredContent(value: unknown): string {

@@ -54,13 +54,6 @@
   height: var(--size-icon-nav);
 }
 
-@utility focus-ring {
-  &:focus-visible {
-    outline: 2px solid var(--ds-focus-ring);
-    outline-offset: 2px;
-  }
-}
-
 /* ——— Button feel ——— */
 
 /* Constant promotion of the button to its own layer: scale runs on the

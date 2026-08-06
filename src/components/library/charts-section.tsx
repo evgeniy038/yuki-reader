@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
-import type { DailyStats } from "@/core/storage";
+import type { DailyStats } from "@/core/stats";
 import {
   bookPace,
   dailyMinutesSeries,

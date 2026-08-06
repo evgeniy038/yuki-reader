@@ -1,9 +1,6 @@
 import type { MokuroBlock } from "../mokuro";
-import {
-  detectPreferredEp,
-  downloadModelFiles,
-  type OcrModelFiles,
-} from "./models";
+import { detectPreferredEp } from "./models";
+import { downloadModelFiles, type OcrModelFiles } from "./download";
 import type { OcrEp } from "./ort-runtime";
 import {
   loadAllBooks,
@@ -38,7 +35,7 @@ export interface OcrStatus {
   error: string | null;
 }
 
-export type OcrBookStage = "detect" | "recognize" | "done";
+type OcrBookStage = "detect" | "recognize" | "done";
 
 /** One volume's OCR progress — storage truth, per stage. */
 export interface OcrBookProgress {

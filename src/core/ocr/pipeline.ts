@@ -422,7 +422,7 @@ function skeletonBlock(det: Det): MokuroBlock {
 
 /** Skeleton blocks (final boxes, empty lines) plus the exact float detector
     rects aligned with them, so recognition reuses the detector's crops. */
-export interface DetectResult {
+interface DetectResult {
   blocks: MokuroBlock[];
   crops: number[][];
 }

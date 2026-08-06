@@ -13,7 +13,6 @@ import {
   goalTarget,
   heatLevel,
   isActiveDay,
-  movingAverage,
   shiftDay,
   speedOf,
   speedSeries,
@@ -246,18 +245,6 @@ function day(date: string, patch: Partial<DailyStats> = {}): DailyStats {
     ),
   );
   console.log("  ✓ dailyMinutesSeries: window, missing days zero, old days ignored");
-}
-
-// --- movingAverage: trailing window, partial heads, zero guards -------------
-{
-  assert.deepEqual(movingAverage([], 7), []);
-  assert.deepEqual(movingAverage([10, 20, 30], 2), [10, 15, 25]);
-  // Window longer than the series: partial averages, no division blowups.
-  assert.deepEqual(movingAverage([4, 8], 5), [4, 6]);
-  assert.deepEqual(movingAverage([0, 0, 0], 2), [0, 0, 0]);
-  // A sub-1 window degrades to the identity, not a crash.
-  assert.deepEqual(movingAverage([3, 5], 0), [3, 5]);
-  console.log("  ✓ movingAverage: partial heads, long window, zeros");
 }
 
 // --- speedSeries: speedOf rules per day, gaps skip, pages fallback ----------

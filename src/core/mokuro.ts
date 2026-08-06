@@ -12,7 +12,7 @@ export interface MokuroBlock {
   lines: string[];
 }
 
-export interface MokuroPage {
+interface MokuroPage {
   img_width: number;
   img_height: number;
   img_path: string;
@@ -92,7 +92,7 @@ export function mokuroImageKey(imgPath: string): string {
 // Natural ordering ("2" before "10") with fullwidth digits folded to ASCII —
 // page scans and volume numbers come in both width variants.
 
-export function foldFullwidthDigits(text: string): string {
+function foldFullwidthDigits(text: string): string {
   return text.replace(/[０-９]/g, (ch) =>
     String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30),
   );

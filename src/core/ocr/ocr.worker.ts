@@ -14,7 +14,7 @@ import {
   putMangaOcrFinal,
 } from "../storage";
 import type { MokuroBlock } from "../mokuro";
-import type { OcrModelFiles } from "./models";
+import type { OcrModelFiles } from "./download";
 
 // OCR worker, the EXECUTOR half of the pool: it holds warm model sessions
 // (~130MB in its own heap — workers can't share memory) and processes one

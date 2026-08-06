@@ -19,7 +19,7 @@ export function LibraryEmpty({ onAdd }: { onAdd: () => void }) {
     <div className="grid flex-1 place-items-center">
       <Empty>
         <EmptyHeader>
-          <EmptyMedia variant="icon">
+          <EmptyMedia>
             <Books />
           </EmptyMedia>
           <EmptyTitle>{t("library.empty.title")}</EmptyTitle>

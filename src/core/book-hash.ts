@@ -2,6 +2,18 @@
 // imports. Derived from the PARSED chapters (not the file bytes) so it can be
 // backfilled for books already in storage — parsing is deterministic, so
 // re-importing the same file always yields the same hash.
+
+/** SHA-256 of a string, hex-encoded. */
+export async function sha256Hex(material: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(material),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 export async function bookContentHash(
   title: string,
   author: string | undefined,
@@ -12,11 +24,5 @@ export async function bookContentHash(
     author ?? "",
     ...chapters.map((chapter) => `${chapter.html.length}:${chapter.html.slice(0, 128)}`),
   ].join("\n");
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(material),
-  );
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return sha256Hex(material);
 }

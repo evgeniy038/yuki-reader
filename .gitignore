@@ -31,8 +31,8 @@ Thumbs.db
 # private working notes, never published
 /private-docs/
 
-# local browser state
-artifacts/local/browser/
+# local browser state and test artifacts
+/artifacts/
 
 # agent worktrees
 .worktrees/

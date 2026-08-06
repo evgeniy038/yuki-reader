@@ -10,23 +10,17 @@ import { cn } from "@/lib/utils";
 export function Tooltip({
   trigger,
   content,
-  side = "top",
-  sideOffset = 6,
-  delay = 50,
 }: {
   trigger: ReactElement;
   content: ReactNode;
-  side?: TooltipPrimitive.Positioner.Props["side"];
-  sideOffset?: number;
-  delay?: number;
 }) {
   return (
     <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger render={trigger} delay={delay} />
+      <TooltipPrimitive.Trigger render={trigger} delay={50} />
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Positioner
-          side={side}
-          sideOffset={sideOffset}
+          side="top"
+          sideOffset={6}
           className="z-50"
         >
           <TooltipPrimitive.Popup

@@ -148,12 +148,12 @@ export function ReadingView({
   chapters,
   language,
   fontSize,
-  pageMargin = 40,
+  pageMargin,
   resources,
   bookCss,
-  initialProgress = 0,
+  initialProgress,
   toc,
-  panel = null,
+  panel,
   onPanelChange,
   onProgress,
 }: {
@@ -161,14 +161,14 @@ export function ReadingView({
   language?: Language;
   fontSize: number;
   /** Page margins, px: head/foot inset + cross-axis padding of the page box. */
-  pageMargin?: number;
+  pageMargin: number;
   resources?: EpubResource[];
   bookCss?: string;
-  initialProgress?: number;
+  initialProgress: number;
   /** Table of contents (chapter ids → section jump targets). */
   toc?: TocEntry[];
   /** Which side panel is open; the view owns its content and jumps. */
-  panel?: ReaderPanelMode;
+  panel: ReaderPanelMode;
   onPanelChange?: (panel: ReaderPanelMode) => void;
   /** Fraction read + absolute position (countable chars) + countable chars
       on the current page. Fires on every page turn and every relayout — the

@@ -8,7 +8,7 @@ import type * as OrtWasm from "onnxruntime-web/wasm";
 // session + tensor in that worker then comes from the SAME module instance —
 // mixing Tensor objects across the two builds is not supported.
 export type OcrEp = "wasm" | "webgpu";
-export type Ort = typeof OrtWasm;
+type Ort = typeof OrtWasm;
 export type Tensor = OrtWasm.Tensor;
 export type InferenceSession = OrtWasm.InferenceSession;
 

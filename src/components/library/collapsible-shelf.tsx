@@ -16,7 +16,7 @@ import { GRID_CLASSES } from "./library-grid";
 // the visuals (ghost slot + FLIP slide), the header only reports the
 // source-side events. Drop targets are the whole sections, wired by the
 // caller.
-export interface HeaderDrag {
+interface HeaderDrag {
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
 }

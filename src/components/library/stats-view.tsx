@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/empty";
 import { DashRing } from "@/components/ui/dash-ring";
 import type { Book } from "@/core/library";
-import { loadStats, type DailyStats } from "@/core/storage";
-import { dayKey, streaks, totals } from "@/core/stats";
+import { loadStats } from "@/core/storage";
+import { dayKey, streaks, totals, type DailyStats } from "@/core/stats";
 import { speedLabel } from "@/lib/format";
 import type { GoalBook } from "./use-goal-book";
 import {
@@ -84,7 +84,7 @@ export function StatsView({
           <div className="grid flex-1 place-items-center">
             <Empty>
               <EmptyHeader>
-                <EmptyMedia variant="icon">
+                <EmptyMedia>
                   <ChartLine />
                 </EmptyMedia>
                 <EmptyTitle>{t("stats.empty.title")}</EmptyTitle>

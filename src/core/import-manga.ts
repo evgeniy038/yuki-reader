@@ -1,4 +1,6 @@
 import { unzipSync } from "fflate";
+import { sha256Hex } from "./book-hash";
+import { mimeFromExtension } from "./mime";
 import {
   cleanVolumeName,
   mokuroImageKey,
@@ -56,19 +58,11 @@ export function isMangaItem(item: MangaInputItem): boolean {
   );
 }
 
-const MIME_BY_EXT: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-  gif: "image/gif",
-  avif: "image/avif",
-  bmp: "image/bmp",
-};
-
 function mimeOf(name: string, fallback: string): string {
-  const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
-  return MIME_BY_EXT[ext] ?? (fallback.startsWith("image/") ? fallback : "image/jpeg");
+  return (
+    mimeFromExtension(name) ??
+    (fallback.startsWith("image/") ? fallback : "image/jpeg")
+  );
 }
 
 function baseName(path: string): string {
@@ -215,13 +209,7 @@ async function volumeHash(
     volumeName,
     ...pages.map((page, i) => `${page.path}:${blobs[i]?.size ?? 0}`),
   ].join("\n");
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(material),
-  );
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return sha256Hex(material);
 }
 
 /** Import a mixed drop/selection: archives become volumes one-by-one, loose

@@ -1,5 +1,5 @@
-import { openDB, unwrap, type DBSchema } from "idb";
-import type { BookFormat, Language } from "./library";
+import { openDB, unwrap, type DBSchema, type IDBPTransaction } from "idb";
+import type { Book } from "./library";
 import type { MokuroBlock } from "./mokuro";
 import type { Chapter, EpubResource, TocEntry } from "./reading";
 import type { MangaStoredPage } from "./import-manga";
@@ -17,36 +17,14 @@ import {
   type StatsDelta,
 } from "./stats";
 
-export type { BookAmount, DailyStats, StatsDelta } from "./stats";
-
-export interface BookRecord {
-  id: string;
-  title: string;
-  author?: string;
-  language?: Language;
-  format?: BookFormat;
-  progress: number;
+export interface BookRecord extends Book {
   chapters: Chapter[];
   /** Table of contents (EPUB): NCX/nav entries mapped to spine chapter ids. */
   toc?: TocEntry[];
-  cover?: string;
   resources?: EpubResource[];
   bookCss?: string;
   /** Raw PDF bytes — the PDF reader renders pages straight from them. */
   pdfBytes?: Uint8Array;
-  /** Total pages (PDF only; EPUB length lives in chapters). */
-  pageCount?: number;
-  /** Content fingerprint for duplicate-import rejection. */
-  contentHash?: string;
-  /** Manga only: the series this volume belongs to (display name). */
-  series?: string;
-  /** Manga only: 1-based position inside the series. */
-  volumeIndex?: number;
-  addedAt: number;
-  /** Last time the book was opened or read. Absent = never opened. */
-  lastReadAt?: number;
-  /** Pinned to the top of its shelf section. */
-  favorite?: boolean;
 }
 
 /** Manga volume sidecar record: page metadata in reading order. The page
@@ -74,7 +52,7 @@ export interface MangaOcrRecord {
 }
 
 /** Cached OCR model file (downloaded once, reused forever). */
-export interface OcrModelRecord {
+interface OcrModelRecord {
   url: string;
   bytes: Uint8Array;
 }
@@ -112,6 +90,11 @@ const DICTIONARY_ARCHIVES = "dictionaryArchives";
 const BY_DICTIONARY_TERM = "byDictionaryTerm";
 
 let dbPromise: ReturnType<typeof openDB<YukiDB>> | null = null;
+
+/** Key range covering every key with the given prefix. */
+function prefixRange(prefix: string): IDBKeyRange {
+  return IDBKeyRange.bound(prefix, `${prefix}￿`);
+}
 
 // A schema upgrade waits for every other connection (another tab) to close;
 // if a tab hangs on to an old version, openDB would pend FOREVER — no event,
@@ -302,7 +285,7 @@ export async function deleteManga(id: string): Promise<void> {
   const db = await open();
   const tx = db.transaction([MANGA, MANGA_PAGES, MANGA_OCR], "readwrite");
   await tx.objectStore(MANGA).delete(id);
-  const range = IDBKeyRange.bound(`${id}/`, `${id}/￿`);
+  const range = prefixRange(`${id}/`);
   for (const storeName of [MANGA_PAGES, MANGA_OCR] as const) {
     let cursor = await tx.objectStore(storeName).openCursor(range);
     while (cursor) {
@@ -433,7 +416,7 @@ export async function loadMangaOcr(
   bookId: string,
 ): Promise<Map<number, MangaOcrRecord>> {
   const db = await open();
-  const range = IDBKeyRange.bound(`${bookId}/`, `${bookId}/￿`);
+  const range = prefixRange(`${bookId}/`);
   const [keys, records] = await Promise.all([
     db.getAllKeys(MANGA_OCR, range),
     db.getAll(MANGA_OCR, range),
@@ -448,25 +431,15 @@ export async function loadMangaOcr(
   return out;
 }
 
-/** OCR progress flags for a volume, without the block payloads: page index →
-    fully recognized. This is what the queue panel counts — cheap to re-read
-    after every completed page, so the UI always shows storage truth. */
+/** OCR progress flags for a volume: page index → fully recognized. This is
+    what the queue panel counts — re-read after every completed page, so the
+    UI always shows storage truth. */
 export async function loadMangaOcrFlags(
   bookId: string,
 ): Promise<Map<number, boolean>> {
-  const db = await open();
-  const range = IDBKeyRange.bound(`${bookId}/`, `${bookId}/￿`);
-  const [keys, records] = await Promise.all([
-    db.getAllKeys(MANGA_OCR, range),
-    db.getAll(MANGA_OCR, range),
-  ]);
+  const records = await loadMangaOcr(bookId);
   const out = new Map<number, boolean>();
-  keys.forEach((key, i) => {
-    const record = records[i];
-    if (record?.engine !== OCR_ENGINE) return;
-    const index = Number(key.slice(key.lastIndexOf("/") + 1));
-    if (Number.isFinite(index)) out.set(index, !record.partial);
-  });
+  for (const [index, record] of records) out.set(index, !record.partial);
   return out;
 }
 
@@ -488,11 +461,29 @@ export async function loadAllDictionaries(): Promise<DictionaryRecord[]> {
   return (await db.getAll(DICTIONARIES)).sort((a, b) => a.order - b.order);
 }
 
-export async function loadDictionaryArchive(
-  id: string,
-): Promise<Uint8Array | undefined> {
-  const db = await open();
-  return (await db.get(DICTIONARY_ARCHIVES, id))?.bytes;
+type DictionariesTx = IDBPTransaction<
+  YukiDB,
+  (
+    | typeof DICTIONARIES
+    | typeof DICTIONARY_ENTRIES
+    | typeof DICTIONARY_ARCHIVES
+  )[],
+  "readwrite"
+>;
+
+/** Delete every parsed entry row of a dictionary inside an open transaction. */
+async function deleteDictionaryEntries(
+  tx: DictionariesTx,
+  dictionaryId: string,
+): Promise<void> {
+  const index = tx.objectStore(DICTIONARY_ENTRIES).index(BY_DICTIONARY_TERM);
+  let cursor = await index.openCursor(
+    IDBKeyRange.bound([dictionaryId, ""], [dictionaryId, "￿"]),
+  );
+  while (cursor) {
+    await cursor.delete();
+    cursor = await cursor.continue();
+  }
 }
 
 export async function loadDictionaryEntries(
@@ -519,12 +510,7 @@ export async function replaceDictionary(
     "readwrite",
   );
   const entriesStore = tx.objectStore(DICTIONARY_ENTRIES);
-  const index = entriesStore.index(BY_DICTIONARY_TERM);
-  let cursor = await index.openCursor(IDBKeyRange.bound([record.id, ""], [record.id, "\uffff"]));
-  while (cursor) {
-    await cursor.delete();
-    cursor = await cursor.continue();
-  }
+  await deleteDictionaryEntries(tx, record.id);
   await tx.objectStore(DICTIONARIES).put(record);
   await tx.objectStore(DICTIONARY_ARCHIVES).put({ id: record.id, bytes: archive });
   onProgress?.(0, entries.length);
@@ -552,12 +538,7 @@ export async function deleteDictionary(id: string): Promise<void> {
   );
   await tx.objectStore(DICTIONARIES).delete(id);
   await tx.objectStore(DICTIONARY_ARCHIVES).delete(id);
-  const index = tx.objectStore(DICTIONARY_ENTRIES).index(BY_DICTIONARY_TERM);
-  let cursor = await index.openCursor(IDBKeyRange.bound([id, ""], [id, "\uffff"]));
-  while (cursor) {
-    await cursor.delete();
-    cursor = await cursor.continue();
-  }
+  await deleteDictionaryEntries(tx, id);
   await tx.done;
 }
 

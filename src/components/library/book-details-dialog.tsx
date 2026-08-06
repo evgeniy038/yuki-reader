@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
-import { loadBookStats, type BookAmount } from "@/core/storage";
+import { loadBookStats } from "@/core/storage";
+import type { BookAmount } from "@/core/stats";
 import { formatDateLong, formatDuration, formatNumber, speedLabel } from "@/lib/format";
 import {
   Dialog,

@@ -193,19 +193,6 @@ export function dailyMinutesSeries(
   return series;
 }
 
-/** Trailing moving average; leading points average a partial window. */
-export function movingAverage(values: number[], window: number): number[] {
-  const w = Math.max(1, Math.floor(window));
-  const out: number[] = [];
-  let sum = 0;
-  for (let i = 0; i < values.length; i += 1) {
-    sum += values[i]!;
-    if (i >= w) sum -= values[i - w]!;
-    out.push(sum / Math.min(i + 1, w));
-  }
-  return out;
-}
-
 /**
  * Reading speed per qualifying day (a minute of active time and up, same
  * rule as speedOf). `kind` follows the latest point — chars/h for text
@@ -262,7 +249,7 @@ export function topBookInWindow(
   return top;
 }
 
-export interface BookPace {
+interface BookPace {
   chars: number;
   pages: number;
   timeMs: number;
@@ -349,14 +336,6 @@ export function loadDailyGoal(): DailyGoal {
     const raw = localStorage.getItem(GOAL_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as unknown;
-      // Back-compat: the first version stored a bare number (chars mode).
-      if (typeof parsed === "number" && Number.isFinite(parsed)) {
-        return {
-          mode: "chars",
-          chars: clamp(parsed, GOAL_CHARS_MIN, GOAL_CHARS_MAX),
-          percent: GOAL_PERCENT_DEFAULT,
-        };
-      }
       if (parsed && typeof parsed === "object") {
         const p = parsed as {
           mode?: unknown;

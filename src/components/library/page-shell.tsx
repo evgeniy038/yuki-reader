@@ -7,8 +7,7 @@ import { cn } from "@/lib/utils";
 // nav pill). PageHeader is ALWAYS a 32px row (min-h-8), with or without
 // actions, so every page's content starts at the same offset; the title is
 // leading-none and taller controls (h-8) center around its line — text aligns
-// with text. PageSectionTitle is the single subhead style inside a page.
-// PageContent carries the body.
+// with text. PageContent carries the body.
 export function PageShell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-full max-w-6xl flex-col px-6 pt-3.5 pb-24">
@@ -29,10 +28,6 @@ export function PageTitle({ children }: { children: ReactNode }) {
       {children}
     </h1>
   );
-}
-
-export function PageSectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mb-4 text-sm text-default tabular-nums">{children}</h2>;
 }
 
 export function PageActions({ children }: { children: ReactNode }) {

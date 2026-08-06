@@ -22,8 +22,8 @@ const FULLSCREEN_REVEAL_ZONE_PX = 4;
 // touches the very top edge — never from the page body, so hovering words at
 // the top of a column (dictionary popups included) stays undisturbed. Holds
 // exit / panels / settings / fullscreen. The settings popover is a separate
-// component — controlled via settingsOpen when passed, otherwise the chrome
-// owns the flag (an open popover pins the pill visible).
+// component — controlled via settingsOpen (an open popover pins the pill
+// visible).
 // Everything here is ABSOLUTE inside the reader root (relative, exactly
 // viewport-sized): no fixed-position layers in the chrome at all.
 // FULLSCREEN: the top edge belongs to the system — touching it drops the
@@ -42,7 +42,7 @@ export function ReaderChrome({
   showMangaSettings = false,
   mangaFirstPageAsCover = true,
   onMangaFirstPageAsCoverChange,
-  settingsOpen: settingsOpenProp,
+  settingsOpen,
   onSettingsOpenChange,
 }: {
   onExit: () => void;
@@ -58,13 +58,11 @@ export function ReaderChrome({
   showMangaSettings?: boolean;
   mangaFirstPageAsCover?: boolean;
   onMangaFirstPageAsCoverChange?: (checked: boolean) => void;
-  /** Controlled popover flag; the chrome keeps its own when omitted. */
-  settingsOpen?: boolean;
-  onSettingsOpenChange?: (open: boolean) => void;
+  /** Controlled popover flag (an open popover pins the pill visible). */
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
 }) {
   const [pillVisible, setPillVisible] = useState(true);
-  const [settingsOpenInternal, setSettingsOpenInternal] = useState(false);
-  const settingsOpen = settingsOpenProp ?? settingsOpenInternal;
   const { t } = useTranslation();
   const hovering = useRef(false);
   const chromeRef = useRef<HTMLDivElement>(null);
@@ -108,8 +106,7 @@ export function ReaderChrome({
   };
 
   const setSettingsOpen = (open: boolean) => {
-    if (settingsOpenProp === undefined) setSettingsOpenInternal(open);
-    onSettingsOpenChange?.(open);
+    onSettingsOpenChange(open);
     if (open) showPill();
     else schedulePillHide();
   };

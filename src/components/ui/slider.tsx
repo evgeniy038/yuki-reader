@@ -34,7 +34,7 @@ export function Slider({
         <SliderPrimitive.Track className="h-2 w-full rounded-full bg-muted-surface">
           <SliderPrimitive.Indicator className="h-full rounded-full bg-primary-gradient" />
         </SliderPrimitive.Track>
-        <SliderPrimitive.Thumb className="size-5 cursor-grab rounded-full border border-subtle bg-white shadow-floating focus-ring active:cursor-grabbing" />
+        <SliderPrimitive.Thumb className="size-5 cursor-grab rounded-full border border-subtle bg-white shadow-floating active:cursor-grabbing" />
       </SliderPrimitive.Control>
     </SliderPrimitive.Root>
   );
