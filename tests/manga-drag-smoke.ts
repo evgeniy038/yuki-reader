@@ -8,36 +8,12 @@
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
 import { chromium, type Page } from "playwright-core";
 import { requireEnv } from "./env.ts";
+import { ensureServer } from "./browser-harness.ts";
 
 const MANGA_DIR = requireEnv("YUKI_TEST_MANGA_DIR");
 const BASE = "http://localhost:1420";
-
-async function ensureServer(): Promise<void> {
-  const up = await fetch(BASE).then(
-    (r) => r.ok,
-    () => false,
-  );
-  if (up) return;
-  const child = spawn("pnpm", ["dev"], {
-    cwd: process.cwd(),
-    stdio: "ignore",
-    detached: true,
-  });
-  child.unref();
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    const ok = await fetch(BASE).then(
-      (r) => r.ok,
-      () => false,
-    );
-    if (ok) return;
-  }
-  throw new Error("dev server did not come up on :1420");
-}
 
 const problems: string[] = [];
 function check(ok: boolean, label: string): void {

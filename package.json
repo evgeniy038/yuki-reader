@@ -28,8 +28,12 @@
     "test:ocr-download": "tsx tests/ocr-download.ts",
     "test:dictionaries": "tsx tests/dictionaries-unit.ts",
     "test:backup": "tsx tests/backup-unit.ts",
+    "test:shelf": "tsx tests/shelf-unit.ts",
+    "test:stats": "tsx tests/stats-unit.ts",
+    "test:book-css": "tsx tests/book-css-smoke.ts",
+    "test:resources": "tsx tests/resources-smoke.ts",
     "test:backup-smoke": "tsx tests/backup-smoke.ts",
-    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup",
+    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup && pnpm test:shelf && pnpm test:stats && pnpm test:book-css && pnpm test:resources",
     "preinstall": "npx only-allow pnpm"
   },
   "dependencies": {

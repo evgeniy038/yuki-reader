@@ -13,36 +13,12 @@
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
 import { chromium, type Page } from "playwright-core";
 import { requireEnv } from "./env.ts";
+import { ensureServer } from "./browser-harness.ts";
 
 const MANGA_DIR = requireEnv("YUKI_TEST_MANGA_DIR");
 const BASE = "http://localhost:1420";
-
-async function ensureServer(): Promise<void> {
-  const up = await fetch(BASE).then(
-    (r) => r.ok,
-    () => false,
-  );
-  if (up) return;
-  const child = spawn("pnpm", ["dev"], {
-    cwd: process.cwd(),
-    stdio: "ignore",
-    detached: true,
-  });
-  child.unref();
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    const ok = await fetch(BASE).then(
-      (r) => r.ok,
-      () => false,
-    );
-    if (ok) return;
-  }
-  throw new Error("dev server did not come up on :1420");
-}
 
 const problems: string[] = [];
 function check(ok: boolean, label: string): void {
@@ -316,6 +292,8 @@ async function main(): Promise<void> {
   await page.waitForTimeout(500);
 
   // --- raw scan archive (zip with junk entries) -------------------------------
+  // The in-app OCR this volume triggers (no sidecar in the archive) is covered
+  // by ocr-smoke — here only the import and grouping side.
   const { readdirSync: readDir } = await import("node:fs");
   const zipName = readDir(join(MANGA_DIR, "kaguya")).find((name) =>
     /\.zip$/i.test(name),
@@ -336,44 +314,13 @@ async function main(): Promise<void> {
       "zip: one volume from the archive",
     );
     await kaguyaTile.click();
+    await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
+    check(
+      (await page.locator("[data-book-id]").count()) === 1,
+      "zip: series page lists the volume",
+    );
+    await page.click('button[aria-label="Back to the shelf"]');
     await page.waitForTimeout(500);
-    // A fresh archive volume is gated (aria-disabled) until the detect pass
-    // covers every page — this click waits the gate out (the first run also
-    // downloads the OCR models; ~5 min for a 200-page volume).
-    await page.locator("[data-book-id]").first().click({ timeout: 600_000 });
-    await page.waitForSelector("[data-manga-page] img", { timeout: 60_000 });
-    await settleOnPage(page, 1);
-    const zipRendered = await page.evaluate(() => {
-      const img = document.querySelector<HTMLImageElement>("[data-manga-page] img");
-      return img ? img.complete && img.naturalWidth > 0 : false;
-    });
-    check(zipRendered, "zip: scan page renders (junk entries skipped)");
-    // No sidecar in the archive: the in-app OCR worker fills the gap (the
-    // first run includes the model download — hence the long wait).
-    const ocrCame = await page
-      .waitForSelector("[data-ocr-block]", { timeout: 300_000 })
-      .then(() => true, () => false);
-    check(ocrCame, "zip: in-app OCR overlays the sidecar-less page");
-    // Lazy OCR: blocks may appear as detect-only skeletons; hovering one
-    // recognizes just that crop (or the background march got there first).
-    if (ocrCame) {
-      await page.locator("[data-ocr-block]").first().hover();
-      const hoverFilled = await page
-        .waitForFunction(
-          () => {
-            const el = document.querySelector("[data-ocr-block] p");
-            return !!el && !!el.textContent && el.textContent.trim().length > 0;
-          },
-          undefined,
-          { timeout: 120_000 },
-        )
-        .then(() => true, () => false);
-      check(hoverFilled, "zip: hover reveals recognized text");
-      if (hoverFilled) {
-        check(await textFitsBox(page), "zip: recognized text fits its box");
-      }
-    }
-    await exitToShelf(page);
 
     // Duplicate import: rejected with a notice, no new tile.
     const tileCount = await page.locator("[data-book-id]").count();

@@ -6,38 +6,13 @@
 // Fixtures: YUKI_TEST_PDF_TEXT, YUKI_TEST_PDF_SCAN (see tests/README.md).
 // Usage: pnpm tsx tests/pdf-smoke.ts
 
-import { spawn } from "node:child_process";
-import { chromium } from "playwright-core";
 import { requireEnv } from "./env.ts";
+import { ensureServer, launchBrowser } from "./browser-harness.ts";
 import { openFreshTile } from "./import-open.ts";
 
 const TEXT_PDF = requireEnv("YUKI_TEST_PDF_TEXT");
 const SCAN_PDF = requireEnv("YUKI_TEST_PDF_SCAN");
 const BASE = "http://localhost:1420";
-
-async function ensureServer(): Promise<void> {
-  const up = await fetch(BASE).then(
-    (r) => r.ok,
-    () => false,
-  );
-  if (up) return;
-  const child = spawn("pnpm", ["dev"], {
-    cwd: process.cwd(),
-    stdio: "ignore",
-    detached: true,
-  });
-  child.unref();
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    const ok = await fetch(BASE).then(
-      (r) => r.ok,
-      () => false,
-    );
-    if (ok) return;
-  }
-  throw new Error("dev server did not come up on :1420");
-}
 
 const problems: string[] = [];
 function check(ok: boolean, label: string): void {
@@ -123,9 +98,7 @@ async function deleteViaMenu(page: import("playwright-core").Page): Promise<void
 
 async function main(): Promise<void> {
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await context.newPage();
+  const { browser, page } = await launchBrowser();
   await page.goto(BASE);
   // A hostile font-size preset: it must NOT blow PDF pages out of the
   // viewport (font settings don't apply to pages rendered as print images).

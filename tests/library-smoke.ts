@@ -7,11 +7,10 @@
 // header count, sort select (+ persistence across reload).
 // Usage: pnpm tsx tests/library-smoke.ts [title substring] [second book] — or YUKI_TEST_EPUB_FILTER / YUKI_TEST_EPUB_FILTER2
 
-import { spawn } from "node:child_process";
 import { readdirSync, writeFileSync } from "node:fs";
 import { requireEnv } from "./env.ts";
+import { ensureServer, launchBrowser } from "./browser-harness.ts";
 import { join } from "node:path";
-import { chromium } from "playwright-core";
 
 const NOVELS_DIR = requireEnv("YUKI_TEST_EPUB_DIR");
 const FILTER = process.argv[2] ?? requireEnv("YUKI_TEST_EPUB_FILTER");
@@ -22,30 +21,6 @@ const NEW_TITLE = "Переименованная книга テスト";
 // 1×1 red PNG for the cover-change check.
 const PNG_B64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-
-async function ensureServer(): Promise<void> {
-  const up = await fetch(BASE).then(
-    (r) => r.ok,
-    () => false,
-  );
-  if (up) return;
-  const child = spawn("pnpm", ["dev"], {
-    cwd: process.cwd(),
-    stdio: "ignore",
-    detached: true,
-  });
-  child.unref();
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    const ok = await fetch(BASE).then(
-      (r) => r.ok,
-      () => false,
-    );
-    if (ok) return;
-  }
-  throw new Error("dev server did not come up on :1420");
-}
 
 const problems: string[] = [];
 function check(ok: boolean, label: string): void {
@@ -71,9 +46,7 @@ async function main(): Promise<void> {
   writeFileSync(pngPath, Buffer.from(PNG_B64, "base64"));
 
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await context.newPage();
+  const { browser, page } = await launchBrowser();
   await page.goto(BASE);
 
   // 1. Import → the book lands on the shelf (no auto-open; batch-friendly),

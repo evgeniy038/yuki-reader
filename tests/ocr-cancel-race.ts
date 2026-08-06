@@ -10,7 +10,7 @@
 // Generic on purpose: no manga path/title/page count is hardcoded — the
 // volume is discovered in IndexedDB as "the manga book that just appeared".
 //
-// Fixture (exactly one volume), same knobs as ocr-bench:
+// Fixture (exactly one volume):
 //   YUKI_BENCH_ZIP          path to a .zip/.cbz archive of page scans
 //   YUKI_BENCH_DIR          path to a folder of loose page scans
 //   YUKI_TEST_BASE          server URL (default http://localhost:1420)

@@ -8,41 +8,17 @@
 //     has one) jumps → text search jumps.
 // Usage: pnpm tsx tests/reader-panel-smoke.ts
 
-import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import { requireEnv } from "./env.ts";
+import { ensureServer } from "./browser-harness.ts";
 import { openFreshTile } from "./import-open.ts";
 
 const NOVELS_DIR = requireEnv("YUKI_TEST_EPUB_DIR");
 const EPUB_FILTER = requireEnv("YUKI_TEST_EPUB_FILTER");
 const PDF_PATH = requireEnv("YUKI_TEST_PDF_TEXT");
 const BASE = "http://localhost:1420";
-
-async function ensureServer(): Promise<void> {
-  const up = await fetch(BASE).then(
-    (r) => r.ok,
-    () => false,
-  );
-  if (up) return;
-  const child = spawn("pnpm", ["dev"], {
-    cwd: process.cwd(),
-    stdio: "ignore",
-    detached: true,
-  });
-  child.unref();
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 500));
-    const ok = await fetch(BASE).then(
-      (r) => r.ok,
-      () => false,
-    );
-    if (ok) return;
-  }
-  throw new Error("dev server did not come up on :1420");
-}
 
 const problems: string[] = [];
 function check(ok: boolean, label: string): void {

@@ -1,14 +1,10 @@
 # Tests
 
-Unit and parser smokes are self-contained (fixtures built on the fly):
+Node-side units and parser smokes are self-contained (fixtures built on the
+fly). `pnpm test` runs all seven: epub, dictionaries, backup, shelf, stats,
+book-css, resources. Standalone extras:
 
 ```
-pnpm test
-pnpm tsx tests/shelf-unit.ts
-pnpm tsx tests/stats-unit.ts
-pnpm tsx tests/book-css-smoke.ts
-pnpm tsx tests/resources-smoke.ts
-pnpm tsx tests/epub-smoke.ts
 pnpm tsx tests/ocr-download.ts
 pnpm tsx tests/decoder-selective-fetch.ts
 ```
@@ -21,12 +17,16 @@ files, not in the repo — paths come from env vars:
 | `YUKI_TEST_EPUB_DIR` | folder with test `.epub` files | all epub smokes |
 | `YUKI_TEST_EPUB_FILTER` | name substring of the main book (also searched) | stats, routing, bookmark, reader-panel, library, shelf-collapse |
 | `YUKI_TEST_EPUB_FILTER2` | name substring of a second book | library, shelf-collapse |
-| `YUKI_TEST_PDF_TEXT` | PDF with a text layer | pdf-smoke, reader-panel, perf-probe, pdf-probe |
-| `YUKI_TEST_PDF_SCAN` | scanned PDF | pdf-smoke, perf-probe, pdf-probe |
-| `YUKI_TEST_MANGA_DIR` | manga folder (volume folders with `.mokuro`, zip in `kaguya/`) | manga-smoke, manga-drag-smoke, ocr-smoke, ocr-quality, backup-smoke |
+| `YUKI_TEST_PDF_TEXT` | PDF with a text layer | pdf-smoke, reader-panel |
+| `YUKI_TEST_PDF_SCAN` | scanned PDF | pdf-smoke |
+| `YUKI_TEST_MANGA_DIR` | manga folder (volume folders with `.mokuro`, zip in `kaguya/`) | manga-smoke, manga-drag-smoke, ocr-smoke, ocr-quality, backup-smoke, shelf-collapse (optional) |
 
 Do not edit `src/` during a browser run — vite full-reload breaks in-flight
 loads.
+
+shelf-collapse-smoke folds a plain section, and — when `YUKI_TEST_MANGA_DIR`
+is set — also the mixed novel+manga group: the whole group folds into one
+stack, and the manga h3 subsection folds on its own.
 
 ## Reader chrome and panels (no fixtures, built-in demo book)
 
@@ -74,16 +74,6 @@ merge_decoders, batch axis dynamic everywhere) → `tests/mocr-quantize-batch.py
 int8, merge) → `tests/mocr-validate-batch.py` (proof: batch ≡ solo decode
 token-by-token, batch=1 ≡ HF greedy; zero-padding enc_seq is forbidden — the
 decoder has no encoder attention mask).
-
-## OCR speed regression probes
-
-Both drive the real reader on the dev server (`:1420`), manga from
-`YUKI_TEST_MANGA_DIR`.
-
-```
-pnpm tsx tests/gate-timing.ts        # cold volume start: model load, detect gate, first pages. Target: gate < 30 s
-pnpm tsx tests/march-timing.ts [sec] # continuous page march, pages/min and per-stage timings from [ocr-page] logs. Target: >= 100 pages/min
-```
 
 ## OCR cancellation regression (`tests/ocr-cancel-race.ts`)
 
