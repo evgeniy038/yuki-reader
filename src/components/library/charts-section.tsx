@@ -12,8 +12,7 @@ import {
   topBookInWindow,
   totals,
 } from "@/core/stats";
-import { formatDuration } from "@/lib/format";
-import i18n from "@/lib/i18n";
+import { formatDayKey, formatDuration } from "@/lib/format";
 import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { ActivityHeatmap } from "./activity-heatmap";
 import { SettingsBlock, SettingsGroup } from "./settings-group";
@@ -35,19 +34,16 @@ const TOP = 12; // headroom so peaks and dots keep clear of the edge
 
 /** Slot date in the tooltip headline: "Sat, Aug 2". */
 function dayLabel(key: string): string {
-  return new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", {
+  return formatDayKey(key, {
     weekday: "short",
     day: "numeric",
     month: "short",
-  }).format(new Date(`${key}T12:00:00`));
+  });
 }
 
 // Weekday letters under a chart, one per day column. The SVG slots span the
 // full width with no side padding, so equal flex columns line up with them.
 function DayAxis({ dayKeys }: { dayKeys: string[] }) {
-  const fmt = new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", {
-    weekday: "narrow",
-  });
   return (
     <div className="flex" aria-hidden="true">
       {dayKeys.map((key) => (
@@ -55,7 +51,7 @@ function DayAxis({ dayKeys }: { dayKeys: string[] }) {
           key={key}
           className="flex-1 text-center text-[10px] leading-none text-muted-content"
         >
-          {fmt.format(new Date(`${key}T12:00:00`))}
+          {formatDayKey(key, { weekday: "narrow" })}
         </span>
       ))}
     </div>

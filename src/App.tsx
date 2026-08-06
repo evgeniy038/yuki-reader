@@ -34,23 +34,14 @@ import { useGoalBook } from "@/components/library/use-goal-book";
 import { ReaderScreen } from "@/components/reader/reader-screen";
 import { useReadingSession } from "@/components/reader/use-reading-session";
 import { DashRing } from "@/components/ui/dash-ring";
-
-// Dev-only demo content (?demo / ?demo=h) so vertical layout + line breaking can
-// be tuned against deterministic text. Markers make first/last page obvious.
-const DEMO_JP =
-  "＃始まり＃　主人は動きを止めた。彼の眼は濁って、穴のように光のない黒になった。この人が犯人である可能性は、夕立のとき店内にいた客のだれかが犯人である可能性よりも高いと思っていた。それが正解だったことを僕は知った。……何のことかな？　彼は知らないふりをした。彼は手帳を差し出した。それを見ると、彼は口元に笑みを浮かべた。尖った白い犬歯が覗いた。Ｎ山に森野の死体を捜しに出かけたことと、そこで考えたことを説明した。コーヒーカップをゆっくり下に置き、正面から僕を見た。";
-const DEMO_EN =
-  "The owner stopped moving. His eyes clouded over, turning a lightless black, like holes. I had thought the chance that this man was the culprit was higher than the chance that any of the customers in the shop during the evening shower was — and that turned out to be correct. He pretended not to know. He held out the notebook, and when I looked at it, a smile surfaced at the corner of his mouth.";
+import { demoModeRequested, useDemoBook } from "@/components/use-demo-mode";
 
 // The app shell: routing, the stores (shelf, reading settings) and
 // their wiring to screens. All book/session logic lives in the hooks and
 // screens — this file only composes them.
 export default function App() {
   const { t } = useTranslation();
-  const demoMode =
-    typeof window !== "undefined" &&
-    import.meta.env.DEV &&
-    new URLSearchParams(window.location.search).has("demo");
+  const demoMode = demoModeRequested();
 
   const shelf = useShelf(demoMode);
 
@@ -129,37 +120,7 @@ export default function App() {
     shelf.openBook(id);
   };
 
-  useEffect(() => {
-    if (!demoMode) return;
-    const vertical = new URLSearchParams(window.location.search).get("demo") !== "h";
-    const paragraph = vertical ? DEMO_JP : DEMO_EN;
-    const html = Array.from({ length: vertical ? 30 : 14 })
-      .map(() => `<p>${paragraph}</p>`)
-      .join("");
-    const id = "demo-book";
-    const title = vertical ? "デモ（縦書き）" : "Demo (horizontal)";
-    shelf.dataRef.current.set(id, {
-      metadata: { title },
-      chapters: [{ id: "c1", html }],
-      resources: [],
-      bookCss: "",
-      toc: [{ label: vertical ? "デモの章" : "Demo chapter", chapterId: "c1" }],
-    });
-    shelf.setBooks([
-      {
-        id,
-        title,
-        language: vertical ? "ja" : "en",
-        format: "epub",
-        progress: 0,
-        addedAt: Date.now(),
-      },
-    ]);
-    navigate(`/read/${id}`);
-    shelf.setShelfReady(true);
-    document.title = vertical ? "yuki · demo (vertical)" : "yuki · demo (horizontal)";
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoMode]);
+  useDemoBook(shelf, demoMode);
 
   if (openedBook && openedData) {
     return (

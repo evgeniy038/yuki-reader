@@ -1,5 +1,5 @@
 import type { Book } from "@/core/library";
-import { readingStateOf } from "@/core/library";
+import { stateLabelOf } from "@/core/library";
 import {
   BookOpen,
   Bookmark,
@@ -18,8 +18,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { DashRing } from "@/components/ui/dash-ring";
-import { ProgressRing } from "@/components/ui/progress-ring";
-import { BookCover } from "./book-cover";
+import { BookCover, CoverFrame } from "./book-cover";
 
 // A book on the shelf: cover, title, author, reading state (percent while
 // reading, "Finished" at the end, silence for a fresh book). Click opens;
@@ -56,21 +55,11 @@ export function BookTile({
   onToggleFavorite?: () => void;
 }) {
   const { t } = useTranslation();
-  const state = readingStateOf(book);
-  const stateLabel =
-    state === "finished"
-      ? t("library.finished")
-      : state === "reading"
-        ? `${Math.round(book.progress * 100)}%`
-        : "";
+  const stateLabel = stateLabelOf(book, t);
   const sub = subtitle ?? book.author ?? " ";
   const content = (
     <>
-      <div
-        className={`relative rounded-media transition-shadow group-hover:shadow-floating ${
-          flash ? "animate-pulse ring-2" : ""
-        }`}
-      >
+      <CoverFrame book={book} flash={flash}>
         <BookCover book={book} />
         {busy ? (
           <div
@@ -80,15 +69,7 @@ export function BookTile({
             <DashRing className="size-6 text-white" />
           </div>
         ) : null}
-        {book.progress > 0 ? (
-          <div
-            data-book-progress=""
-            className="absolute bottom-1.5 right-1.5 rounded-full bg-scrim p-1"
-          >
-            <ProgressRing value={book.progress} className="size-6" />
-          </div>
-        ) : null}
-      </div>
+      </CoverFrame>
       <p className="mt-3 truncate text-sm text-strong" title={book.title}>
         {book.title}
       </p>

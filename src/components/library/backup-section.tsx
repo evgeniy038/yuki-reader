@@ -3,7 +3,6 @@ import {
   CaretRight,
   CheckCircle,
   DownloadSimple,
-  FileArrowUp,
   UploadSimple,
 } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
@@ -11,87 +10,17 @@ import { toast } from "sonner";
 import {
   BackupCancelledError,
   type BackupOperationProgress,
-  type BackupOperationProgressPhase,
   type BackupTask,
   DEFAULT_BACKUP_OPTIONS,
   exportBackupTask,
   importBackupTask,
   type BackupOptions,
 } from "@/core/backup";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { SettingsGroup } from "./settings-group";
+import { BackupExportDialog } from "./backup-export-dialog";
+import { BackupImportDialog } from "./backup-import-dialog";
 
 type OpenDialog = "export" | "import" | null;
-
-const BACKUP_PROGRESS_RANGES: Record<
-  BackupOperationProgressPhase,
-  readonly [number, number]
-> = {
-  // Prepare is the real work (page-granular); packing the streaming archive
-  // is a short final beat.
-  prepare: [0, 0.9],
-  pack: [0.9, 1],
-  unpack: [0, 0.15],
-  restore: [0.15, 1],
-};
-
-function backupPercent(progress: BackupOperationProgress | null): number {
-  if (!progress) return 0;
-  const [start, end] = BACKUP_PROGRESS_RANGES[progress.phase];
-  if (progress.total <= 0) return Math.round(start * 100);
-  const fraction = Math.min(1, Math.max(0, progress.current / progress.total));
-  return Math.round((start + (end - start) * fraction) * 100);
-}
-
-// Vertical, centered: the current step on top, a live detail line under it,
-// a large percent figure, and the bar pinned to the bottom edge — the block
-// fills its fixed height instead of floating in emptiness.
-function TransferProgress({
-  progress,
-  label,
-  detail,
-}: {
-  progress: BackupOperationProgress | null;
-  label: string;
-  detail?: string;
-}) {
-  const percent = backupPercent(progress);
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex flex-col items-center gap-1 text-center"
-    >
-      <span className="text-sm font-medium text-default">{label}</span>
-      <span className="min-h-4 truncate text-xs tabular-nums text-muted-content">
-        {detail ?? " "}
-      </span>
-      <span className="mt-1 text-2xl font-semibold tabular-nums text-default">
-        {percent}%
-      </span>
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted-surface"
-      >
-        <div
-          className="h-full rounded-full bg-primary-gradient transition-[width] duration-300"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </div>
-  );
-}
 
 // Section action: an iOS-style row — small tinted icon tile, title + one-line
 // hint, chevron. The tile is one radius step below the card (ladder rule).
@@ -133,14 +62,11 @@ function ActionRow({
 
 export function BackupSection() {
   const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dragDepth = useRef(0);
   const taskRef = useRef<BackupTask<unknown> | null>(null);
   const [options, setOptions] = useState<BackupOptions>(DEFAULT_BACKUP_OPTIONS);
   const [open, setOpen] = useState<OpenDialog>(null);
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
   const [progress, setProgress] = useState<BackupOperationProgress | null>(null);
-  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const setOption = (key: keyof BackupOptions, value: boolean) => {
@@ -260,32 +186,6 @@ export function BackupSection() {
           })
       : undefined;
 
-  const chooseFile = (file: File | undefined) => {
-    dragDepth.current = 0;
-    setDragging(false);
-    if (file) void restore(file);
-  };
-
-  const exportRows: [keyof BackupOptions, string, string][] = [
-    ["books", t("settings.backup.books"), t("settings.backup.booksAria")],
-    [
-      "progress",
-      t("settings.backup.progress"),
-      t("settings.backup.progressAria"),
-    ],
-    ["stats", t("settings.backup.stats"), t("settings.backup.statsAria")],
-    [
-      "settings",
-      t("settings.backup.settings"),
-      t("settings.backup.settingsAria"),
-    ],
-    [
-      "dictionaries",
-      t("settings.backup.dictionaries"),
-      t("settings.backup.dictionariesAria"),
-    ],
-  ];
-
   return (
     <>
       <SettingsGroup title={t("settings.backup.title")}>
@@ -305,160 +205,32 @@ export function BackupSection() {
         />
       </SettingsGroup>
 
-      <Dialog
+      <BackupExportDialog
         open={open === "export"}
-        onOpenChange={(next) => !next && closeDialog()}
-      >
-        <DialogContent className="max-w-sm gap-4 p-5">
-          <DialogHeader>
-            <DialogTitle>{t("settings.backup.exportTitle")}</DialogTitle>
-          </DialogHeader>
-          {busy === "export" ? (
-            // Same height as the options list it replaces — the dialog
-            // doesn't jump when the transfer starts.
-            <div className="flex min-h-50 flex-col justify-center">
-              <TransferProgress
-                progress={progress}
-                label={transferLabel}
-                detail={transferDetail}
-              />
-            </div>
-          ) : (
-            <>
-              <div className="divide-y divide-subtle overflow-hidden rounded-lg border border-subtle">
-                {exportRows.map(([key, label, ariaLabel]) => (
-                  <div
-                    key={key}
-                    className="flex min-h-10 items-center justify-between gap-3 px-3 py-2"
-                  >
-                    <span className="text-sm text-default">{label}</span>
-                    <Switch
-                      checked={options[key]}
-                      onCheckedChange={(value) => setOption(key, value)}
-                      ariaLabel={ariaLabel}
-                    />
-                  </div>
-                ))}
-              </div>
-              {error ? <p className="text-xs text-destructive">{error}</p> : null}
-            </>
-          )}
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={busy === "export" ? cancelTask : closeDialog}
-            >
-              {t("settings.backup.cancel")}
-            </Button>
-            {busy === "export" ? (
-              <Button loading>
-                <UploadSimple />
-                {t("settings.backup.export")}
-              </Button>
-            ) : (
-              <Button onClick={() => void download()}>
-                <UploadSimple />
-                {t("settings.backup.export")}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
+        busy={busy === "export"}
+        options={options}
+        onOptionChange={setOption}
+        progress={progress}
+        label={transferLabel}
+        detail={transferDetail}
+        error={error}
+        onExport={() => void download()}
+        onCancelTask={cancelTask}
+        onClose={closeDialog}
+      />
+      <BackupImportDialog
         open={open === "import"}
-        onOpenChange={(next) => !next && closeDialog()}
-      >
-        <DialogContent className="max-w-md gap-4 p-5">
-          <DialogHeader>
-            <DialogTitle>{t("settings.backup.importTitle")}</DialogTitle>
-            {busy !== "import" ? (
-              <p className="text-sm text-muted-content">
-                {t("settings.backup.importHint")}
-              </p>
-            ) : null}
-          </DialogHeader>
-          {busy === "import" ? (
-            // Same height as the dropzone it replaces.
-            <div className="flex min-h-36 flex-col justify-center">
-              <TransferProgress
-                progress={progress}
-                label={transferLabel}
-                detail={transferDetail}
-              />
-            </div>
-          ) : (
-            <>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".zip,.yuki,application/zip"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  chooseFile(file);
-                }}
-              />
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={t("settings.backup.dropzone")}
-                onClick={() => inputRef.current?.click()}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    inputRef.current?.click();
-                  }
-                }}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  dragDepth.current += 1;
-                  setDragging(true);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "copy";
-                }}
-                onDragLeave={() => {
-                  // dragenter/dragleave fire in pairs when the pointer moves
-                  // across children — only the outermost leave ends the drag.
-                  dragDepth.current = Math.max(0, dragDepth.current - 1);
-                  if (dragDepth.current === 0) setDragging(false);
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  chooseFile(event.dataTransfer.files[0]);
-                }}
-                className={`flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-5 text-center outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40 ${
-                  dragging
-                    ? "border-primary bg-primary/5"
-                    : "border-subtle hover:border-strong hover:bg-hover-surface"
-                }`}
-              >
-                <FileArrowUp className="mb-2 size-6 text-muted-content" />
-                <p className="text-sm font-medium text-default">
-                  {dragging
-                    ? t("settings.backup.dropActive")
-                    : t("settings.backup.dropzone")}
-                </p>
-                <p className="mt-1 text-xs text-muted-content">
-                  {t("settings.backup.browse")}
-                </p>
-              </div>
-              {error ? <p className="text-xs text-destructive">{error}</p> : null}
-            </>
-          )}
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={busy === "import" ? cancelTask : closeDialog}
-            >
-              {t("settings.backup.cancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        busy={busy === "import"}
+        progress={progress}
+        label={transferLabel}
+        detail={transferDetail}
+        error={error}
+        onFile={(file) => {
+          if (file) void restore(file);
+        }}
+        onCancelTask={cancelTask}
+        onClose={closeDialog}
+      />
     </>
   );
 }

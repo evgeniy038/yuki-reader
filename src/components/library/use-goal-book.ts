@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { Book } from "@/core/library";
-import { charCountOfHtml } from "@/core/reading-stats";
+import { totalCharsOf } from "@/core/reading-stats";
 import type { OpenedData } from "./use-shelf";
 
 /** The book a percent daily goal scales from. */
@@ -46,10 +46,7 @@ export function useGoalBook(
     if (!data) return undefined;
     let totalChars = charsCacheRef.current.get(current.id);
     if (totalChars === undefined) {
-      totalChars = data.chapters.reduce(
-        (sum, chapter) => sum + charCountOfHtml(chapter.html),
-        0,
-      );
+      totalChars = totalCharsOf(data);
       charsCacheRef.current.set(current.id, totalChars);
     }
     return { id: current.id, title: current.title, totalChars, totalPages: 0 };

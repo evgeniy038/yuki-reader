@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { DailyStats, BookAmount } from "@/core/stats";
 import { heatLevel, heatmapWeeks } from "@/core/stats";
-import { formatDuration } from "@/lib/format";
+import { formatDayKey, formatDuration } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { Tooltip } from "@/components/ui/tooltip";
 
@@ -24,10 +24,7 @@ const HEAT_CLASSES = [
 ];
 
 function dateLabel(key: string): string {
-  return new Intl.DateTimeFormat(i18n.resolvedLanguage ?? "en", {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(`${key}T12:00:00`));
+  return formatDayKey(key, { day: "numeric", month: "short" });
 }
 
 // The cell's accessible name doubles as the tooltip headline — date first,

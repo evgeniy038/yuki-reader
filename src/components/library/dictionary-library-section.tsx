@@ -31,8 +31,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { HiddenFileInput } from "@/components/ui/hidden-file-input";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { SettingsBlock, SettingsGroup, SettingsRow } from "./settings-group";
+import { phasePercent } from "./transfer-progress";
 
 const DICTIONARY_PROGRESS_RANGES: Record<
   DictionaryProgressPhase,
@@ -45,12 +47,8 @@ const DICTIONARY_PROGRESS_RANGES: Record<
 };
 
 function dictionaryPercent(progress: DictionaryProgress | null): number {
-  if (!progress) return 0;
-  const [start, end] = DICTIONARY_PROGRESS_RANGES[progress.phase];
-  if (progress.total <= 0) return Math.round(start * 100);
-  const fraction = Math.min(1, Math.max(0, progress.current / progress.total));
-  const percent = Math.round((start + (end - start) * fraction) * 100);
-  return progress.phase === "save" && progress.current < progress.total
+  const percent = phasePercent(progress, DICTIONARY_PROGRESS_RANGES);
+  return progress?.phase === "save" && progress.current < progress.total
     ? Math.min(99, percent)
     : percent;
 }
@@ -323,11 +321,9 @@ export function DictionaryLibrarySection() {
             <p className="text-xs text-muted-content">
               {t("settings.dictionaries.importHint")}
             </p>
-            <input
-              ref={inputRef}
-              type="file"
+            <HiddenFileInput
+              inputRef={inputRef}
               accept=".zip,application/zip"
-              className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 event.target.value = "";

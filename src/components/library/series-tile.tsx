@@ -1,5 +1,5 @@
 import type { ShelfItem } from "@/core/library";
-import { readingStateOf, type Book } from "@/core/library";
+import { coverBookOf, stateLabelOf } from "@/core/library";
 import { BookOpen, Bookmark, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,8 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { ProgressRing } from "@/components/ui/progress-ring";
-import { BookCover } from "./book-cover";
+import { BookCover, CoverFrame } from "./book-cover";
 
 type SeriesItem = Extract<ShelfItem, { kind: "series" }>;
 
@@ -33,20 +32,8 @@ export function SeriesTile({
 }) {
   const { t } = useTranslation();
   // BookCover speaks Book — the series pretends to be one for the cover's sake.
-  const pseudo: Book = {
-    id: item.id,
-    title: item.series,
-    cover: item.cover,
-    progress: item.progress,
-    addedAt: item.addedAt,
-  };
-  const state = readingStateOf(pseudo);
-  const stateLabel =
-    state === "finished"
-      ? t("library.finished")
-      : state === "reading"
-        ? `${Math.round(item.progress * 100)}%`
-        : "";
+  const pseudo = coverBookOf(item);
+  const stateLabel = stateLabelOf(pseudo, t);
   return (
     <ContextMenu>
       <ContextMenuTrigger
@@ -59,20 +46,8 @@ export function SeriesTile({
           />
         }
       >
-        <div
-          className={`relative rounded-media transition-shadow group-hover:shadow-floating ${
-            flash ? "animate-pulse ring-2" : ""
-          }`}
-        >
+        <CoverFrame book={pseudo} flash={flash}>
           <BookCover book={pseudo} />
-          {item.progress > 0 ? (
-            <div
-              data-book-progress=""
-              className="absolute bottom-1.5 right-1.5 rounded-full bg-scrim p-1"
-            >
-              <ProgressRing value={item.progress} className="size-6" />
-            </div>
-          ) : null}
           {item.favorite ? (
             // A volume pinned from its series page hangs the ribbon here;
             // static (no flip) — the toggle lives on the volume tiles.
@@ -83,7 +58,7 @@ export function SeriesTile({
               <Bookmark weight="fill" className="relative top-[9px] mx-auto size-4 text-white" />
             </span>
           ) : null}
-        </div>
+        </CoverFrame>
         <p className="mt-3 truncate text-sm text-strong" title={item.series}>
           {item.series}
         </p>

@@ -7,7 +7,8 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { Book, ShelfItem } from "@/core/library";
+import type { ShelfItem } from "@/core/library";
+import { coverBookOf } from "@/core/library";
 import { cn } from "@/lib/utils";
 import { BookCover } from "./book-cover";
 import { GRID_CLASSES } from "./library-grid";
@@ -40,19 +41,6 @@ const LAYER_CLASSES = [
   "translate-x-1.5 -translate-y-1.5 group-hover:translate-x-3 group-hover:-translate-y-0.5 group-hover:rotate-2",
   "translate-x-3 -translate-y-3 group-hover:translate-x-6 group-hover:translate-y-0.5 group-hover:rotate-[5deg]",
 ];
-
-function coverBookOf(item: ShelfItem): Book {
-  // BookCover speaks Book — a series tile pretends to be one, as in SeriesTile.
-  return item.kind === "book"
-    ? item.book
-    : {
-        id: item.id,
-        title: item.series,
-        cover: item.cover,
-        progress: item.progress,
-        addedAt: item.addedAt,
-      };
-}
 
 // The folded section: up to three covers fanned out behind the first one.
 function ShelfStack({

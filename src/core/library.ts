@@ -1,4 +1,5 @@
 import { normalizeSeriesKey } from "./mokuro";
+import type { TFunction } from "i18next";
 
 export type Language = "ja" | "en";
 export type BookFormat = "epub" | "pdf" | "manga";
@@ -194,6 +195,20 @@ export function buildShelfItems(sortedBooks: Book[]): ShelfItem[] {
   return items;
 }
 
+// BookCover speaks Book — a series tile pretends to be one for the cover's
+// sake (tile id, series name as title, mean progress).
+export function coverBookOf(item: ShelfItem): Book {
+  return item.kind === "book"
+    ? item.book
+    : {
+        id: item.id,
+        title: item.series,
+        cover: item.cover,
+        progress: item.progress,
+        addedAt: item.addedAt,
+      };
+}
+
 // ---------------------------------------------------------------------------
 // Reading state shown on the tile: nothing for a fresh book, a percent while
 // reading, "Finished" at the end (the label comes from the locales).
@@ -204,6 +219,17 @@ export function readingStateOf(book: Book): ReadingState {
   if (book.progress >= 0.995) return "finished";
   if (book.progress > 0) return "reading";
   return "new";
+}
+
+// The tile's reading-state caption: percent while reading, "Finished" at the
+// end, silence for a fresh book.
+export function stateLabelOf(book: Book, t: TFunction): string {
+  const state = readingStateOf(book);
+  return state === "finished"
+    ? t("library.finished")
+    : state === "reading"
+      ? `${Math.round(book.progress * 100)}%`
+      : "";
 }
 
 // ---------------------------------------------------------------------------

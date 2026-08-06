@@ -56,6 +56,14 @@ export function charCountOfHtml(html: string): number {
   return countableNodes(el).reduce((sum, node) => sum + charCountOf(node), 0);
 }
 
+// Whole-book character total: the sum over the parsed chapters.
+export function totalCharsOf(data: { chapters: { html: string }[] }): number {
+  return data.chapters.reduce(
+    (sum, chapter) => sum + charCountOfHtml(chapter.html),
+    0,
+  );
+}
+
 // Countable leaves of the flow: text nodes with visible text + gaiji images.
 function countableNodes(root: Node): Node[] {
   const out: Node[] = [];

@@ -6,15 +6,9 @@ import { useNavigate, useParams } from "react-router";
 import { normalizeSeriesKey } from "@/core/mokuro";
 import type { Book } from "@/core/library";
 import type { MangaInputItem } from "@/core/import-manga";
+import { importItemsOf } from "@/lib/import-files";
+import { moveItem } from "@/lib/array";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,26 +16,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { HiddenFileInput } from "@/components/ui/hidden-file-input";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { BookTile } from "./book-tile";
 import { RenameDialog } from "./rename-dialog";
+import { MoveToSeriesDialog } from "./move-to-series-dialog";
+import { PageMessages } from "./page-messages";
 import { useOcrBooks } from "@/components/use-ocr-books";
 import {
   PageActions,
@@ -50,8 +31,6 @@ import {
   PageShell,
   PageTitle,
 } from "./page-shell";
-
-const NEW_SERIES = "__new__";
 
 // The series page: one manga's volumes as a cover grid. Volumes sort by
 // number; drag a tile onto another to reorder (positions persist as the
@@ -133,8 +112,6 @@ export function MangaPage({
   const [renamingSeries, setRenamingSeries] = useState(false);
   const [movingSeries, setMovingSeries] = useState(false);
   const [deletingSeries, setDeletingSeries] = useState(false);
-  const [moveTarget, setMoveTarget] = useState<string>(NEW_SERIES);
-  const [moveNewName, setMoveNewName] = useState("");
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragIndexRef = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -163,15 +140,7 @@ export function MangaPage({
     const files = [...(event.target.files ?? [])];
     event.target.value = "";
     if (files.length === 0 || seriesName === "") return;
-    onAddVolumes(
-      files.map((file) => ({
-        file,
-        path:
-          (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
-          file.name,
-      })),
-      seriesName,
-    );
+    onAddVolumes(importItemsOf(files), seriesName);
   };
 
   const onDropTile = (event: DragEvent<HTMLDivElement>, index: number) => {
@@ -181,8 +150,7 @@ export function MangaPage({
     dragIndexRef.current = null;
     if (from === null || from === index) return;
     const ids = volumes.map((volume) => volume.id);
-    const [moved] = ids.splice(from, 1);
-    ids.splice(index, 0, moved!);
+    moveItem(ids, from, index);
     onReorder(ids);
   };
 
@@ -221,13 +189,7 @@ export function MangaPage({
                 <PencilSimple />
                 {t("manga.seriesMenu.rename")}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setMovingSeries(true);
-                  setMoveTarget(otherSeries[0] ?? NEW_SERIES);
-                  setMoveNewName("");
-                }}
-              >
+              <DropdownMenuItem onClick={() => setMovingSeries(true)}>
                 <FolderPlus />
                 {t("manga.seriesMenu.move")}
               </DropdownMenuItem>
@@ -248,12 +210,7 @@ export function MangaPage({
         </PageActions>
       </PageHeader>
       <PageContent>
-        {error ? (
-          <p className="mb-6 text-sm text-muted-content">{error}</p>
-        ) : null}
-        {notice ? (
-          <p className="mb-6 text-sm text-muted-content">{notice}</p>
-        ) : null}
+        <PageMessages error={error} notice={notice} />
         <div className="grid grid-cols-3 gap-x-4 gap-y-8 sm:grid-cols-4 lg:grid-cols-5">
           {volumes.map((volume, index) => (
             <div
@@ -286,11 +243,7 @@ export function MangaPage({
                 }
                 menuExtra={
                   <ContextMenuItem
-                    onClick={() => {
-                      setMovingId(volume.id);
-                      setMoveTarget(otherSeries[0] ?? NEW_SERIES);
-                      setMoveNewName("");
-                    }}
+                    onClick={() => setMovingId(volume.id)}
                   >
                     <FolderPlus />
                     {t("manga.moveToSeries")}
@@ -329,207 +282,48 @@ export function MangaPage({
         />
       ) : null}
       {movingId ? (
-        <Dialog
+        <MoveToSeriesDialog
           open
-          onOpenChange={(next) => !next && setMovingId(null)}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("manga.move.title")}</DialogTitle>
-            </DialogHeader>
-            <form
-              className="grid gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const target =
-                  moveTarget === NEW_SERIES ? moveNewName.trim() : moveTarget;
-                if (target === "") return;
-                onMoveVolume(movingId, target);
-                setMovingId(null);
-              }}
-            >
-              <Select
-                items={[
-                  ...otherSeries.map((name) => ({ value: name, label: name })),
-                  { value: NEW_SERIES, label: t("manga.move.newSeries") },
-                ]}
-                value={moveTarget}
-                onValueChange={(value) => {
-                  if (value) setMoveTarget(value);
-                }}
-              >
-                <SelectTrigger aria-label={t("manga.move.title")}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {otherSeries.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={NEW_SERIES}>
-                    {t("manga.move.newSeries")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              {moveTarget === NEW_SERIES ? (
-                <Input
-                  autoFocus
-                  placeholder={t("manga.move.newSeriesPlaceholder")}
-                  value={moveNewName}
-                  onChange={(event) => setMoveNewName(event.target.value)}
-                />
-              ) : null}
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setMovingId(null)}
-                >
-                  {t("library.delete.cancel")}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={moveTarget === NEW_SERIES && moveNewName.trim() === ""}
-                >
-                  {t("manga.move.confirm")}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+          title={t("manga.move.title")}
+          otherSeries={otherSeries}
+          onMove={(target) => onMoveVolume(movingId, target)}
+          onClose={() => setMovingId(null)}
+        />
       ) : null}
       {deletingId ? (
-        <AlertDialog
+        <ConfirmDialog
           open
-          onOpenChange={(next) => !next && setDeletingId(null)}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("library.delete.title")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("library.delete.body", {
-                  title: volumes.find((v) => v.id === deletingId)?.title ?? "",
-                })}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("library.delete.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  onDeleteBook(deletingId);
-                  setDeletingId(null);
-                }}
-              >
-                {t("library.delete.confirm")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          title={t("library.delete.title")}
+          body={t("library.delete.body", {
+            title: volumes.find((v) => v.id === deletingId)?.title ?? "",
+          })}
+          onConfirm={() => onDeleteBook(deletingId)}
+          onClose={() => setDeletingId(null)}
+        />
       ) : null}
       {movingSeries ? (
-        <Dialog
+        <MoveToSeriesDialog
           open
-          onOpenChange={(next) => !next && setMovingSeries(false)}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("manga.moveSeries.title")}</DialogTitle>
-            </DialogHeader>
-            <form
-              className="grid gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const target =
-                  moveTarget === NEW_SERIES ? moveNewName.trim() : moveTarget;
-                if (target === "" || target === seriesName) return;
-                onMoveSeries(seriesName, target);
-                setMovingSeries(false);
-              }}
-            >
-              <Select
-                items={[
-                  ...otherSeries.map((name) => ({ value: name, label: name })),
-                  { value: NEW_SERIES, label: t("manga.move.newSeries") },
-                ]}
-                value={moveTarget}
-                onValueChange={(value) => {
-                  if (value) setMoveTarget(value);
-                }}
-              >
-                <SelectTrigger aria-label={t("manga.moveSeries.title")}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {otherSeries.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={NEW_SERIES}>
-                    {t("manga.move.newSeries")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              {moveTarget === NEW_SERIES ? (
-                <Input
-                  autoFocus
-                  placeholder={t("manga.move.newSeriesPlaceholder")}
-                  value={moveNewName}
-                  onChange={(event) => setMoveNewName(event.target.value)}
-                />
-              ) : null}
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setMovingSeries(false)}
-                >
-                  {t("library.delete.cancel")}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={moveTarget === NEW_SERIES && moveNewName.trim() === ""}
-                >
-                  {t("manga.move.confirm")}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+          title={t("manga.moveSeries.title")}
+          otherSeries={otherSeries}
+          excludeTarget={seriesName}
+          onMove={(target) => onMoveSeries(seriesName, target)}
+          onClose={() => setMovingSeries(false)}
+        />
       ) : null}
       {deletingSeries ? (
-        <AlertDialog
+        <ConfirmDialog
           open
-          onOpenChange={(next) => !next && setDeletingSeries(false)}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("library.delete.title")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("manga.deleteSeries.body", { title: seriesName })}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("library.delete.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  onDeleteSeries(seriesName);
-                  setDeletingSeries(false);
-                }}
-              >
-                {t("library.delete.confirm")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          title={t("library.delete.title")}
+          body={t("manga.deleteSeries.body", { title: seriesName })}
+          onConfirm={() => onDeleteSeries(seriesName)}
+          onClose={() => setDeletingSeries(false)}
+        />
       ) : null}
-      <input
-        ref={fileRef}
-        type="file"
+      <HiddenFileInput
+        inputRef={fileRef}
         accept=".zip,.cbz,.mokuro,image/*"
         multiple
-        hidden
         onChange={onFileChange}
       />
     </PageShell>

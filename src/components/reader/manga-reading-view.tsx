@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { MokuroBlock } from "@/core/mokuro";
-import { enqueueDetect, onOcrPage, recognizeBlockNow } from "@/core/ocr/ocr";
-import {
-  loadManga,
-  loadMangaOcr,
-  loadMangaPageBlob,
-  type MangaRecord,
-} from "@/core/storage";
-import { useLatest } from "@/lib/use-latest";
+import { recognizeBlockNow } from "@/core/ocr/ocr";
+import { loadManga, type MangaRecord } from "@/core/storage";
 import { usePagingInput } from "./use-paging-input";
+import { useSpreadNav } from "./use-spread-nav";
 import { useZoomPan } from "./use-zoom-pan";
+import { useMangaPages } from "./use-manga-pages";
+import { useMangaOcrBlocks } from "./use-manga-ocr-blocks";
+import {
+  PAGE_MARGIN,
+  SPREAD_MIN_ASPECT,
+  SPREAD_MIN_WIDTH,
+  fitScale,
+  spreadFirstOf,
+  visibleNums,
+} from "./spread-paging";
 import { PageIndicator } from "./page-indicator";
 import { MangaOcrOverlay } from "./manga-ocr-overlay";
 
@@ -23,53 +27,6 @@ import { MangaOcrOverlay } from "./manga-ocr-overlay";
 //   become object URLs in a small LRU-ish window around the current page and
 //   are revoked beyond it. OCR boxes ride on top in source-image coordinates.
 //   Position: a page number, derived from the stored 0..1 progress.
-
-const PAGE_MARGIN = 16;
-const SPREAD_MIN_ASPECT = 1.2;
-const SPREAD_MIN_WIDTH = 880;
-const GUTTER = 0;
-/** Keep object URLs this many pages around the current one. */
-const URL_WINDOW = 8;
-
-interface ViewPage {
-  num: number;
-  url: string;
-  width: number;
-  height: number;
-}
-
-function spreadFirstOf(page: number, firstPageAsCover: boolean): number {
-  if (firstPageAsCover) {
-    if (page <= 1) return 1;
-    return page % 2 === 0 ? page : page - 1;
-  }
-  return page % 2 === 1 ? page : page - 1;
-}
-
-function visibleNums(
-  first: number,
-  spread: boolean,
-  numPages: number,
-  firstPageAsCover: boolean,
-): number[] {
-  const canPair =
-    spread && first + 1 <= numPages && (!firstPageAsCover || first > 1);
-  return canPair ? [first, first + 1] : [first];
-}
-
-function fitScale(
-  pages: { width: number; height: number }[],
-  availW: number,
-  availH: number,
-): number {
-  let totalW = GUTTER * (pages.length - 1);
-  let maxH = 1;
-  for (const page of pages) {
-    totalW += page.width;
-    maxH = Math.max(maxH, page.height);
-  }
-  return Math.min(availW / totalW, availH / maxH);
-}
 
 export function MangaReadingView({
   bookId,
@@ -91,11 +48,6 @@ export function MangaReadingView({
   const [record, setRecord] = useState<MangaRecord | null>(null);
   const [failed, setFailed] = useState(false);
   const [page, setPage] = useState(1);
-  // In-app OCR blocks for pages that came without a sidecar (0-based index).
-  const [ocrBlocks, setOcrBlocks] = useState<Map<number, MokuroBlock[]>>(
-    new Map(),
-  );
-  const [view, setView] = useState<{ key: string; pages: ViewPage[] } | null>(null);
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   // Which blank margin the cursor is over — those turn the page on click.
   const [hoverSide, setHoverSide] = useState<"left" | "right" | null>(null);
@@ -107,13 +59,13 @@ export function MangaReadingView({
     reset: resetZoomPan,
     handlers: zoomPanHandlers,
   } = useZoomPan({ targetRef: outerRef, enabled: record !== null });
-  const pageRef = useRef(1);
-  const spreadRef = useRef(false);
-  const numPagesRef = useRef(1);
-  const renderTokenRef = useRef(0);
-  const urlCacheRef = useRef(new Map<number, string>());
-  const sizeCacheRef = useRef(new Map<number, { width: number; height: number }>());
-  const onProgressRef = useLatest(onProgress);
+  const { pageRef, spreadRef, numPagesRef, stepFor, goTo } = useSpreadNav({
+    firstPageAsCover: mangaFirstPageAsCover,
+    onNavigate: (target) => {
+      setPage(target);
+      resetZoomPan();
+    },
+  });
 
   const numPages = record?.pages.length ?? 0;
   numPagesRef.current = Math.max(1, numPages);
@@ -148,49 +100,6 @@ export function MangaReadingView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
-  // Object URLs die with the view.
-  useEffect(() => {
-    const cache = urlCacheRef.current;
-    return () => {
-      for (const url of cache.values()) URL.revokeObjectURL(url);
-      cache.clear();
-    };
-  }, [bookId]);
-
-  // In-app OCR for sidecar-less pages (lazy): attach what's already computed,
-  // queue detect-only skeletons for the rest as a safety net (the import and
-  // the resume pass normally beat the reader to it), and attach fresh results
-  // live as the worker finishes pages. Recognition itself is the background
-  // march (ocr.ts) plus hover — nothing here re-prioritizes the queue.
-  useEffect(() => {
-    if (!record) return;
-    let alive = true;
-    const missing = record.pages.flatMap((meta, index) =>
-      meta.blocks && meta.blocks.length > 0 ? [] : [index],
-    );
-    void loadMangaOcr(bookId).then((map) => {
-      // Merge, never replace: live page events may have landed after the
-      // storage snapshot was taken — they are newer and must win.
-      if (alive && map.size > 0) {
-        const blocksMap = new Map(
-          [...map].map(([index, rec]) => [index, rec.blocks]),
-        );
-        setOcrBlocks((prev) => new Map([...blocksMap, ...prev]));
-      }
-    });
-    if (missing.length > 0) {
-      enqueueDetect(bookId, missing);
-    }
-    const unsubscribe = onOcrPage((doneBookId, pageIndex, blocks) => {
-      if (doneBookId !== bookId) return;
-      setOcrBlocks((prev) => new Map(prev).set(pageIndex, blocks));
-    });
-    return () => {
-      alive = false;
-      unsubscribe();
-    };
-  }, [record, bookId]);
-
   // Track the stage size: the spread/single decision and the fit scale.
   useEffect(() => {
     const outer = outerRef.current;
@@ -216,99 +125,16 @@ export function MangaReadingView({
     ? visibleNums(first, spread, numPages, mangaFirstPageAsCover)
     : [];
 
-  // Load the visible set (blobs → object URLs, natural sizes from the sidecar
-  // or the image itself). Rapid navigation is token-guarded; the previous
-  // page stays on screen until the new one is ready.
-  useEffect(() => {
-    if (!record || nums.length === 0) return;
-    const token = (renderTokenRef.current += 1);
-    const wanted = new Set<number>();
-    for (let n = Math.max(1, nums[0]! - URL_WINDOW); n <= Math.min(numPages, nums[nums.length - 1]! + URL_WINDOW); n++) {
-      wanted.add(n);
-    }
-
-    const getUrl = async (num: number): Promise<string> => {
-      const cached = urlCacheRef.current.get(num);
-      if (cached) return cached;
-      const blob = await loadMangaPageBlob(bookId, num - 1);
-      if (!blob) throw new Error(`missing page ${num}`);
-      const url = URL.createObjectURL(blob);
-      urlCacheRef.current.set(num, url);
-      return url;
-    };
-
-    const getSize = async (num: number, url: string) => {
-      const cached = sizeCacheRef.current.get(num);
-      if (cached) return cached;
-      const meta = record.pages[num - 1];
-      let size =
-        meta?.img_width && meta?.img_height
-          ? { width: meta.img_width, height: meta.img_height }
-          : undefined;
-      if (!size) {
-        size = await new Promise<{ width: number; height: number }>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () =>
-            resolve({ width: img.naturalWidth, height: img.naturalHeight });
-          img.onerror = () => reject(new Error(`bad image ${num}`));
-          img.src = url;
-        });
-      }
-      sizeCacheRef.current.set(num, size);
-      return size;
-    };
-
-    void (async () => {
-      try {
-        const pages: ViewPage[] = [];
-        for (const num of nums) {
-          const url = await getUrl(num);
-          const size = await getSize(num, url);
-          pages.push({ num, url, ...size });
-        }
-        if (token !== renderTokenRef.current) return;
-        // Evict URLs far outside the window.
-        for (const [num, url] of urlCacheRef.current) {
-          if (!wanted.has(num)) {
-            URL.revokeObjectURL(url);
-            urlCacheRef.current.delete(num);
-          }
-        }
-        setView({ key: nums.join(","), pages });
-        onProgressRef.current?.(
-          numPages > 1 ? (nums[0]! - 1) / (numPages - 1) : 1,
-          nums[0]!,
-          nums.length,
-        );
-      } catch {
-        // a failed page load leaves the previous page on screen
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, first, nums.length, bookId]);
-
-  // Navigation step: one page in single mode; in spread mode the cover flips
-  // to 2, then spreads advance by two.
-  const stepFor = (dir: 1 | -1): number => {
-    if (!spreadRef.current) return dir;
-    if (mangaFirstPageAsCover && pageRef.current === 1 && dir > 0) return 1;
-    return 2 * dir;
-  };
-
-  const goTo = (index: number) => {
-    const count = numPagesRef.current;
-    const max = spreadRef.current
-      ? spreadFirstOf(count, mangaFirstPageAsCover)
-      : count;
-    let target = Math.max(1, Math.min(max, index));
-    if (spreadRef.current && target > 1) {
-      target = spreadFirstOf(target, mangaFirstPageAsCover);
-    }
-    if (target === pageRef.current) return;
-    pageRef.current = target;
-    setPage(target);
-    resetZoomPan();
-  };
+  const view = useMangaPages({
+    bookId,
+    record,
+    first,
+    nums,
+    numPages,
+    onProgress,
+  });
+  // In-app OCR blocks for pages that came without a sidecar (0-based index).
+  const ocrBlocks = useMangaOcrBlocks(bookId, record);
 
   usePagingInput({
     targetRef: outerRef,
@@ -327,7 +153,7 @@ export function MangaReadingView({
     );
   }
 
-  const scale = view ? fitScale(view.pages, availW, availH) : 1;
+  const scale = view ? fitScale(view.pages, availW, availH, 0) : 1;
 
   return (
     <div

@@ -31,6 +31,17 @@ export function formatDateLong(timestamp: number): string {
   });
 }
 
+/** A "YYYY-MM-DD" day key as a local date label; the noon anchor pins the
+    day against timezone edges. Options choose the fields shown. */
+export function formatDayKey(
+  key: string,
+  options: Intl.DateTimeFormatOptions,
+): string {
+  return new Intl.DateTimeFormat(lng(), options).format(
+    new Date(`${key}T12:00:00`),
+  );
+}
+
 /** Active time as a short label: seconds under a minute, then min / h min. */
 export function formatDuration(timeMs: number): string {
   // Sub-minute sessions show seconds — "0 min" for real reading looks broken.

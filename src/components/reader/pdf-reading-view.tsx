@@ -8,6 +8,16 @@ import { useLatest } from "@/lib/use-latest";
 import { currentIndexBefore } from "./panels-data";
 import { usePdfDocument } from "./use-pdf-document";
 import { usePagingInput } from "./use-paging-input";
+import { useSpreadNav } from "./use-spread-nav";
+import {
+  PAGE_MARGIN,
+  SPREAD_MIN_ASPECT,
+  SPREAD_MIN_WIDTH,
+  fitScale,
+  spreadFirstOf,
+  spreadProgress,
+  visibleNums,
+} from "./spread-paging";
 import { PageIndicator } from "./page-indicator";
 import {
   SearchPanel,
@@ -29,43 +39,12 @@ import {
 //   Position: a page number, derived from the stored 0..1 progress — restores
 //   exactly, at any window size and across spread/single switches.
 
-// Outer margin around the page set: just breathing room off the window edge —
-// pages are the protagonist, they take all the space the aspect ratio allows.
-const PAGE_MARGIN = 16;
+// The spread geometry (margin, spread thresholds, fit) lives in
+// spread-paging.ts, shared with the manga reader; the pdf spread always
+// treats page 1 as a solo cover.
 const MAX_PIXEL_RATIO = 2;
-const SPREAD_MIN_ASPECT = 1.2;
-const SPREAD_MIN_WIDTH = 880;
 // Gutter between the two pages of a spread — keep in sync with gap-2 below.
 const GUTTER = 8;
-
-// First page of the physical-book spread containing `page`: the cover (1) is
-// always alone; pairs are [2,3], [4,5], … so even pages land on the left.
-function spreadFirstOf(page: number): number {
-  if (page <= 1) return 1;
-  return page % 2 === 0 ? page : page - 1;
-}
-
-// The visible set starting at `first`: the cover (1) stays alone; physical
-// pairs start at [2,3].
-function visiblePageNums(first: number, spread: boolean, numPages: number): number[] {
-  return spread && first > 1 && first + 1 <= numPages ? [first, first + 1] : [first];
-}
-
-// One scale for the whole set: the largest that fits every visible page whole
-// (heights share the bound, widths add up plus the gutters).
-function fitScale(
-  viewports: { width: number; height: number }[],
-  availW: number,
-  availH: number,
-): number {
-  let totalW = GUTTER * (viewports.length - 1);
-  let maxH = 1;
-  for (const viewport of viewports) {
-    totalW += viewport.width;
-    maxH = Math.max(maxH, viewport.height);
-  }
-  return Math.min(availW / totalW, availH / maxH);
-}
 
 export function PdfReadingView({
   pdfBytes,
@@ -91,17 +70,13 @@ export function PdfReadingView({
   const outerRef = useRef<HTMLDivElement>(null);
   const pageHostRef = useRef<HTMLDivElement>(null);
   const renderTokenRef = useRef(0);
-  const pageRef = useRef(1);
-  const spreadRef = useRef(false);
   const onProgressRef = useLatest(onProgress);
   const onOutlineChangeRef = useLatest(onOutlineChange);
-  const numPagesRef = useRef(1);
 
   const { doc, numPages, restoredPage, failed, outline } = usePdfDocument(
     pdfBytes,
     initialProgress,
   );
-  numPagesRef.current = Math.max(1, numPages);
 
   const [page, setPage] = useState(1);
   const [pageLast, setPageLast] = useState(1);
@@ -109,6 +84,11 @@ export function PdfReadingView({
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTokenRef = useRef(0);
+  const { pageRef, spreadRef, numPagesRef, stepFor, goTo } = useSpreadNav({
+    firstPageAsCover: true,
+    onNavigate: setPage,
+  });
+  numPagesRef.current = Math.max(1, numPages);
 
   // Restore once the document lands: the stored progress becomes the page.
   useEffect(() => {
@@ -162,12 +142,12 @@ export function PdfReadingView({
         spreadRef.current = spread;
 
         // Normalize the anchor to a spread boundary (31 → 30 shows [30,31]).
-        const first = spread ? spreadFirstOf(pageRef.current) : pageRef.current;
+        const first = spread ? spreadFirstOf(pageRef.current, true) : pageRef.current;
         if (first !== pageRef.current) {
           pageRef.current = first;
           setPage(first);
         }
-        const nums = visiblePageNums(first, spread, numPagesRef.current);
+        const nums = visibleNums(first, spread, numPagesRef.current, true);
 
         const pdfPages = [];
         for (const n of nums) pdfPages.push(await doc.getPage(n));
@@ -178,6 +158,7 @@ export function PdfReadingView({
           }),
           availW,
           availH,
+          GUTTER,
         );
         const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
 
@@ -201,9 +182,7 @@ export function PdfReadingView({
         pageHostRef.current.dataset.renderedPage = String(first);
         setPageLast(nums[nums.length - 1]!);
         onProgressRef.current?.(
-          numPagesRef.current > 1
-            ? (first - 1) / (numPagesRef.current - 1)
-            : 1,
+          spreadProgress(first, numPagesRef.current),
           first,
           nums.length,
         );
@@ -226,24 +205,6 @@ export function PdfReadingView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, page]);
-
-  // Navigation step: one page in single mode; in spread mode the cover flips
-  // to 2, then spreads advance by two.
-  const stepFor = (dir: 1 | -1): number => {
-    if (!spreadRef.current) return dir;
-    if (pageRef.current === 1 && dir > 0) return 1;
-    return 2 * dir;
-  };
-
-  const goTo = (index: number) => {
-    const count = numPagesRef.current;
-    const max = spreadRef.current ? spreadFirstOf(count) : count;
-    let target = Math.max(1, Math.min(max, index));
-    if (spreadRef.current && target > 1) target = spreadFirstOf(target);
-    if (target === pageRef.current) return;
-    pageRef.current = target;
-    setPage(target);
-  };
 
   usePagingInput({
     targetRef: outerRef,
