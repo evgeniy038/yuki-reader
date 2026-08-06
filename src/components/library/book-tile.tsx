@@ -9,7 +9,6 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -22,15 +21,10 @@ import { DashRing } from "@/components/ui/dash-ring";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { BookCover } from "./book-cover";
 
-// How far from the pin's hit area the unpinned ribbon starts answering the
-// pointer, px — tight on purpose: the tip should stir only when the cursor
-// heads for the corner, not from across the tile.
-const PEEK_RADIUS = 64;
-
 // A book on the shelf: cover, title, author, reading state (percent while
 // reading, "Finished" at the end, silence for a fresh book). Click opens;
 // right-click opens the context menu with every per-book action. Hover lifts
-// the cover with a shadow, press settles the tile.
+// the cover with a shadow.
 // `subtitle` overrides the author line (manga volumes show "Vol N" there);
 // `menuExtra` inserts extra context-menu items before the destructive zone.
 // `busy` (manga volumes mid-detect) frosts the cover with a spinner — the
@@ -118,67 +112,29 @@ export function BookTile({
   }
   // The pin control can't nest inside the tile's own <button>, so it rides
   // as an absolutely-positioned sibling over the cover's top-right corner.
-  // It is ONE morphing element, not two skins: unpinned, the ribbon's
-  // notched tip peeks from under the cover's top edge — and the CLOSER the
-  // pointer gets, the further it peeks (proximity drives --peek, the 200ms
-  // ease smooths every retarget). Pinning drops the ribbon to full length
-  // on a light spring (a barely-there settle, never a visible dip below
-  // the cover's edge); unpinning retracts it. All motion is a transform on
-  // a promoted layer (no scale — a squashing ribbon reads as a glitch); the
-  // hit area is a full 48px square. The clip window is 12px taller than the
-  // ribbon so neither the spring's settle nor the press tug is cut flat.
-  const pinButtonRef = useRef<HTMLButtonElement | null>(null);
-  const ribbonRef = useRef<HTMLSpanElement | null>(null);
-  const peekFrameRef = useRef(0);
-  const handlePeekMove = (event: React.PointerEvent) => {
-    if (!onToggleFavorite || book.favorite) return;
-    const { clientX, clientY } = event;
-    cancelAnimationFrame(peekFrameRef.current);
-    peekFrameRef.current = requestAnimationFrame(() => {
-      const button = pinButtonRef.current;
-      const ribbon = ribbonRef.current;
-      if (!button || !ribbon) return;
-      const rect = button.getBoundingClientRect();
-      const dx = Math.max(rect.left - clientX, 0, clientX - rect.right);
-      const dy = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
-      const t = Math.min(1, Math.max(0, 1 - Math.hypot(dx, dy) / PEEK_RADIUS));
-      // smoothstep: the tip answers gently from afar, decisively up close.
-      ribbon.style.setProperty("--peek", (t * t * (3 - 2 * t)).toFixed(3));
-    });
-  };
-  const handlePeekLeave = () => {
-    cancelAnimationFrame(peekFrameRef.current);
-    // Remove (not zero) so the focus-visible variant can drive --peek again.
-    ribbonRef.current?.style.removeProperty("--peek");
-  };
-  // Pressing the unpinned pin tugs the ribbon a hair past full reach.
-  const handlePinPress = () => {
-    if (!book.favorite)
-      ribbonRef.current?.style.setProperty("--peek", "1.25");
-  };
+  // It is ONE morphing element, not two skins: unpinned, the ribbon hides
+  // above the cover and its notched tip slides out on tile hover — already
+  // the primary gradient, the bookmark is visibly THERE; pinning drops it
+  // to full length on a light spring and fades the icon in, unpinning
+  // retracts it. All motion is a transform on a promoted layer (no scale —
+  // a squashing ribbon reads as a glitch); the hit area is a full 56px
+  // square. The clip window is 4px taller than the ribbon so the spring's
+  // settle is never cut flat.
   const pinControl = onToggleFavorite ? (
     <button
       type="button"
-      ref={pinButtonRef}
       data-book-favorite=""
       aria-label={t(book.favorite ? "library.menu.unpin" : "library.menu.pin")}
       aria-pressed={book.favorite}
-      onPointerDown={handlePinPress}
-      onClick={() => {
-        // Clear the inline peek: the pinned classes ignore it, and after an
-        // UNPIN the proximity handler must start from a clean slate.
-        ribbonRef.current?.style.removeProperty("--peek");
-        onToggleFavorite();
-      }}
-      className="group/pin absolute right-0 top-0 z-10 h-12 w-12 cursor-pointer"
+      onClick={onToggleFavorite}
+      className="group/pin absolute right-0 top-0 z-10 h-14 w-14 cursor-pointer outline-none"
     >
-      <span className="absolute right-2.5 top-0 block h-12 w-7 overflow-hidden">
+      <span className="absolute right-2.5 top-0 block h-10 w-7 overflow-hidden">
         <span
-          ref={ribbonRef}
-          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-200 ${
+          className={`relative block h-9 w-7 bookmark-ribbon bg-primary-gradient will-change-transform transition-transform duration-300 ${
             book.favorite
-              ? "translate-y-0 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:translate-y-[3px]"
-              : "pin-peek ease-out group-focus-visible/pin:[--peek:1]"
+              ? "translate-y-0 ease-[cubic-bezier(0.34,1.4,0.64,1)] group-active/pin:translate-y-[3px] group-focus-visible/pin:translate-y-[3px]"
+              : "-translate-y-full ease-out group-hover:-translate-y-[20px] group-focus-visible/pin:-translate-y-[20px] group-active/pin:-translate-y-[16px]"
           }`}
         >
           <Bookmark
@@ -194,14 +150,7 @@ export function BookTile({
     </button>
   ) : null;
   return (
-    <div
-      // origin-top: the press scale contracts the tile TOWARD its top edge,
-      // so the pinned ribbon's flush seam with the cover is the fixed point
-      // — it can't ride down off the corner mid-press.
-      className="group relative transition-transform origin-top active:scale-98"
-      onPointerMove={handlePeekMove}
-      onPointerLeave={handlePeekLeave}
-    >
+    <div className="group relative">
       <ContextMenu>
         <ContextMenuTrigger
           render={
