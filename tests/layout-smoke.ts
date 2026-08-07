@@ -235,16 +235,21 @@ async function waitForReader(page: Page): Promise<void> {
 // The reader re-measures via ResizeObserver → rAF, so right after a resize the
 // column geometry can lag the viewport for a frame or two. Wait until the
 // re-measure has actually landed (column width matches the new page box and
-// the pitch divides exactly) before collecting a report.
+// the pitch divides exactly) before collecting a report. A single matching
+// poll can catch a transient mid-re-measure frame — intermediate geometry and
+// the React indicator briefly agree — so only accept the state when the same
+// settled signature (viewport | scrollSize | columnW | indicated pages) comes
+// up in TWO polls in a row.
 async function waitForSettledGeometry(page: Page): Promise<boolean> {
   const deadline = Date.now() + 5_000;
+  let confirmed: string | null = null;
   while (Date.now() < deadline) {
-    const settled = await page.evaluate(() => {
+    const sample = await page.evaluate(() => {
       const article = document.querySelector(".book-content");
       const contentEl = article?.parentElement;
       const scrollEl = contentEl?.parentElement;
       const outerEl = scrollEl?.parentElement;
-      if (!article || !contentEl || !scrollEl || !outerEl) return false;
+      if (!article || !contentEl || !scrollEl || !outerEl) return null;
       const vertical = getComputedStyle(contentEl).writingMode.includes("vertical");
       const viewport = vertical ? scrollEl.clientHeight : scrollEl.clientWidth;
       const fontSize = parseFloat(getComputedStyle(contentEl).fontSize) || 18;
@@ -269,22 +274,24 @@ async function waitForSettledGeometry(page: Page): Promise<boolean> {
           expectedViewport = expectedColumn;
         }
       }
-      if (Math.abs(viewport - expectedViewport) > 1) return false;
+      if (Math.abs(viewport - expectedViewport) > 1) return null;
       const scrollSize = vertical ? scrollEl.scrollHeight : scrollEl.scrollWidth;
       const columnW = parseFloat(getComputedStyle(contentEl).columnWidth);
-      if (!viewport || !scrollSize || Number.isNaN(columnW)) return false;
+      if (!viewport || !scrollSize || Number.isNaN(columnW)) return null;
       // Sub-glyph trailing overflow (kinsoku ink at the flow end) is tolerated
       // by the report too — don't block settling on it.
-      if ((scrollSize + 40) % (viewport + 40) > fontSize) return false;
+      if ((scrollSize + 40) % (viewport + 40) > fontSize) return null;
       // The React page-count indicator re-renders a tick after measure() —
       // require it to agree with the geometry before collecting a report.
       const indicated = Number(
         document.querySelector("[data-page-indicator]")?.getAttribute("data-pages"),
       );
       const pages = Math.max(1, Math.round((scrollSize + 40) / (viewport + 40)));
-      return Math.abs(columnW - expectedColumn) < 1 && indicated === pages;
+      if (Math.abs(columnW - expectedColumn) >= 1 || indicated !== pages) return null;
+      return `${viewport}|${scrollSize}|${columnW}|${indicated}`;
     });
-    if (settled) return true;
+    if (sample !== null && sample === confirmed) return true;
+    confirmed = sample;
     await page.waitForTimeout(100);
   }
   return false;

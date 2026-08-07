@@ -95,32 +95,39 @@ async function waitForReader(page: Page): Promise<void> {
 }
 
 // Wait until the re-measure after a resize has landed: the indicator's page
-// count must agree with the live column geometry.
+// count must agree with the live column geometry. A single matching poll can
+// catch a transient mid-re-measure frame — the layout and the React indicator
+// pass through intermediate values that briefly agree (deterministic wrong
+// snapshots) — so only accept the state when the same settled signature
+// (viewport | scrollSize | indicated pages) comes up in TWO polls in a row.
 async function waitForSettled(page: Page): Promise<void> {
   const deadline = Date.now() + 5_000;
+  let confirmed: string | null = null;
   while (Date.now() < deadline) {
-    const settled = await page.evaluate(() => {
+    const sample = await page.evaluate(() => {
       const article = document.querySelector(".book-content");
       const contentEl = article?.parentElement;
       const scrollEl = contentEl?.parentElement;
-      if (!article || !contentEl || !scrollEl) return false;
+      if (!article || !contentEl || !scrollEl) return null;
       const outerEl = scrollEl.parentElement;
-      if (!outerEl) return false;
+      if (!outerEl) return null;
       const vertical = getComputedStyle(contentEl).writingMode.includes("vertical");
       const viewport = vertical ? scrollEl.clientHeight : scrollEl.clientWidth;
       // Guard against pre-measure staleness: the scroll box must already have
       // been resized to the CURRENT outer box (vertical page box = outer − 2·40).
       const expected = vertical ? outerEl.clientHeight - 80 : outerEl.clientWidth;
-      if (Math.abs(viewport - expected) > 1) return false;
+      if (Math.abs(viewport - expected) > 1) return null;
       const scrollSize = vertical ? scrollEl.scrollHeight : scrollEl.scrollWidth;
-      if (!viewport || !scrollSize) return false;
+      if (!viewport || !scrollSize) return null;
       const pages = Math.max(1, Math.round((scrollSize + 40) / (viewport + 40)));
       const indicated = Number(
         document.querySelector("[data-page-indicator]")?.getAttribute("data-pages"),
       );
-      return indicated === pages;
+      if (indicated !== pages) return null;
+      return `${viewport}|${scrollSize}|${indicated}`;
     });
-    if (settled) return;
+    if (sample !== null && sample === confirmed) return;
+    confirmed = sample;
     await page.waitForTimeout(100);
   }
 }
@@ -154,7 +161,18 @@ async function checkBook(page: Page, name: string, fwd: string): Promise<string[
 
   await page.setViewportSize(VIEW_B);
   await waitForSettled(page);
-  const b = (await page.evaluate(takeSnapshot)) as Snapshot;
+  // A mid-re-measure plateau can sit at a wrong-but-stable explored count for
+  // a few hundred ms before the final remeasure lands — past the two-sample
+  // window. Wait out the anchor itself: if the explored count never settles
+  // back at/below the pre-resize one within the deadline, that's a real jump.
+  let b = (await page.evaluate(takeSnapshot)) as Snapshot;
+  {
+    const deadline = Date.now() + 5_000;
+    while (b.explored > a.explored && Date.now() < deadline) {
+      await page.waitForTimeout(100);
+      b = (await page.evaluate(takeSnapshot)) as Snapshot;
+    }
+  }
   if (b.explored > a.explored)
     problems.push(
       `${name}: resize jumped forward: explored ${a.explored} → ${b.explored} (total ${a.total})`,
@@ -162,7 +180,17 @@ async function checkBook(page: Page, name: string, fwd: string): Promise<string[
 
   await page.setViewportSize(VIEW_A);
   await waitForSettled(page);
-  const c = (await page.evaluate(takeSnapshot)) as Snapshot;
+  // Same for the round trip: wait for the reader to converge on the exact
+  // pre-resize anchor, not just for any self-consistent frame. Never
+  // converging within the deadline = real drift, reported below.
+  let c = (await page.evaluate(takeSnapshot)) as Snapshot;
+  {
+    const deadline = Date.now() + 5_000;
+    while ((c.page !== a.page || c.explored !== a.explored) && Date.now() < deadline) {
+      await page.waitForTimeout(100);
+      c = (await page.evaluate(takeSnapshot)) as Snapshot;
+    }
+  }
   if (c.page !== a.page)
     problems.push(`${name}: round-trip page drifted: ${a.page} → ${c.page}`);
   if (c.explored !== a.explored)

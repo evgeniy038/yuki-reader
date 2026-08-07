@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import { requireEnv } from "./env.ts";
 import { ensureServer } from "./browser-harness.ts";
+import { exitToShelf } from "./import-open.ts";
 
 const MANGA_DIR = requireEnv("YUKI_TEST_MANGA_DIR");
 const BASE = "http://localhost:1420";
@@ -78,14 +79,6 @@ async function settleOnPage(page: Page, expected: number): Promise<void> {
     expected,
     { timeout: 20_000 },
   );
-}
-
-async function exitToShelf(page: Page): Promise<void> {
-  await page.mouse.move(640, 10); // cursor to the top edge reveals the chrome
-  await page.waitForTimeout(400);
-  await page.click('button[aria-label="Back to the shelf"]');
-  await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
-  await page.waitForTimeout(500);
 }
 
 async function deleteFirstTile(page: Page): Promise<void> {
@@ -356,11 +349,7 @@ async function main(): Promise<void> {
   check((await currentPage(page)) === 2, "restore: reopen lands on the bookmark");
 
   // Back to the series page, delete Vol 3.
-  await page.mouse.move(640, 10);
-  await page.waitForTimeout(400);
-  await page.click('button[aria-label="Back to the shelf"]');
-  await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
-  await page.waitForTimeout(500);
+  await exitToShelf(page);
   await page
     .locator("[data-book-id]", { hasText: "Vol 3" })
     .first()

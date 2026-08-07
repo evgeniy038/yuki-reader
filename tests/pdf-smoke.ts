@@ -8,7 +8,7 @@
 
 import { requireEnv } from "./env.ts";
 import { ensureServer, launchBrowser } from "./browser-harness.ts";
-import { openFreshTile } from "./import-open.ts";
+import { openFreshTile, exitToShelf } from "./import-open.ts";
 
 const TEXT_PDF = requireEnv("YUKI_TEST_PDF_TEXT");
 const SCAN_PDF = requireEnv("YUKI_TEST_PDF_SCAN");
@@ -78,14 +78,6 @@ async function flip(page: import("playwright-core").Page, times: number): Promis
     await page.keyboard.press("ArrowRight");
     await page.waitForTimeout(150);
   }
-}
-
-async function exitToShelf(page: import("playwright-core").Page): Promise<void> {
-  await page.mouse.move(640, 10); // cursor to the top edge reveals the chrome
-  await page.waitForTimeout(400);
-  await page.click('button[aria-label="Back to the shelf"]');
-  await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
-  await page.waitForTimeout(500);
 }
 
 async function deleteViaMenu(page: import("playwright-core").Page): Promise<void> {

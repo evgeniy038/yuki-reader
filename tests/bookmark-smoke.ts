@@ -11,7 +11,7 @@
 import { readdirSync } from "node:fs";
 import { requireEnv } from "./env.ts";
 import { ensureServer } from "./browser-harness.ts";
-import { openFreshTile } from "./import-open.ts";
+import { openFreshTile, exitToShelf } from "./import-open.ts";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 
@@ -23,15 +23,6 @@ const problems: string[] = [];
 function check(ok: boolean, label: string): void {
   if (!ok) problems.push(label);
   console.log(`${ok ? "  ✓" : "  ✗"} ${label}`);
-}
-
-// The reader chrome auto-hides when idle and only reveals near the top edge
-// (clientY < 40) — wake it with a mouse move there before clicking.
-async function exitToShelf(page: Page): Promise<void> {
-  await page.mouse.move(720, 10);
-  await page.waitForTimeout(300);
-  await page.click('button[aria-label="Back to the shelf"]');
-  await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
 }
 
 async function reopenBook(page: Page): Promise<void> {
@@ -108,7 +99,9 @@ async function main(): Promise<void> {
     await exitToShelf(page);
     await page.click('button[data-view="stats"]');
     // Nothing was ever flushed: the stats view stays in its empty state.
-    await page.waitForSelector("text=Statistics", { timeout: 10_000 });
+    // The days load async (a spinner renders first), so wait for the empty
+    // state itself, not just the page title.
+    await page.waitForSelector("text=Nothing to count yet", { timeout: 10_000 });
     check(
       (await page.locator("text=Nothing to count yet").count()) === 1,
       "peek visit leaves the stats log empty",
