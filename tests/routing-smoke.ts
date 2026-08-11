@@ -6,7 +6,7 @@
 
 import { readdirSync } from "node:fs";
 import { requireEnv } from "./env.ts";
-import { ensureServer } from "./browser-harness.ts";
+import { clickChromeButton, ensureServer } from "./browser-harness.ts";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 
@@ -66,9 +66,7 @@ async function main(): Promise<void> {
   check(true, "reader comes back after refresh");
 
   // 5. Exit to the shelf → home URL; history back → the book again.
-  await page.mouse.move(720, 10);
-  await page.waitForTimeout(400);
-  await page.click('button[aria-label="Back to the shelf"]');
+  await clickChromeButton(page, 'button[aria-label="Back to the shelf"]');
   await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
   check(
     page.url().endsWith("#/") || page.url().endsWith("/"),
@@ -79,9 +77,7 @@ async function main(): Promise<void> {
   check(page.url() === readUrl, "history.back reopens the book at its URL");
 
   // 6. Refresh on /stats stays on /stats.
-  await page.mouse.move(720, 10);
-  await page.waitForTimeout(400);
-  await page.click('button[aria-label="Back to the shelf"]');
+  await clickChromeButton(page, 'button[aria-label="Back to the shelf"]');
   await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
   await page.click('button[data-view="stats"]');
   await page.waitForSelector("text=Statistics", { timeout: 10_000 });

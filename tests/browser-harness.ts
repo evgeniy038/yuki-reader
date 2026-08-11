@@ -49,3 +49,32 @@ export async function launchBrowser(): Promise<{
   const page = await context.newPage();
   return { browser, context, page };
 }
+
+// Clicking a button on the auto-hiding reader chrome (the top pill). The pill
+// hides after ~1s idle and wakes ONLY from the top REVEAL_ZONE_PX (10) strip —
+// the app's check is `clientY < 10`, so a wake at y=10 itself never fires and
+// the click falls through to the page. Throw the cursor to y=5, then hit-test
+// the button's own point: an opacity-0 pill still reads as "visible" to the
+// selector engine, so only elementFromPoint proves the chrome is awake.
+export async function clickChromeButton(
+  page: Page,
+  selector: string,
+): Promise<void> {
+  await page.mouse.move(720, 5);
+  await page.waitForFunction(
+    (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      return el.contains(
+        document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        ),
+      );
+    },
+    selector,
+    { timeout: 5_000 },
+  );
+  await page.click(selector);
+}

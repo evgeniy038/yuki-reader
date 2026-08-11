@@ -4,6 +4,7 @@
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import { chromium, type Page } from "playwright-core";
+import { clickChromeButton } from "./browser-harness.ts";
 
 const BASE = "http://localhost:1420";
 
@@ -26,9 +27,8 @@ const indicatorText = (page: Page) =>
 async function wheelOverPanel(page: Page, name: "toc" | "search"): Promise<void> {
   await page.goto(`${BASE}/?demo=h`);
   await page.waitForSelector(".book-content");
-  await page.mouse.move(720, 10);
-  await page.waitForTimeout(150);
-  await page.click(
+  await clickChromeButton(
+    page,
     `button[aria-label="${name === "toc" ? "Contents" : "Search in book"}"]`,
   );
   const panel = page.locator(`[data-reader-panel="${name}"]`);
