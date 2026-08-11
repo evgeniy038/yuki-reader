@@ -308,6 +308,15 @@ export function useSectionPager({
           spacerRef.current = spacer;
         }
         article.appendChild(spacer);
+        // Horizontal pages have a fixed box: a late-loading image reflows the
+        // columns without moving the box, so the ResizeObserver never sees
+        // it. Re-measure when each pending image settles. (Vertical's box
+        // grows with the flow — the observer catches it there.)
+        for (const img of article.querySelectorAll("img")) {
+          if (img.complete) continue;
+          img.addEventListener("load", schedule, { once: true });
+          img.addEventListener("error", schedule, { once: true });
+        }
         statsRef.current = new ReadingStats(article);
         currentSectionRef.current = clamped;
       }
@@ -366,15 +375,21 @@ export function useSectionPager({
     remeasure();
     const ro = new ResizeObserver(schedule);
     if (outerRef.current) ro.observe(outerRef.current);
-    // The section box too: images finishing resize the flow — a cheap
-    // re-measure absorbs it instead of drifting the page count.
+    // The section box too: a vertical flow grows its box as images finish —
+    // a cheap re-measure absorbs it instead of drifting the page count.
     ro.observe(contentEl);
+    // Webfonts swap in AFTER the first measure (unicode-range subsets keep
+    // arriving per-glyph even later), and each swap reflows the columns. The
+    // observer can't see it — the page box itself doesn't move — so every
+    // font-load batch schedules a re-measure of its own.
+    document.fonts.addEventListener("loadingdone", schedule);
     document.addEventListener("fullscreenchange", onFullscreen);
     document.addEventListener("webkitfullscreenchange", onFullscreen);
     return () => {
       cancelAnimationFrame(raf);
       window.clearTimeout(fsTimer);
       ro.disconnect();
+      document.fonts.removeEventListener("loadingdone", schedule);
       document.removeEventListener("fullscreenchange", onFullscreen);
       document.removeEventListener("webkitfullscreenchange", onFullscreen);
     };

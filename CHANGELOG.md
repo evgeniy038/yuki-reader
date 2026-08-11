@@ -6,6 +6,7 @@ versioning — [SemVer](https://semver.org/).
 ## [1.3.5] - 2026-08-11
 
 - The app opens much faster — the library greets you right away, and the heavy reading screens load only when you actually open them
+- Horizontal books: the end of a chapter no longer goes missing once fonts and illustrations settle in — every page stays reachable, and your place now holds exactly through window resizes
 
 ## [1.3.4] - 2026-08-04
 
