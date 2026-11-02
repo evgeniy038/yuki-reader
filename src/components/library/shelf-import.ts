@@ -38,6 +38,12 @@ export function createShelfImport({
   const importFile = async (file: File) => {
     try {
       const imported = await importBookFile(file);
+      if (imported.kind === "manga") {
+        void navigator.storage?.persist?.();
+        shelveMangaVolumes([imported.volume]);
+        setError(null);
+        return;
+      }
 
       // Duplicate rejection: same content fingerprint as a shelved book →
       // don't add; flash the existing card instead.
@@ -121,31 +127,39 @@ export function createShelfImport({
     try {
       // Page scans are large — ask the browser not to evict our storage.
       void navigator.storage?.persist?.();
-      const volumes = await importMangaItems(items);
-      const batchHashes = new Set<string>();
-      for (const volume of volumes) {
-        const duplicate =
-          batchHashes.has(volume.contentHash) ||
-          books.find((book) => book.contentHash === volume.contentHash);
-        if (duplicate) {
-          const existing =
-            typeof duplicate === "object" ? duplicate : undefined;
-          if (existing) {
-            setNotice(i18n.t("library.duplicate", { title: existing.title }));
-            setFlashId(
-              existing.series
-                ? seriesShelfId(existing.series)
-                : existing.id,
-            );
-          }
-          continue;
-        }
-        batchHashes.add(volume.contentHash);
-        addMangaVolume(volume, targetSeries);
-      }
+      shelveMangaVolumes(await importMangaItems(items), targetSeries);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : i18n.t("library.openError"));
+    }
+  };
+
+  // Shelve imported volumes, skipping ones already on the shelf (or twice in
+  // this batch) — an existing duplicate is flashed instead.
+  const shelveMangaVolumes = (
+    volumes: ImportedMangaVolume[],
+    targetSeries?: string,
+  ) => {
+    const batchHashes = new Set<string>();
+    for (const volume of volumes) {
+      const duplicate =
+        batchHashes.has(volume.contentHash) ||
+        books.find((book) => book.contentHash === volume.contentHash);
+      if (duplicate) {
+        const existing =
+          typeof duplicate === "object" ? duplicate : undefined;
+        if (existing) {
+          setNotice(i18n.t("library.duplicate", { title: existing.title }));
+          setFlashId(
+            existing.series
+              ? seriesShelfId(existing.series)
+              : existing.id,
+          );
+        }
+        continue;
+      }
+      batchHashes.add(volume.contentHash);
+      addMangaVolume(volume, targetSeries);
     }
   };
 

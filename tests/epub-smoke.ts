@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { strToU8, zipSync } from "fflate";
 import { parseEpub } from "../src/core/epub.ts";
+import { mangaPagesOf } from "../src/core/epub-manga.ts";
 
 const containerXml = `<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oasis.opendocument.package"/></rootfiles></container>`;
@@ -153,6 +154,79 @@ function testNonAsciiEncodedHref(): void {
   assert.equal(parsed.chapters.length, 1, "non-ASCII percent-encoded href");
 }
 
+// Regression: a fixed-layout comic EPUB (store scans, calibre conversions) is
+// a spine of page wrappers — <svg><image> or <img>, a <title>, no text. It
+// must be recognized as manga with pages in spine order (not manifest order);
+// a book whose only images are illustrations between text stays a book.
+function testComicEpub(): void {
+  const page = (img: string, svg: boolean) => `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="ja">
+<head><meta charset="UTF-8"/><title>漫画 1巻</title><link rel="stylesheet" type="text/css" href="../style/fixed-layout-jp.css"/></head>
+<body><div class="main">${
+    svg
+      ? `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" viewBox="0 0 1350 1920"><image width="1350" height="1920" xlink:href="../image/${img}"/></svg>`
+      : `&#160;<img src="../image/${img}" alt=""/>`
+  }</div></body></html>`;
+  const opf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>漫画 1巻</dc:title><meta property="rendition:layout">pre-paginated</meta></metadata><manifest>
+<item id="i3" href="image/p3.jpg" media-type="image/jpeg"/>
+<item id="i1" href="image/p1.jpg" media-type="image/jpeg"/>
+<item id="i2" href="image/p2.jpg" media-type="image/jpeg"/>
+<item id="p-1" href="xhtml/p-1.xhtml" media-type="application/xhtml+xml"/>
+<item id="p-2" href="xhtml/p-2.xhtml" media-type="application/xhtml+xml"/>
+<item id="p-3" href="xhtml/p-3.xhtml" media-type="application/xhtml+xml"/>
+</manifest><spine page-progression-direction="rtl"><itemref idref="p-1"/><itemref idref="p-2"/><itemref idref="p-3"/></spine></package>`;
+  const comic = parseEpub(
+    epubWith({
+      "META-INF/container.xml": `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="item/standard.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`,
+      "item/standard.opf": opf,
+      "item/xhtml/p-1.xhtml": page("p1.jpg", true),
+      "item/xhtml/p-2.xhtml": page("p2.jpg", false),
+      "item/xhtml/p-3.xhtml": page("p3.jpg", true),
+      "item/image/p1.jpg": "one",
+      "item/image/p2.jpg": "two",
+      "item/image/p3.jpg": "three",
+    }),
+  );
+  const pages = mangaPagesOf(comic);
+  assert.ok(pages, "image-only EPUB detected as manga");
+  assert.deepEqual(
+    pages.map((p) => p.path),
+    ["item/image/p1.jpg", "item/image/p2.jpg", "item/image/p3.jpg"],
+    "pages follow the spine",
+  );
+  assert.equal(new TextDecoder().decode(pages[1]!.bytes), "two");
+
+  const illustrated = parseEpub(
+    epubWith({
+      "META-INF/container.xml": containerXml,
+      "content.opf": opfWith(
+        `<item id="cv" href="cover.xhtml" media-type="application/xhtml+xml"/><item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/><item id="img" href="cover.jpg" media-type="image/jpeg"/>`,
+        `<itemref idref="cv"/><itemref idref="c1"/>`,
+      ),
+      "cover.xhtml": `<html><head><title>表紙</title></head><body><img src="cover.jpg"/></body></html>`,
+      "ch1.xhtml": chapterXml,
+      "cover.jpg": "cover",
+    }),
+  );
+  assert.equal(mangaPagesOf(illustrated), null, "text chapters keep it a book");
+  assert.equal(
+    mangaPagesOf(
+      parseEpub(
+        epubWith({
+          "META-INF/container.xml": containerXml,
+          "content.opf": opfXml,
+          "ch1.xhtml": `<html><head><title>空</title></head><body></body></html>`,
+        }),
+      ),
+    ),
+    null,
+    "no text and no images is not manga",
+  );
+}
+
 function main(): void {
   testBasic();
   testEncodedHref();
@@ -160,6 +234,7 @@ function main(): void {
   testEncodedImage();
   testLiteralPercentName();
   testNonAsciiEncodedHref();
+  testComicEpub();
   console.log("EPUB parser smoke: PASS");
 }
 

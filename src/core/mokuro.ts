@@ -126,7 +126,7 @@ export function naturalCompare(a: string, b: string): number {
 const AUTHOR_PREFIX = /^(?:\[[^\]]*\]\s*)+/;
 const DRIVE_SUFFIX = /-\d{8}T\d{6}Z(?:-\d+)+$/;
 const VOLUME_MARKERS = [
-  /第\s*([0-9０-９]+)\s*巻.*$/,
+  /(?:第\s*)?([0-9０-９]+)\s*巻.*$/,
   /(?:^|[_\s#])v(?:ol)?\.?\s*([0-9０-９]+)\b.*$/i,
   /[#_]([0-9０-９]+)\s*$/,
   /\s([0-9０-９]+)\s*$/,

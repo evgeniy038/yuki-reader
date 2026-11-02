@@ -1,6 +1,7 @@
 import { unzipSync } from "fflate";
 import { sha256Hex } from "./book-hash";
 import { mimeFromExtension } from "./mime";
+import type { EpubResource } from "./reading";
 import {
   cleanVolumeName,
   mokuroImageKey,
@@ -212,6 +213,41 @@ async function volumeHash(
   return sha256Hex(material);
 }
 
+/** Raw volume → shelf-ready volume: sidecar boxes aligned, series and
+    volume number split from the name, cover and dedupe hash made. */
+async function finishVolume(raw: RawVolume): Promise<ImportedMangaVolume | null> {
+  const { pages, blobs } = alignMokuro(raw);
+  if (pages.length === 0) return null;
+  const { series, volumeIndex } = splitSeriesVolume(
+    raw.mokuro?.volume && raw.volumeName === "Manga"
+      ? raw.mokuro.volume
+      : raw.volumeName,
+  );
+  return {
+    volumeName: raw.volumeName,
+    series,
+    volumeIndex,
+    pages,
+    blobs,
+    cover: blobs[0] ? await makeCover(blobs[0]) : undefined,
+    contentHash: await volumeHash(raw.volumeName, pages, blobs),
+  };
+}
+
+/** An image-only EPUB (see epub-manga) as one volume, pages in spine order. */
+export async function mangaVolumeFromEpub(
+  volumeName: string,
+  pages: EpubResource[],
+): Promise<ImportedMangaVolume | null> {
+  return finishVolume({
+    volumeName: cleanVolumeName(volumeName),
+    images: pages.map((page) => ({
+      path: baseName(page.path),
+      blob: new Blob([page.bytes as BlobPart], { type: page.mime }),
+    })),
+  });
+}
+
 /** Import a mixed drop/selection: archives become volumes one-by-one, loose
     images and sidecars group into volumes by their top-level folder. */
 export async function importMangaItems(
@@ -231,22 +267,8 @@ export async function importMangaItems(
 
   const out: ImportedMangaVolume[] = [];
   for (const raw of rawVolumes) {
-    const { pages, blobs } = alignMokuro(raw);
-    if (pages.length === 0) continue;
-    const { series, volumeIndex } = splitSeriesVolume(
-      raw.mokuro?.volume && raw.volumeName === "Manga"
-        ? raw.mokuro.volume
-        : raw.volumeName,
-    );
-    out.push({
-      volumeName: raw.volumeName,
-      series,
-      volumeIndex,
-      pages,
-      blobs,
-      cover: blobs[0] ? await makeCover(blobs[0]) : undefined,
-      contentHash: await volumeHash(raw.volumeName, pages, blobs),
-    });
+    const volume = await finishVolume(raw);
+    if (volume) out.push(volume);
   }
   return out;
 }

@@ -12,6 +12,20 @@ function dummy(path: string): string {
   return `${DUMMY_BASE}${path}${DUMMY_SUFFIX}`;
 }
 
+/** Packed-resource paths a chapter references, in document order. */
+export function packedImagePaths(html: string): string[] {
+  const paths: string[] = [];
+  let at = html.indexOf(DUMMY_BASE);
+  while (at !== -1) {
+    const start = at + DUMMY_BASE.length;
+    const end = html.indexOf(DUMMY_SUFFIX, start);
+    if (end === -1) break;
+    paths.push(html.slice(start, end));
+    at = html.indexOf(DUMMY_BASE, end);
+  }
+  return paths;
+}
+
 export const xml = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",

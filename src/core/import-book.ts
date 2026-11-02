@@ -1,4 +1,6 @@
 import { parseEpub } from "./epub";
+import { mangaPagesOf } from "./epub-manga";
+import { mangaVolumeFromEpub, type ImportedMangaVolume } from "./import-manga";
 import { detectLanguage, type BookFormat, type Language } from "./library";
 import { deriveToc, type Chapter, type EpubResource, type TocEntry } from "./reading";
 
@@ -6,6 +8,7 @@ import { deriveToc, type Chapter, type EpubResource, type TocEntry } from "./rea
 // need. One place owns the EPUB/PDF split and every fallback (title from the
 // filename, language sniffed from the text, TOC derived when the book has no
 // NCX/nav), so App's `openFile` is just: import → dedupe → store → open.
+// Image-only comic EPUBs come back as a manga volume instead of a book.
 
 interface ImportedFile {
   format: BookFormat;
@@ -25,6 +28,10 @@ interface ImportedFile {
   pageCount?: number;
 }
 
+type ImportedBookFile =
+  | ({ kind: "book" } & ImportedFile)
+  | { kind: "manga"; volume: ImportedMangaVolume };
+
 function toLanguage(code: string | undefined): Language | undefined {
   const c = (code ?? "").toLowerCase();
   if (c.startsWith("ja")) return "ja";
@@ -41,7 +48,7 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export async function importBookFile(file: File): Promise<ImportedFile> {
+export async function importBookFile(file: File): Promise<ImportedBookFile> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const isPdf =
     file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -67,6 +74,15 @@ export async function importBookFile(file: File): Promise<ImportedFile> {
   }
 
   const parsed = parseEpub(bytes);
+  const mangaPages = mangaPagesOf(parsed);
+  if (mangaPages) {
+    const title = parsed.metadata.title.trim();
+    const volume = await mangaVolumeFromEpub(
+      title === "" || title === "Untitled" ? file.name.replace(/\.epub$/i, "") : title,
+      mangaPages,
+    );
+    if (volume) return { kind: "manga", volume };
+  }
   let cover: string | undefined;
   if (parsed.cover) {
     try {
@@ -97,7 +113,7 @@ export async function importBookFile(file: File): Promise<ImportedFile> {
 function finalize(
   file: File,
   imported: Omit<ImportedFile, "title"> & { title?: string },
-): ImportedFile {
+): ImportedBookFile {
   const title =
     imported.title && imported.title.trim() !== ""
       ? imported.title
@@ -110,5 +126,5 @@ function finalize(
         .map((chapter) => chapter.html)
         .join(""),
     );
-  return { ...imported, title, language };
+  return { kind: "book", ...imported, title, language };
 }

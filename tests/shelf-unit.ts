@@ -171,6 +171,11 @@ function book(patch: Partial<Book>): Book {
     { series: "鬼滅の刃", volumeIndex: 1 },
     "drive-export suffix is junk",
   );
+  assert.deepEqual(
+    splitSeriesVolume("スーパーの裏でヤニ吸うふたり 1巻 - 地主"),
+    { series: "スーパーの裏でヤニ吸うふたり", volumeIndex: 1 },
+    "N巻 without 第, author tail dropped",
+  );
   assert.deepEqual(splitSeriesVolume("Oshinoko_3"), {
     series: "Oshinoko",
     volumeIndex: 3,
