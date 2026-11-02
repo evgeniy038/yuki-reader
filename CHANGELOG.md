@@ -3,6 +3,11 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.6] - 2026-11-02
+
+- Manga that comes as an EPUB — store scans and calibre conversions — now opens in the manga reader with right-to-left spreads and OCR, instead of as a blank book
+- Manga volumes named like "Title 1巻" now land in the right series with the right volume number
+
 ## [1.3.5] - 2026-08-11
 
 - The app opens much faster — the library greets you right away, and the heavy reading screens load only when you actually open them
