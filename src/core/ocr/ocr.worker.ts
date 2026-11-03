@@ -14,10 +14,11 @@ import {
   putMangaOcrFinal,
 } from "../storage";
 import type { MokuroBlock } from "../mokuro";
-import type { OcrModelFiles } from "./download";
+import { readModelFiles, type OcrModelRefs } from "./download";
 
-// OCR worker, the EXECUTOR half of the pool: it holds warm model sessions
-// (~130MB in its own heap — workers can't share memory) and processes one
+// OCR worker, the EXECUTOR half of the pool: it reads the model files from
+// the cache itself and holds warm sessions (~130MB in its own heap —
+// workers can't share memory) and processes one
 // job per message. Scheduling, priorities and cancellation all live in the
 // main-thread controller (ocr.ts); this file just reads a page blob, runs
 // the pipeline, writes the result to the mangaOcr store and posts it back.
@@ -32,7 +33,8 @@ import type { OcrModelFiles } from "./download";
 export type OcrWorkerIn =
   | {
       type: "init";
-      files: OcrModelFiles;
+      /** The model files to read (from the cache) — see cacheModelFiles. */
+      files: OcrModelRefs;
       threads?: number;
       ep?: import("./ort-runtime").OcrEp;
       debug?: boolean;
@@ -200,10 +202,8 @@ self.onmessage = (event: MessageEvent<OcrWorkerIn>) => {
   const msg = event.data;
   if (msg.type === "init") {
     setOcrDebugTiming(msg.debug === true);
-    const init = createOcrSessions(
-      msg.files,
-      msg.threads ?? 1,
-      msg.ep ?? "wasm",
+    const init = readModelFiles(msg.files).then((files) =>
+      createOcrSessions(files, msg.threads ?? 1, msg.ep ?? "wasm"),
     );
     modelsPromise = init;
     // Two-argument then: ready or error posts exactly once and the rejection

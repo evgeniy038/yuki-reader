@@ -1,5 +1,5 @@
 import { applyBookDelta, type DailyStats } from "../stats";
-import { loadAllBooks, putStatsDay, restoreBookProgress } from "../storage";
+import { loadShelfBooks, putStatsDay, restoreBookProgress } from "../storage";
 import { BackupCancelledError, type BackupCancelToken, type BackupOperationProgressListener } from "../backup";
 import type { BackupImportSummary } from "./import";
 import { readJson } from "./format";
@@ -93,7 +93,7 @@ export async function importTtsuBackup(
     }
   }
 
-  const books = await loadAllBooks();
+  const books = await loadShelfBooks();
   const booksByTitle = new Map(books.map((book) => [titleKey(book.title), book]));
   const summary: BackupImportSummary = {
     books: 0,

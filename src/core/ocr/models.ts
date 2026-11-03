@@ -5,10 +5,10 @@ import {
 } from "./ort-runtime";
 import type { OcrModelFiles } from "./download";
 
-// OCR models: download (see download.ts) → inference sessions (here). The
-// bytes are handed to the worker pool, which builds its own sessions from
-// them (workers can't share memory, so each keeps a copy — the price of
-// parallel pages). Sessions also parallelize WITHIN a page via wasm threads,
+// OCR models: download into the cache (see download.ts) → inference
+// sessions (here). Each pool worker reads the bytes from the cache itself
+// and builds its own sessions from them (workers can't share memory, so
+// each keeps a copy — the price of parallel pages). Sessions also parallelize WITHIN a page via wasm threads,
 // but only where the app is cross-origin isolated (COOP/COEP headers);
 // elsewhere they fall back to one thread.
 

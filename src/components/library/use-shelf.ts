@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { bookContentHash } from "@/core/book-hash";
-import { detectLanguage, type Book } from "@/core/library";
+import type { Book } from "@/core/library";
 import { cancelOcr } from "@/core/ocr/ocr";
 import { deriveToc } from "@/core/reading";
 import type { Chapter, EpubResource, TocEntry } from "@/core/reading";
 import {
   deleteBook,
-  loadAllBooks,
+  loadBookContent,
+  loadShelfBooks,
   updateBookMeta,
 } from "@/core/storage";
 import { createShelfImport } from "./shelf-import";
@@ -25,11 +26,31 @@ export interface OpenedData {
   pdfBytes?: Uint8Array;
 }
 
-// The shelf: the book list plus the heavy per-book payloads (chapters, bytes).
-// The list lives in state (it drives the UI); the payloads live in a ref map —
-// they never change after import and must not re-render anything. All book
-// mutations (import, open, rename, cover, delete) go through this hook so the
-// list, the payload map and the storage write stay in lockstep.
+/** Reader payloads kept in memory: the open book and a couple of recent
+    ones (a reopen is instant), never the whole library — on a phone the
+    content of every book at once is hundreds of MB. */
+const DATA_CACHE_SIZE = 3;
+
+/** Insert as the most recent entry, dropping the oldest beyond the cap. */
+export function rememberData(
+  cache: Map<string, OpenedData>,
+  id: string,
+  data: OpenedData,
+): void {
+  cache.delete(id);
+  cache.set(id, data);
+  for (const key of cache.keys()) {
+    if (cache.size <= DATA_CACHE_SIZE) break;
+    cache.delete(key);
+  }
+}
+
+// The shelf: the book list plus a small cache of per-book payloads
+// (chapters, bytes). The list lives in state (it drives the UI); payloads
+// load on open and live in a ref map — they never change after import and
+// must not re-render anything. All book mutations (import, open, rename,
+// cover, delete) go through this hook so the list, the payload cache and
+// the storage write stay in lockstep.
 export function useShelf(demoMode: boolean) {
   const [books, setBooks] = useState<Book[]>([]);
   // The shelf loads from storage asynchronously — until it resolves we show
@@ -44,56 +65,30 @@ export function useShelf(demoMode: boolean) {
   useEffect(() => {
     if (demoMode) return;
     let active = true;
-    loadAllBooks()
-      .then(async (records) => {
+    // Shelf records only — a few KB per book. Content (chapters, images,
+    // PDF bytes) stays on disk until a book is opened (useBookData).
+    loadShelfBooks()
+      .then((loaded) => {
         if (!active) return;
-        const loaded: Book[] = [];
-        for (const record of records) {
-          // Backfill fields introduced after the book was stored.
-          if (!record.contentHash) {
-            record.contentHash = await bookContentHash(
-              record.title,
-              record.author,
-              record.chapters,
-            );
-            void updateBookMeta(record.id, { contentHash: record.contentHash });
-          }
-          if (!record.format) {
-            record.format =
-              (record.resources?.length ?? 0) > 0 || record.bookCss
-                ? "epub"
-                : "pdf";
-            void updateBookMeta(record.id, { format: record.format });
-          }
-          if (!record.language) {
-            record.language = detectLanguage(
-              record.chapters
-                .slice(0, 3)
-                .map((chapter) => chapter.html)
-                .join(""),
-            );
-          }
-          dataRef.current.set(record.id, {
-            metadata: {
-              title: record.title,
-              creator: record.author,
-              language: record.language,
-            },
-            chapters: record.chapters,
-            // Records from before TOC parsing derive labels from chapters.
-            toc:
-              record.toc ??
-              (record.format === "pdf" || record.format === "manga"
-                ? undefined
-                : deriveToc(record.chapters)),
-            resources: record.resources ?? [],
-            bookCss: record.bookCss ?? "",
-            pdfBytes: record.pdfBytes,
-          });
-          loaded.push({ ...record });
-        }
         setBooks(loaded);
         setShelfReady(true);
+        // Backfill the duplicate fingerprint of books stored before it
+        // existed — off the startup path, it needs the content.
+        for (const book of loaded) {
+          if (book.contentHash || book.format === "manga") continue;
+          void loadBookContent(book.id).then(async (content) => {
+            if (!content) return;
+            const contentHash = await bookContentHash(
+              book.title,
+              book.author,
+              content.chapters,
+            );
+            void updateBookMeta(book.id, { contentHash });
+            setBooks((prev) =>
+              prev.map((b) => (b.id === book.id ? { ...b, contentHash } : b)),
+            );
+          });
+        }
       })
       .catch(() => {
         // storage unavailable — shelf stays empty
@@ -103,6 +98,35 @@ export function useShelf(demoMode: boolean) {
       active = false;
     };
   }, [demoMode]);
+
+  // A book's reader payload: from the small in-memory cache (fresh imports,
+  // recent opens, the demo book) or from storage. Undefined = not stored.
+  const loadBookData = async (id: string): Promise<OpenedData | undefined> => {
+    const cached = dataRef.current.get(id);
+    if (cached) return cached;
+    const book = books.find((b) => b.id === id);
+    if (!book) return undefined;
+    const content =
+      book.format === "manga"
+        ? { chapters: [] } // the manga reader reads its own stores
+        : await loadBookContent(id);
+    if (!content) return undefined;
+    const data: OpenedData = {
+      metadata: { title: book.title, creator: book.author, language: book.language },
+      chapters: content.chapters,
+      // Records from before TOC parsing derive labels from chapters.
+      toc:
+        content.toc ??
+        (book.format === "pdf" || book.format === "manga"
+          ? undefined
+          : deriveToc(content.chapters)),
+      resources: content.resources ?? [],
+      bookCss: content.bookCss ?? "",
+      pdfBytes: content.pdfBytes,
+    };
+    rememberData(dataRef.current, id, data);
+    return data;
+  };
 
   // A duplicate-import notice auto-clears.
   useEffect(() => {
@@ -139,7 +163,7 @@ export function useShelf(demoMode: boolean) {
 
   // Opening a book bumps it to the top of the recency sort.
   const openBook = (id: string) => {
-    if (!dataRef.current.has(id)) return;
+    if (!books.some((book) => book.id === id)) return;
     const now = Date.now();
     setBooks((prev) =>
       prev.map((book) => (book.id === id ? { ...book, lastReadAt: now } : book)),
@@ -190,6 +214,7 @@ export function useShelf(demoMode: boolean) {
     notice,
     flashId,
     dataRef,
+    loadBookData,
     importFiles,
     importManga,
     openBook,

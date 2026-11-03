@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Navigate,
@@ -25,7 +25,7 @@ import { resumeMangaOcr } from "@/core/ocr/ocr";
 import { LibraryPage } from "@/components/library/library-page";
 import { NavPill, type AppView } from "@/components/library/nav-pill";
 import { OcrQueuePanel } from "@/components/ocr-queue-panel";
-import { useShelf } from "@/components/library/use-shelf";
+import { useShelf, type OpenedData } from "@/components/library/use-shelf";
 import { useFileDrop } from "@/components/library/use-drag-drop";
 import { useGoalBook } from "@/components/library/use-goal-book";
 import { ReaderScreen } from "@/components/reader/reader-screen";
@@ -52,6 +52,16 @@ const MangaPage = lazy(() =>
     default: module.MangaPage,
   })),
 );
+
+/** The reader payload of a manga volume: metadata only. */
+function mangaData(book: Book): OpenedData {
+  return {
+    metadata: { title: book.title, language: book.language },
+    chapters: [],
+    resources: [],
+    bookCss: "",
+  };
+}
 
 // Shown in the routed area while a second-layer page's chunk loads.
 function RouteFallback() {
@@ -104,7 +114,35 @@ export default function App() {
   const openedBook = openedId
     ? shelf.books.find((book) => book.id === openedId)
     : undefined;
-  const openedData = openedId ? shelf.dataRef.current.get(openedId) : undefined;
+  // The open book's payload loads on demand (the shelf holds metadata only);
+  // fresh imports and recent opens come straight from the in-memory cache.
+  // null = the book has no stored content — the shell's redirect takes it.
+  const [loaded, setLoaded] = useState<{
+    id: string;
+    data: OpenedData | null;
+  } | null>(null);
+  // A manga volume needs no payload — its reader reads the page stores.
+  const cachedData = openedId
+    ? (shelf.dataRef.current.get(openedId) ??
+      (openedBook?.format === "manga" ? mangaData(openedBook) : undefined))
+    : undefined;
+  const openedData =
+    cachedData ?? (loaded && loaded.id === openedId ? loaded.data : undefined);
+  const { shelfReady, loadBookData } = shelf;
+  const needsData = !!openedBook && openedData === undefined;
+  useEffect(() => {
+    if (!openedId || !shelfReady || !needsData) return;
+    let alive = true;
+    void loadBookData(openedId).then(
+      (data) => alive && setLoaded({ id: openedId, data: data ?? null }),
+      () => alive && setLoaded({ id: openedId, data: null }),
+    );
+    return () => {
+      alive = false;
+    };
+    // loadBookData is rebuilt every render; the id and readiness drive it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedId, shelfReady, needsData]);
 
   // Bookmark dwell, active-time heartbeat, warmup gate — see the hook.
   const { updateProgress, resetSession } = useReadingSession({
@@ -129,13 +167,9 @@ export default function App() {
     resumeMangaOcr();
   }, []);
 
-  const getBookData = useCallback(
-    (id: string) => shelf.dataRef.current.get(id),
-    [shelf.dataRef],
-  );
   const { goalBook, setGoalBookId } = useGoalBook(
     shelf.books,
-    getBookData,
+    loadBookData,
     view === "stats",
   );
 
@@ -169,11 +203,12 @@ export default function App() {
     );
   }
 
-  // The URL asks for a book but the shelf is still loading: hold a quiet
-  // loader instead of bouncing to the library — the id may well be valid
-  // (this is the refresh-while-reading path). A genuinely unknown id falls
-  // through to the shell, whose catch-all redirects home.
-  if (openedId && !shelf.shelfReady) {
+  // The URL asks for a book but the shelf (or the book's payload) is still
+  // loading: hold a quiet loader instead of bouncing to the library — the
+  // id may well be valid (this is the refresh-while-reading path). A
+  // genuinely unknown id falls through to the shell, whose catch-all
+  // redirects home.
+  if (openedId && (!shelf.shelfReady || needsData)) {
     return (
       <div className="grid h-dvh place-items-center bg-canvas">
         <DashRing className="size-6 text-muted-content" />
@@ -244,7 +279,7 @@ export default function App() {
                 error={shelf.error}
                 notice={shelf.notice}
                 flashId={shelf.flashId}
-                dataRef={shelf.dataRef}
+                loadBookData={loadBookData}
                 onOpenBook={openBook}
                 onImportFiles={shelf.importFiles}
                 onRenameBook={shelf.renameBook}

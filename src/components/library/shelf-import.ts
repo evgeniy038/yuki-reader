@@ -1,9 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import i18n from "@/lib/i18n";
 import { bookContentHash } from "@/core/book-hash";
-import { importBookFile } from "@/core/import-book";
+import { importBook, importManga as unpackManga } from "@/core/import-client";
 import {
-  importMangaItems,
   isMangaItem,
   type ImportedMangaVolume,
   type MangaInputItem,
@@ -12,7 +11,7 @@ import { seriesShelfId, type Book } from "@/core/library";
 import { normalizeSeriesKey } from "@/core/mokuro";
 import { trackMangaOcr } from "@/core/ocr/ocr";
 import { putBook, putMangaVolume, type BookRecord } from "@/core/storage";
-import type { OpenedData } from "./use-shelf";
+import { rememberData, type OpenedData } from "./use-shelf";
 
 interface ShelfImportDeps {
   books: Book[];
@@ -37,7 +36,7 @@ export function createShelfImport({
 }: ShelfImportDeps) {
   const importFile = async (file: File) => {
     try {
-      const imported = await importBookFile(file);
+      const imported = await importBook(file);
       if (imported.kind === "manga") {
         void navigator.storage?.persist?.();
         shelveMangaVolumes([imported.volume]);
@@ -79,7 +78,7 @@ export function createShelfImport({
         addedAt: now,
         lastReadAt: now,
       };
-      dataRef.current.set(id, {
+      rememberData(dataRef.current, id, {
         metadata: {
           title: imported.title,
           creator: imported.author,
@@ -127,7 +126,7 @@ export function createShelfImport({
     try {
       // Page scans are large — ask the browser not to evict our storage.
       void navigator.storage?.persist?.();
-      shelveMangaVolumes(await importMangaItems(items), targetSeries);
+      shelveMangaVolumes(await unpackManga(items), targetSeries);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : i18n.t("library.openError"));
@@ -200,7 +199,7 @@ export function createShelfImport({
       addedAt: now,
       lastReadAt: now,
     };
-    dataRef.current.set(id, {
+    rememberData(dataRef.current, id, {
       metadata: { title, language: "ja" },
       chapters: [],
       resources: [],

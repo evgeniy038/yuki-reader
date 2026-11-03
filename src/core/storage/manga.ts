@@ -46,12 +46,14 @@ export async function putMangaVolume(
 ): Promise<void> {
   const db = await open();
   const tx = db.transaction([MANGA, MANGA_PAGES], "readwrite");
-  await tx.objectStore(MANGA).put(record);
   const pages = tx.objectStore(MANGA_PAGES);
-  for (let i = 0; i < blobs.length; i++) {
-    await pages.put(blobs[i]!, `${record.id}/${i}`);
-  }
-  await tx.done;
+  // Every put is issued at once and the transaction awaited once: no
+  // round-trip per page between requests.
+  await Promise.all([
+    tx.objectStore(MANGA).put(record),
+    ...blobs.map((blob, i) => pages.put(blob, `${record.id}/${i}`)),
+    tx.done,
+  ]);
 }
 
 export async function loadManga(id: string): Promise<MangaRecord | undefined> {
@@ -235,6 +237,12 @@ export async function loadMangaOcrFlags(
 export async function loadOcrModel(url: string): Promise<Uint8Array | undefined> {
   const db = await open();
   return (await db.get(OCR_MODELS, url))?.bytes;
+}
+
+/** Whether a model file is cached — a key lookup, the bytes stay on disk. */
+export async function hasOcrModel(url: string): Promise<boolean> {
+  const db = await open();
+  return (await db.getKey(OCR_MODELS, url)) !== undefined;
 }
 
 export async function putOcrModel(url: string, bytes: Uint8Array): Promise<void> {

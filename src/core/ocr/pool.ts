@@ -1,5 +1,5 @@
 import { detectPreferredEp } from "./models";
-import { downloadModelFiles, type OcrModelFiles } from "./download";
+import { cacheModelFiles, type OcrModelRefs } from "./download";
 import type { OcrEp } from "./ort-runtime";
 import type { OcrWorkerIn, OcrWorkerOut } from "./ocr.worker";
 import { jobCurrent, pump, releaseJob, retryJob, type Job } from "./ocr";
@@ -77,8 +77,9 @@ function topology(ep: OcrEp): { pool: number; threads: number } {
 }
 
 export let pool: PoolWorker[] | null = null;
-let filesPromise: Promise<OcrModelFiles> | null = null;
-let modelFiles: OcrModelFiles | null = null;
+let filesPromise: Promise<OcrModelRefs> | null = null;
+/** Where workers read the model files from (the cache, by URL). */
+let modelFiles: OcrModelRefs | null = null;
 /** Threads each pool worker was built with — a crash replacement reuses it. */
 let workerThreads = 1;
 /** Crash replacements are capped so a fundamentally broken runtime can't
@@ -89,7 +90,7 @@ let ocrEp: OcrEp = "wasm";
 
 // --- pool -------------------------------------------------------------------
 
-function spawnWorker(files: OcrModelFiles, threads: number): PoolWorker {
+function spawnWorker(files: OcrModelRefs, threads: number): PoolWorker {
   const slot: PoolWorker = {
     worker: new Worker(new URL("./ocr.worker.ts", import.meta.url), {
       type: "module",
@@ -106,7 +107,7 @@ function spawnWorker(files: OcrModelFiles, threads: number): PoolWorker {
     ep: ocrEp,
     debug: OCR_DEBUG,
   };
-  slot.worker.postMessage(message); // each worker gets its own copy
+  slot.worker.postMessage(message); // each worker reads its own copy
   slot.worker.onmessage = (event: MessageEvent<OcrWorkerOut>) =>
     onWorkerMessage(slot, event.data);
   slot.worker.onerror = (event) =>
@@ -202,7 +203,7 @@ function onWorkerCrash(slot: PoolWorker, message: string): void {
   void pump();
 }
 
-function initPool(files: OcrModelFiles): void {
+function initPool(files: OcrModelRefs): void {
   modelFiles = files;
   // The pool is born on the first successful download; later attempts reuse
   // the same resolved files promise, so this runs exactly once. The topology
@@ -215,11 +216,11 @@ function initPool(files: OcrModelFiles): void {
 
 // --- model download -----------------------------------------------------------
 
-export function ensureFiles(): Promise<OcrModelFiles> {
+export function ensureFiles(): Promise<OcrModelRefs> {
   filesPromise ??= detectPreferredEp()
     .then((ep) => {
       ocrEp = ep;
-      return downloadModelFiles(ep, (loaded, total) => {
+      return cacheModelFiles(ep, (loaded, total) => {
         status.models = { loaded, total };
         emitStatus();
       });

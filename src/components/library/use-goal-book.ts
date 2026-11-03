@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Book } from "@/core/library";
 import { totalCharsOf } from "@/core/reading-stats";
 import type { OpenedData } from "./use-shelf";
@@ -13,25 +13,51 @@ export interface GoalBook {
 
 // The stats view's "8 % от …" book: the user picks it themselves (goalBookId);
 // unset or deleted → the current read. Char totals are counted once per book
-// and cached (a full-book HTML parse is not free).
+// and cached (a full-book HTML parse is not free); the book's content loads
+// on demand — the shelf keeps metadata only.
 export function useGoalBook(
   books: Book[],
-  getData: (id: string) => OpenedData | undefined,
+  loadData: (id: string) => Promise<OpenedData | undefined>,
   active: boolean,
 ) {
   const [goalBookId, setGoalBookId] = useState<string | null>(null);
-  const charsCacheRef = useRef(new Map<string, number>());
+  const [chars, setChars] = useState<ReadonlyMap<string, number>>(
+    () => new Map(),
+  );
 
-  const goalBook = useMemo<GoalBook | undefined>(() => {
+  const current = useMemo(() => {
     if (!active || books.length === 0) return undefined;
     const chosen = goalBookId
       ? books.find((book) => book.id === goalBookId)
       : undefined;
-    const current =
+    return (
       chosen ??
       [...books].sort(
         (a, b) => (b.lastReadAt ?? b.addedAt) - (a.lastReadAt ?? a.addedAt),
-      )[0];
+      )[0]
+    );
+  }, [active, books, goalBookId]);
+
+  const countId =
+    current && current.format !== "pdf" && !chars.has(current.id)
+      ? current.id
+      : null;
+  useEffect(() => {
+    if (!countId) return;
+    let alive = true;
+    void loadData(countId).then((data) => {
+      if (!alive || !data) return;
+      const total = totalCharsOf(data);
+      setChars((prev) => new Map(prev).set(countId, total));
+    });
+    return () => {
+      alive = false;
+    };
+    // loadData is rebuilt every render; the book id is the real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countId]);
+
+  const goalBook = useMemo<GoalBook | undefined>(() => {
     if (!current) return undefined;
     if (current.format === "pdf") {
       // PDF length is pages, not chars.
@@ -42,17 +68,10 @@ export function useGoalBook(
         totalPages: current.pageCount ?? 0,
       };
     }
-    const data = getData(current.id);
-    if (!data) return undefined;
-    let totalChars = charsCacheRef.current.get(current.id);
-    if (totalChars === undefined) {
-      totalChars = totalCharsOf(data);
-      charsCacheRef.current.set(current.id, totalChars);
-    }
+    const totalChars = chars.get(current.id);
+    if (totalChars === undefined) return undefined;
     return { id: current.id, title: current.title, totalChars, totalPages: 0 };
-    // getData reads a stable ref map; books/active/goalBookId are the real deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, books, goalBookId]);
+  }, [current, chars]);
 
   return { goalBook, setGoalBookId };
 }

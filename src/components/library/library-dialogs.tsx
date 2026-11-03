@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
 import { totalCharsOf } from "@/core/reading-stats";
@@ -13,14 +13,14 @@ import type { OpenedData } from "./use-shelf";
 // `dialogs` next to its hidden file inputs.
 export function useLibraryDialogs({
   books,
-  dataRef,
+  loadBookData,
   onRenameBook,
   onDeleteBook,
   onRenameSeries,
   onDeleteSeries,
 }: {
   books: Book[];
-  dataRef: { current: Map<string, OpenedData> };
+  loadBookData: (id: string) => Promise<OpenedData | undefined>;
   onRenameBook: (id: string, title: string) => void;
   onDeleteBook: (id: string) => void;
   onRenameSeries: (series: string, next: string) => void;
@@ -43,14 +43,36 @@ export function useLibraryDialogs({
   const detailsBook = detailsId
     ? books.find((book) => book.id === detailsId)
     : undefined;
-  const detailsTotalChars = useMemo(() => {
-    if (!detailsId) return 0;
-    const book = books.find((b) => b.id === detailsId);
-    if (book?.format === "pdf" || book?.format === "manga") return 0; // paged formats: length is pages, not chars
-    const data = dataRef.current.get(detailsId);
-    if (!data) return 0;
-    return totalCharsOf(data);
-  }, [detailsId, books, dataRef]);
+  // A text book's chapter count and character total come from its content,
+  // which loads on demand (the shelf keeps metadata only); the dialog opens
+  // once they are in. Paged formats (PDF, manga) measure in pages and never
+  // need the content.
+  const detailsPaged =
+    detailsBook?.format === "pdf" || detailsBook?.format === "manga";
+  const [detailsCounts, setDetailsCounts] = useState<{
+    id: string;
+    chapters: number;
+    chars: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!detailsId || detailsPaged) return;
+    let alive = true;
+    void loadBookData(detailsId).then((data) => {
+      if (!alive || !data) return;
+      setDetailsCounts({
+        id: detailsId,
+        chapters: data.chapters.length,
+        chars: totalCharsOf(data),
+      });
+    });
+    return () => {
+      alive = false;
+    };
+    // loadBookData is rebuilt every render; the open dialog's id is the
+    // real dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailsId, detailsPaged]);
+  const counts = detailsCounts?.id === detailsId ? detailsCounts : null;
 
   const saveRename = (title: string) => {
     const id = renamingId;
@@ -81,13 +103,11 @@ export function useLibraryDialogs({
           onClose={() => setRenamingSeries(null)}
         />
       ) : null}
-      {detailsBook ? (
+      {detailsBook && (detailsPaged || counts) ? (
         <BookDetailsDialog
           book={detailsBook}
-          chapterCount={
-            dataRef.current.get(detailsBook.id)?.chapters.length ?? 0
-          }
-          totalChars={detailsTotalChars}
+          chapterCount={counts?.chapters ?? 0}
+          totalChars={counts?.chars ?? 0}
           onClose={() => setDetailsId(null)}
         />
       ) : null}

@@ -1,6 +1,7 @@
 import { openDB, type DBSchema } from "idb";
+import { detectLanguage } from "../library";
 import type { DailyStats } from "../stats";
-import type { BookRecord } from "./books";
+import { splitBook, type BookContent, type StoredBook } from "./books";
 import type { MangaOcrRecord, MangaRecord, OcrModelRecord } from "./manga";
 import type {
   DictionaryArchiveRecord,
@@ -9,7 +10,8 @@ import type {
 } from "../dictionaries";
 
 export interface YukiDB extends DBSchema {
-  books: { key: string; value: BookRecord };
+  books: { key: string; value: StoredBook };
+  bookContent: { key: string; value: BookContent };
   stats: { key: string; value: DailyStats };
   manga: { key: string; value: MangaRecord };
   mangaPages: { key: string; value: Blob };
@@ -28,6 +30,7 @@ export interface YukiDB extends DBSchema {
 
 const DB_NAME = "yuki";
 export const BOOKS = "books";
+export const BOOK_CONTENT = "bookContent";
 /** Pre-v4 store, gone from the schema: referenced untyped, only to drop it. */
 const LEGACY_DICTS = "dicts";
 export const STATS = "stats";
@@ -50,8 +53,8 @@ const DB_OPEN_TIMEOUT_MS = 15_000;
 
 export function open() {
   if (!dbPromise) {
-    const request = openDB<YukiDB>(DB_NAME, 7, {
-      upgrade(db, oldVersion) {
+    const request = openDB<YukiDB>(DB_NAME, 8, {
+      async upgrade(db, oldVersion, _newVersion, transaction) {
         if (oldVersion < 1 && !db.objectStoreNames.contains(BOOKS)) {
           db.createObjectStore(BOOKS, { keyPath: "id" });
         }
@@ -104,6 +107,37 @@ export function open() {
           }
           if (!db.objectStoreNames.contains(DICTIONARY_ARCHIVES)) {
             db.createObjectStore(DICTIONARY_ARCHIVES, { keyPath: "id" });
+          }
+        }
+        // v8: book content (chapters, resources, PDF bytes) moves out of the
+        // shelf record into its own store, keyed by book id — the shelf
+        // reads a few KB per book instead of every byte of every book. One
+        // record at a time through a cursor, so memory stays flat however
+        // big the library is. The shelf-time backfills (format, language)
+        // need the content, so they are settled here once and persisted.
+        if (oldVersion < 8) {
+          if (!db.objectStoreNames.contains(BOOK_CONTENT)) {
+            db.createObjectStore(BOOK_CONTENT);
+          }
+          const content = transaction.objectStore(BOOK_CONTENT);
+          let cursor = await transaction.objectStore(BOOKS).openCursor();
+          while (cursor) {
+            const { meta, content: payload } = splitBook(cursor.value);
+            if (payload) {
+              meta.format ??=
+                (payload.resources?.length ?? 0) > 0 || payload.bookCss
+                  ? "epub"
+                  : "pdf";
+              meta.language ??= detectLanguage(
+                payload.chapters
+                  .slice(0, 3)
+                  .map((chapter) => chapter.html)
+                  .join(""),
+              );
+              await content.put(payload, meta.id);
+              await cursor.update(meta);
+            }
+            cursor = await cursor.continue();
           }
         }
       },

@@ -12,7 +12,6 @@ export const GRID_CLASSES =
 
 export function LibraryGrid({
   items,
-  openableIds,
   flashId,
   onOpenBook,
   onDetails,
@@ -25,7 +24,6 @@ export function LibraryGrid({
   onDeleteSeries,
 }: {
   items: ShelfItem[];
-  openableIds: Set<string>;
   flashId: string | null;
   onOpenBook: (id: string) => void;
   onDetails: (id: string) => void;
@@ -55,11 +53,7 @@ export function LibraryGrid({
             key={item.book.id}
             book={item.book}
             flash={flashId === item.book.id}
-            onOpen={
-              openableIds.has(item.book.id)
-                ? () => onOpenBook(item.book.id)
-                : undefined
-            }
+            onOpen={() => onOpenBook(item.book.id)}
             onDetails={() => onDetails(item.book.id)}
             onRename={() => onRename(item.book.id)}
             onChangeCover={() => onChangeCover(item.book.id)}

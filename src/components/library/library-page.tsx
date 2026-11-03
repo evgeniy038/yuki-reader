@@ -16,7 +16,7 @@ import {
   type Book,
   type ShelfSort,
 } from "@/core/library";
-import { blobToDataUrl } from "@/core/import-book";
+import { blobToDataUrl } from "@/core/data-url";
 import type { MangaInputItem } from "@/core/import-manga";
 import { importItemsOf } from "@/lib/import-files";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,7 @@ export function LibraryPage({
   error,
   notice,
   flashId,
-  dataRef,
+  loadBookData,
   onOpenBook,
   onImportFiles,
   onRenameBook,
@@ -70,7 +70,7 @@ export function LibraryPage({
   error: string | null;
   notice: string | null;
   flashId: string | null;
-  dataRef: { current: Map<string, OpenedData> };
+  loadBookData: (id: string) => Promise<OpenedData | undefined>;
   onOpenBook: (id: string) => void;
   onImportFiles: (items: MangaInputItem[]) => void;
   onRenameBook: (id: string, title: string) => void;
@@ -99,7 +99,7 @@ export function LibraryPage({
     setDeletingSeries,
   } = useLibraryDialogs({
     books,
-    dataRef,
+    loadBookData,
     onRenameBook,
     onDeleteBook,
     onRenameSeries,
@@ -158,8 +158,6 @@ export function LibraryPage({
 
   const { dragGroupId, ghostHeight, ghostIndex, registerSection, sectionDrag } =
     useGroupReorder({ groups, onReorder: setGroupOrder });
-
-  const openableIds = useMemo(() => new Set(dataRef.current.keys()), [books]);
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.target.files ?? [])];
@@ -275,7 +273,6 @@ export function LibraryPage({
                   isLast={index === displayEntries.length - 1}
                   collapsed={collapsed}
                   onToggleSection={toggleSection}
-                  openableIds={openableIds}
                   flashId={flashId}
                   registerSection={registerSection}
                   sectionDrag={sectionDrag}

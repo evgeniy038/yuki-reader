@@ -59,21 +59,34 @@ function fixMime(mime: string, path: string, bytes: Uint8Array): string {
   return mimeFromExtension(path) ?? mimeFromMagic(bytes) ?? "image/jpeg";
 }
 
-export function parseEpub(bytes: Uint8Array): ParsedEpub {
-  const rawFiles = unzipSync(bytes);
-
-  // Case-insensitive file lookup: many epubs have mismatched case between OPF
-  // hrefs and actual zip entry paths. Entries are additionally indexed under
-  // their percent-decoded names, so a plain href still finds an entry written
-  // in encoded form by a broken exporter.
+/** Zip entry name for a path the OPF/spine refers to — case-insensitive
+    (many epubs have mismatched case between OPF hrefs and actual zip entry
+    paths) and percent-tolerant: entries are additionally indexed under their
+    percent-decoded names, so a plain href still finds an entry written in
+    encoded form by a broken exporter. */
+export function epubEntryLookup(
+  names: string[],
+): (path: string) => string | undefined {
+  const exact = new Set(names);
   const lowerMap = new Map<string, string>();
-  for (const key of Object.keys(rawFiles)) {
+  for (const key of names) {
     lowerMap.set(key.toLowerCase(), key);
     const decoded = decodePath(key).toLowerCase();
     if (!lowerMap.has(decoded)) lowerMap.set(decoded, key);
   }
+  return (path) => (exact.has(path) ? path : lowerMap.get(path.toLowerCase()));
+}
+
+export function parseEpub(bytes: Uint8Array): ParsedEpub {
+  return parseEpubFiles(unzipSync(bytes));
+}
+
+/** parseEpub over already unpacked entries (name → bytes). */
+export function parseEpubFiles(rawFiles: Record<string, Uint8Array>): ParsedEpub {
+  const lookup = epubEntryLookup(Object.keys(rawFiles));
   const findBytes = (path: string): Uint8Array | undefined => {
-    return rawFiles[path] ?? rawFiles[lowerMap.get(path.toLowerCase()) ?? ""];
+    const name = lookup(path);
+    return name === undefined ? undefined : rawFiles[name];
   };
   const read = (filename: string): string => {
     const entry = findBytes(filename);

@@ -2,7 +2,7 @@ import { unzipSync } from "fflate";
 import { importDictionaryArchive } from "../dictionaries";
 import {
   deleteManga,
-  loadAllBooks,
+  loadShelfBooks,
   putBook,
   putMangaOcrRecords,
   putMangaVolume,
@@ -236,7 +236,7 @@ export async function importBackupInProcess(
   }
 
   if (manifest.progress) {
-    const existing = await loadAllBooks();
+    const existing = await loadShelfBooks();
     for (const item of prepared.progress) {
       if (token?.cancelled) throw new BackupCancelledError(summary);
       const target = existing.find(

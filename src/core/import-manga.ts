@@ -1,7 +1,7 @@
-import { unzipSync } from "fflate";
 import { sha256Hex } from "./book-hash";
+import { blobToDataUrl } from "./data-url";
 import { mimeFromExtension } from "./mime";
-import type { EpubResource } from "./reading";
+import { byOffset, openZip } from "./zip-entries";
 import {
   cleanVolumeName,
   mokuroImageKey,
@@ -87,10 +87,12 @@ interface RawVolume {
   mokuro?: MokuroData;
 }
 
-/** One archive = one volume: image entries in natural reading order. */
+/** One archive = one volume: image entries in natural reading order. The
+    archive is read lazily (zip-entries): only its directory and the page
+    entries, one at a time — never the whole file in memory. */
 async function volumeFromZip(file: File): Promise<RawVolume | null> {
-  const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
-  const names = Object.keys(entries).filter(
+  const zip = await openZip(file);
+  const names = [...zip.entries.keys()].filter(
     (name) => !name.endsWith("/") && !name.startsWith("__MACOSX/"),
   );
   const imageNames = names.filter((name) => IMAGE_EXT.test(baseName(name)));
@@ -99,16 +101,19 @@ async function volumeFromZip(file: File): Promise<RawVolume | null> {
   const order = imageNames
     .map((name, index) => ({ name, stripped: stripped[index]! }))
     .sort((a, b) => naturalCompare(a.stripped, b.stripped));
-  const images = order.map(({ name, stripped }) => {
-    const bytes = entries[name]!;
-    return {
-      path: baseName(stripped),
-      blob: new Blob([bytes as BlobPart], { type: mimeOf(name, "") }),
-    };
-  });
+  const blobs = new Map<string, Blob>();
+  for (const name of byOffset(zip.entries, imageNames)) {
+    blobs.set(name, await zip.blob(zip.entries.get(name)!, mimeOf(name, "")));
+  }
+  const images = order.map(({ name, stripped }) => ({
+    path: baseName(stripped),
+    blob: blobs.get(name)!,
+  }));
   const mokuroName = names.find((name) => MOKURO_EXT.test(baseName(name)));
   const mokuro = mokuroName
-    ? (parseMokuro(new TextDecoder().decode(entries[mokuroName])) ?? undefined)
+    ? (parseMokuro(
+        new TextDecoder().decode(await zip.bytes(zip.entries.get(mokuroName)!)),
+      ) ?? undefined)
     : undefined;
   return { volumeName: cleanVolumeName(file.name), images, mokuro };
 }
@@ -183,19 +188,23 @@ function alignMokuro(volume: RawVolume): {
   return { pages, blobs: volume.images.map((image) => image.blob) };
 }
 
-/** Downscaled first page as the shelf cover (best-effort, browser only). */
+/** Downscaled first page as the shelf cover (best-effort; an
+    OffscreenCanvas, so it runs inside the import worker too). */
 async function makeCover(blob: Blob): Promise<string | undefined> {
   try {
     const bitmap = await createImageBitmap(blob);
     const scale = Math.min(1, 480 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = new OffscreenCanvas(
+      Math.max(1, Math.round(bitmap.width * scale)),
+      Math.max(1, Math.round(bitmap.height * scale)),
+    );
     const ctx = canvas.getContext("2d");
     if (!ctx) return undefined;
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
-    return canvas.toDataURL("image/jpeg", 0.85);
+    return await blobToDataUrl(
+      await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 }),
+    );
   } catch {
     return undefined;
   }
@@ -237,14 +246,11 @@ async function finishVolume(raw: RawVolume): Promise<ImportedMangaVolume | null>
 /** An image-only EPUB (see epub-manga) as one volume, pages in spine order. */
 export async function mangaVolumeFromEpub(
   volumeName: string,
-  pages: EpubResource[],
+  pages: { path: string; blob: Blob }[],
 ): Promise<ImportedMangaVolume | null> {
   return finishVolume({
     volumeName: cleanVolumeName(volumeName),
-    images: pages.map((page) => ({
-      path: baseName(page.path),
-      blob: new Blob([page.bytes as BlobPart], { type: page.mime }),
-    })),
+    images: pages.map((page) => ({ path: baseName(page.path), blob: page.blob })),
   });
 }
 
