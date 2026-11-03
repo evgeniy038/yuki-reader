@@ -3,6 +3,18 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.7] - 2026-11-03
+
+- Phone: reading is made for your thumb now — tap the outer edges to turn pages (left goes forward in Japanese books and manga, right in English ones), tap the middle for the controls, or just swipe
+- Phone: manga pages follow your finger and the next page is already waiting beside it — flick and it lands with the speed you threw it, a hesitant drag springs back, and turns feel instant because neighbouring pages load ahead
+- Phone: pinch to zoom into a manga panel and drag around it, double-tap the middle to zoom straight to that spot and double-tap again to fit the page back
+- Phone: a tap in the middle brings up the controls together with a page slider at the bottom — drag it to scrub through the whole book (right to left in Japanese books) and let go to jump
+- Phone: manga uses the whole screen width, and turning the phone sideways shows two-page spreads like the printed book
+- Phone: nothing hides under the Dynamic Island, the home bar or Safari's toolbar anymore — the shelf, the dock, the reader's controls and the page counter all stay clear, and the status bar takes on your page color while you read
+- Phone: long-press a cover for its menu with roomy, finger-sized rows; typing in search or rename no longer zooms the whole page in
+- Phone: the narrowest screens fold "Add book" into a single plus, so the shelf header always fits
+- PDF: click the page counter to jump to any page, like in novels and manga
+
 ## [1.3.6] - 2026-11-02
 
 - Manga that comes as an EPUB — store scans and calibre conversions — now opens in the manga reader with right-to-left spreads and OCR, instead of as a blank book
