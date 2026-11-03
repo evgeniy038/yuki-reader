@@ -73,7 +73,7 @@ async function main(): Promise<void> {
 
   // 3. Library header offers the primary import action.
   check(
-    (await page.locator('button:text-is("Add book")').count()) === 1,
+    (await page.getByRole("button", { name: "Add book", exact: true }).count()) === 1,
     "library header offers the add-book action",
   );
 

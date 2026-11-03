@@ -34,6 +34,7 @@ export function OcrBlockBox({
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       data-ocr-block=""
+      data-open={open || undefined}
       className="absolute cursor-text overflow-hidden"
       style={{
         left: x1,
@@ -45,8 +46,14 @@ export function OcrBlockBox({
         lineHeight: 1.2,
         writingMode: block.vertical ? "vertical-rl" : undefined,
       }}
-      onMouseEnter={() => onEnter(index)}
-      onMouseLeave={() => onLeave(index)}
+      // Hover is a mouse thing: a finger's compat mouseenter would open a
+      // box the tap is about to toggle, and nothing would ever close it.
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") onEnter(index);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") onLeave(index);
+      }}
       onClick={(event) => {
         event.stopPropagation();
         onToggle(index);

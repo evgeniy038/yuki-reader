@@ -5,8 +5,12 @@ export function Toaster() {
     <Sonner
       position="top-center"
       theme="light"
-      offset={16}
-      mobileOffset={{ top: 16, left: 12, right: 12 }}
+      offset={{ top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
+      mobileOffset={{
+        top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+        left: 12,
+        right: 12,
+      }}
       duration={3000}
       gap={8}
       visibleToasts={1}

@@ -31,7 +31,7 @@ export function NavPill({
   return (
     <nav
       aria-label={t("nav.sections")}
-      className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2"
+      className="fixed bottom-dock left-1/2 z-40 -translate-x-1/2"
     >
       <div
         ref={containerRef}

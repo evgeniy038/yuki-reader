@@ -326,6 +326,25 @@ is the bottleneck. Line-level (mokuro-style per-line) OCR is the known next
 lever for dense small text (profile pages, colophons).
 
 
+## Touch reading
+
+Fingers get their own grammar in every reader (mouse, wheel and keys stay
+as they are): the screen splits into three bands — the outer ones turn the
+page, the middle one shows the **controls** (the top pill plus a bottom
+**scrubber** bar: drag to preview a position, let go to jump; it fills from
+the right in right-to-left books). Right-to-left books (vertical Japanese,
+manga) turn FORWARD on the left band and on a swipe to the right — the
+finger pulls the next page in from the left. A phone opens a book with the
+controls up; a page turn puts them away. Text books follow the finger with
+resistance and slide the new page in; manga is a live **pager** — the
+neighbouring spreads wait preloaded on either side of the track, the drag is
+1:1, release velocity decides turn or stay and carries into the spring.
+Pinch zooms manga around the fingers, a zoomed page pans inside its bounds,
+a double tap on the middle band zooms to that spot and back. A tap opens an
+OCR box; a tap elsewhere closes it. Phones get the whole screen: manga drops
+its outer margin, a landscape phone reads spreads, every floating control
+clears the system insets (Dynamic Island, home indicator, sensor housing).
+
 ## Reading position
 
 Opening a book resumes where you stopped: the position is stored as 0..1

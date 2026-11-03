@@ -150,24 +150,22 @@ export default function App() {
 
   if (openedBook && openedData) {
     return (
-      <>
-        <ReaderScreen
-          book={openedBook}
-          data={openedData}
-          settings={readingSettings}
-          onSettingsChange={setReadingSettings}
-          onProgress={updateProgress}
-          onExit={() =>
-            // A manga volume exits to its series, not all the way to the shelf.
-            openedBook.format === "manga" && openedBook.series
-              ? navigate(
-                  `/manga/${encodeURIComponent(normalizeSeriesKey(openedBook.series))}`,
-                )
-              : navigate("/")
-          }
-        />
-        <OcrQueuePanel books={shelf.books} defaultCollapsed />
-      </>
+      <ReaderScreen
+        book={openedBook}
+        books={shelf.books}
+        data={openedData}
+        settings={readingSettings}
+        onSettingsChange={setReadingSettings}
+        onProgress={updateProgress}
+        onExit={() =>
+          // A manga volume exits to its series, not all the way to the shelf.
+          openedBook.format === "manga" && openedBook.series
+            ? navigate(
+                `/manga/${encodeURIComponent(normalizeSeriesKey(openedBook.series))}`,
+              )
+            : navigate("/")
+        }
+      />
     );
   }
 
@@ -177,14 +175,14 @@ export default function App() {
   // through to the shell, whose catch-all redirects home.
   if (openedId && !shelf.shelfReady) {
     return (
-      <div className="grid h-screen place-items-center bg-canvas">
+      <div className="grid h-dvh place-items-center bg-canvas">
         <DashRing className="size-6 text-muted-content" />
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-canvas" {...dropHandlers}>
+    <div className="h-dvh bg-canvas" {...dropHandlers}>
       <main className="h-full overflow-y-auto">
         <Routes>
           <Route

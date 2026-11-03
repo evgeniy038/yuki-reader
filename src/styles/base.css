@@ -5,13 +5,21 @@
     box-sizing: border-box;
   }
 
+  /* Phones: no font inflation on rotation, no gray flash on tap, no
+     rubber-band bounce of the whole app past its edges (the readers own
+     every gesture on their surface). */
   html {
     color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
 
   body {
-    min-height: 100vh;
+    min-height: 100dvh;
     margin: 0;
+    overscroll-behavior: none;
     background: var(--ds-surface-canvas);
     color: var(--ds-content-strong);
     font-family: var(--font-sans);
@@ -87,6 +95,13 @@
     background: var(--ds-surface-accent-soft);
   }
 
+  /* Touch-first controls: no double-tap-to-zoom wait on a button. */
+  button,
+  [role="button"],
+  a {
+    touch-action: manipulation;
+  }
+
   /* Reduced motion: movement collapses to near-instant; opacity/color cues stay. */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -96,5 +111,17 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+/* iOS zooms the whole page into any focused field set under 16px and never
+   zooms back out. On touch screens fields render at 16px — the platform's
+   own body size — so focusing search or rename keeps the layout still.
+   Unlayered on purpose: it must beat the text-size utilities. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 1rem;
   }
 }

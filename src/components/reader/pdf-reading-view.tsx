@@ -8,6 +8,7 @@ import { useLatest } from "@/lib/use-latest";
 import { currentIndexBefore } from "./panels-data";
 import { usePdfDocument } from "./use-pdf-document";
 import { usePagingInput } from "./use-paging-input";
+import { playPageEnter, useTouchPaging } from "./use-touch-paging";
 import { useSpreadNav } from "./use-spread-nav";
 import {
   PAGE_MARGIN,
@@ -53,6 +54,8 @@ export function PdfReadingView({
   onPanelChange,
   onOutlineChange,
   onProgress,
+  controlsVisible = false,
+  onControlsChange,
 }: {
   pdfBytes: Uint8Array;
   initialProgress?: number;
@@ -65,6 +68,9 @@ export function PdfReadingView({
   /** Fraction read + absolute position (first visible page number, 1-based)
       + how many pages the visible set holds (1, or 2 in a spread). */
   onProgress?: (progress: number, absolute: number, pageCount: number) => void;
+  /** Touch controls are up (the scrubber bar replaces the page chip). */
+  controlsVisible?: boolean;
+  onControlsChange?: (visible: boolean) => void;
 }) {
   const { t } = useTranslation();
   const outerRef = useRef<HTMLDivElement>(null);
@@ -84,6 +90,8 @@ export function PdfReadingView({
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTokenRef = useRef(0);
+  // A touch turn waiting for its canvas: the slide-in plays when it lands.
+  const pendingEnterRef = useRef<1 | -1 | null>(null);
   const { pageRef, spreadRef, numPagesRef, stepFor, goTo } = useSpreadNav({
     firstPageAsCover: true,
     onNavigate: setPage,
@@ -178,6 +186,10 @@ export function PdfReadingView({
           return wrap;
         });
         pageHostRef.current.replaceChildren(...wrappers);
+        if (pendingEnterRef.current !== null) {
+          playPageEnter(pageHostRef.current, pendingEnterRef.current, false);
+          pendingEnterRef.current = null;
+        }
         // Test seam: the first page number the on-screen canvas actually shows.
         pageHostRef.current.dataset.renderedPage = String(first);
         setPageLast(nums[nums.length - 1]!);
@@ -213,6 +225,23 @@ export function PdfReadingView({
     onStep: (dir) => goTo(pageRef.current + stepFor(dir)),
   });
 
+  useTouchPaging({
+    targetRef: outerRef,
+    dragRef: pageHostRef,
+    enabled: doc !== null,
+    rtl: false,
+    enterOnStep: false,
+    onStep: (dir) => {
+      const before = pageRef.current;
+      goTo(before + stepFor(dir));
+      if (pageRef.current === before) return false;
+      pendingEnterRef.current = dir;
+      onControlsChange?.(false);
+      return true;
+    },
+    onMenu: () => onControlsChange?.(!controlsVisible),
+  });
+
   if (failed) {
     return (
       <div className="grid h-full w-full place-items-center bg-canvas">
@@ -230,12 +259,25 @@ export function PdfReadingView({
   return (
     <div
       ref={outerRef}
-      className="grid h-full w-full place-items-center overflow-hidden"
+      className="grid h-full w-full touch-pan-y place-items-center overflow-hidden"
       style={{ background: "var(--reading-bg, var(--ds-surface-canvas))" }}
     >
       <div ref={pageHostRef} className="flex items-center gap-2" data-pdf-page="" />
       {numPages > 0 ? (
-        <PageIndicator page={page} pageLast={pageLast} pages={numPages}>
+        <PageIndicator
+          page={page}
+          pageLast={pageLast}
+          pages={numPages}
+          jumpMin={1}
+          jumpMax={numPages}
+          jumpStep={1}
+          jumpValue={page}
+          jumpLabel={t("reader.jumpPage")}
+          jumpSubmitLabel={t("reader.jump")}
+          onJump={(value) => goTo(Math.round(value))}
+          expanded={controlsVisible && panel === null}
+          formatJump={(value) => `${Math.round(value)} / ${numPages}`}
+        >
           {page === pageLast ? `${page} / ${numPages}` : `${page}–${pageLast} / ${numPages}`}
         </PageIndicator>
       ) : null}

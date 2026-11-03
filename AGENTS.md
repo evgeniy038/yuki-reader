@@ -14,14 +14,15 @@ pnpm, never npm (`preinstall` enforces it).
 - Type check: `pnpm typecheck`
 - Unit tests: `pnpm test` — node-side smokes via tsx (epub parser and
   resources, dictionaries, backup round-trip on fake-indexeddb, shelf,
-  stats, book-css)
+  stats, book-css, reader touch geometry)
 - Focused: `pnpm test:epub` / `pnpm test:dictionaries` / `pnpm test:backup`
   / `pnpm test:shelf` / `pnpm test:stats` / `pnpm test:book-css` /
-  `pnpm test:resources`
+  `pnpm test:resources` / `pnpm test:reader-touch`
 - Browser e2e: `pnpm test:backup-smoke` (plus test:layout, test:position,
   test:library, test:ocr-download) — real Chrome via playwright-core
   against the dev server; needs YUKI*TEST*\* fixture env vars, see
-  tests/README.md
+  tests/README.md; `pnpm test:mobile` needs no fixtures (demo book, real
+  touch, phone viewport with safe-area insets)
 - Build: `pnpm build`
 
 Run the narrowest relevant check first; broaden when the change crosses

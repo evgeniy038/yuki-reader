@@ -11,8 +11,10 @@ import { useFullscreen } from "@/lib/use-fullscreen";
 // The panel is a FLOATING CARD (like the control pill): parked at the pill's
 // height with margins all around, never edge-to-edge — so in fullscreen the
 // header and its close button stay below the system menu bar. Everything is
-// absolute inside the reader root; an invisible backdrop swallows outside
-// clicks (they would otherwise flip pages).
+// absolute inside the book view — already clear of the phone's system insets,
+// so no inset is added here; an invisible backdrop swallows outside clicks
+// (they would otherwise flip pages). On a narrow screen the card spans the
+// width and parks below the control pill; it sits above the page counter.
 
 interface TocItem {
   label: string;
@@ -69,13 +71,13 @@ function PanelShell({
         type="button"
         aria-label={t("reader.closePanel")}
         onClick={onClose}
-        className="absolute inset-0 z-30 cursor-default"
+        className="absolute inset-0 z-50 cursor-default"
       />
       <div
         data-reader-panel={panel}
         className={cn(
-          "absolute bottom-3 left-3 z-40 flex w-72 animate-in flex-col overflow-hidden rounded-card border border-subtle bg-raised shadow-floating slide-in-from-left duration-150",
-          fullscreen ? "top-11" : "top-3",
+          "absolute bottom-3 left-3 z-50 flex animate-in flex-col overflow-hidden rounded-card border border-subtle bg-raised shadow-floating slide-in-from-left duration-150 max-sm:right-3 sm:w-72",
+          fullscreen ? "top-11" : "top-3 max-sm:top-18",
         )}
       >
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-subtle pl-4 pr-2">
@@ -84,6 +86,7 @@ function PanelShell({
             variant="ghost"
             size="icon-sm"
             shape="round"
+            className="pointer-coarse:size-10"
             onClick={onClose}
             title={t("reader.close")}
             aria-label={t("reader.closePanel")}
@@ -117,7 +120,7 @@ export function TocPanel({
             data-toc-entry=""
             onClick={() => onJump(index)}
             className={cn(
-              "flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left text-sm transition-colors hover:bg-muted",
+              "flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left text-sm transition-colors hover:bg-muted pointer-coarse:py-3 pointer-coarse:text-base",
               entry.current
                 ? "font-medium text-strong"
                 : "text-default",
@@ -180,7 +183,7 @@ export function SearchPanel({
               type="button"
               data-search-result=""
               onClick={() => onJump(index)}
-              className="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left transition-colors hover:bg-muted"
+              className="flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left transition-colors hover:bg-muted pointer-coarse:py-3"
             >
               <span className="min-w-0 flex-1 truncate text-sm text-default">
                 {result.before}

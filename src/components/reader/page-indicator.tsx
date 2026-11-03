@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 
 // The quiet page chip at the bottom-right of every reader: reading-muted ink.
@@ -10,6 +11,10 @@ import { cn } from "@/lib/utils";
 // jump-to-page control; its clicks (and the form's) stopPropagation so they
 // never page the reader, and Escape inside the form closes it instead of
 // firing the reader's own Escape.
+//   Touch: when the reader controls are up (`expanded`), the chip grows into
+// a floating bottom bar with a scrubber across the whole book — drag to
+// preview the position, let go to jump. A right-to-left book fills it from
+// the right, the way its pages run.
 export function PageIndicator({
   page,
   pages,
@@ -21,6 +26,9 @@ export function PageIndicator({
   jumpLabel,
   jumpSubmitLabel,
   onJump,
+  expanded = false,
+  rtl = false,
+  formatJump,
   children,
 }: {
   page: number;
@@ -34,11 +42,24 @@ export function PageIndicator({
   jumpLabel?: string;
   jumpSubmitLabel?: string;
   onJump?: (value: number) => void;
+  /** Touch controls are up: show the scrubber bar instead of the chip. */
+  expanded?: boolean;
+  /** Right-to-left book: the scrubber fills from the right. */
+  rtl?: boolean;
+  /** Label for a scrubber value while the finger drags it. */
+  formatJump?: (value: number) => string;
   children: ReactNode;
 }) {
   const interactive = typeof onJump === "function";
   const [open, setOpen] = useState(false);
+  const [scrub, setScrub] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // The scrub preview holds until the jump lands (the view's position
+  // moves) or the bar hides — no flash back to the old position between.
+  useEffect(() => {
+    setScrub(null);
+  }, [jumpValue, expanded]);
 
   useEffect(() => {
     if (!open) return;
@@ -62,6 +83,34 @@ export function PageIndicator({
     setOpen(false);
   };
 
+  if (expanded && interactive && jumpMin !== undefined && jumpMax !== undefined) {
+    return (
+      <div
+        data-page-indicator=""
+        data-page={page}
+        data-page-last={pageLast}
+        data-pages={pages}
+        data-page-bar=""
+        className="fixed right-safe-3 bottom-safe-3 left-safe-3 z-50 mx-auto flex max-w-lg animate-in items-center gap-4 rounded-card border border-subtle bg-raised py-2 pr-4 pl-4 shadow-floating fade-in-0 slide-in-from-bottom-2 duration-150"
+      >
+        <span className="min-w-16 shrink-0 text-xs text-muted-content tabular-nums">
+          {scrub !== null && formatJump ? formatJump(scrub) : children}
+        </span>
+        <Slider
+          value={scrub ?? jumpValue ?? jumpMin}
+          min={jumpMin}
+          max={jumpMax}
+          step={jumpStep ?? 1}
+          ariaLabel={jumpLabel ?? ""}
+          reversed={rtl}
+          className="w-full min-w-0 flex-1"
+          onValueChange={setScrub}
+          onValueCommitted={onJump}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       data-page-indicator=""
@@ -69,7 +118,7 @@ export function PageIndicator({
       data-page-last={pageLast}
       data-pages={pages}
       className={cn(
-        "fixed bottom-3 right-4 z-50 text-xs",
+        "fixed right-safe-4 bottom-safe-3 z-50 text-xs",
         !interactive && "pointer-events-none",
       )}
       style={{ color: "var(--reading-muted, var(--ds-content-muted))" }}

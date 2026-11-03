@@ -8,6 +8,7 @@ import { useLatest } from "@/lib/use-latest";
 import { buildArticle, type ArticleBuild } from "./book-html";
 import { useSectionPager, type Landing } from "./use-section-pager";
 import { usePagingInput } from "./use-paging-input";
+import { useTouchPaging } from "./use-touch-paging";
 import { PageIndicator } from "./page-indicator";
 import { ReadingPanels } from "./reading-panels";
 import { type ReaderPanelMode } from "./reader-panel";
@@ -47,6 +48,8 @@ export function ReadingView({
   panel,
   onPanelChange,
   onProgress,
+  controlsVisible = false,
+  onControlsChange,
 }: {
   chapters: Chapter[];
   language?: Language;
@@ -65,6 +68,9 @@ export function ReadingView({
       on the current page. Fires on every page turn and every relayout — the
       consumer debounces these into a dwell. */
   onProgress?: (progress: number, absolute: number, pageChars: number) => void;
+  /** Touch controls are up (the scrubber bar replaces the page chip). */
+  controlsVisible?: boolean;
+  onControlsChange?: (visible: boolean) => void;
 }) {
   const { t } = useTranslation();
   const vertical = language === "ja";
@@ -176,19 +182,21 @@ export function ReadingView({
       setTotalCount,
     });
 
-  const goTo = (index: number) => {
+  // Returns false at the book's very edge — nothing to turn to.
+  const goTo = (index: number): boolean => {
     const count = pageCountRef.current;
     const current = currentSectionRef.current;
     const sectionCount = modelRef.current?.sections.length ?? 0;
     // Section boundary: cross or stay at the book's edge.
     if (index < 0) {
-      if (current > 0) renderSectionRef.current?.(current - 1, { kind: "end" });
-      return;
+      if (current <= 0) return false;
+      renderSectionRef.current?.(current - 1, { kind: "end" });
+      return true;
     }
     if (index >= count) {
-      if (current < sectionCount - 1)
-        renderSectionRef.current?.(current + 1, { kind: "start" });
-      return;
+      if (current >= sectionCount - 1) return false;
+      renderSectionRef.current?.(current + 1, { kind: "start" });
+      return true;
     }
     pageRef.current = index;
     setPage(index);
@@ -196,6 +204,7 @@ export function ReadingView({
     charPosRef.current =
       (currentSection()?.offset ?? 0) + (statsRef.current?.explored(index) ?? 0);
     reportProgress(index);
+    return true;
   };
 
   // Jump to a global character offset (search hit): the anchor follows, so a
@@ -240,10 +249,25 @@ export function ReadingView({
     onStep: (dir) => goTo(pageRef.current + dir),
   });
 
+  // Fingers: outer bands and swipes turn, the middle band toggles the
+  // controls; a turn puts the controls away.
+  useTouchPaging({
+    targetRef: outerRef,
+    dragRef: scrollRef,
+    enabled: chapters.length > 0,
+    rtl: vertical,
+    onStep: (dir) => {
+      const moved = goTo(pageRef.current + dir);
+      if (moved) onControlsChange?.(false);
+      return moved;
+    },
+    onMenu: () => onControlsChange?.(!controlsVisible),
+  });
+
   return (
     <div
       ref={outerRef}
-      className="relative flex h-full w-full"
+      className="relative flex h-full w-full touch-pan-y"
       style={{ background: "var(--reading-bg, var(--ds-surface-canvas))" }}
     >
       <div ref={scrollRef} className="m-auto overflow-hidden">
@@ -261,6 +285,9 @@ export function ReadingView({
         jumpLabel={t("reader.jumpPercent")}
         jumpSubmitLabel={t("reader.jump")}
         onJump={jumpToPercent}
+        expanded={controlsVisible && panel === null}
+        rtl={vertical}
+        formatJump={(value) => `${value.toFixed(1)}%`}
       >
         {totalCount > 0
           ? `${exploredCount} / ${totalCount} ${progressPercent.toFixed(1)}%`

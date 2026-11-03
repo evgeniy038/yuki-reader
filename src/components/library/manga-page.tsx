@@ -24,6 +24,7 @@ import { RenameDialog } from "./rename-dialog";
 import { MoveToSeriesDialog } from "./move-to-series-dialog";
 import { PageMessages } from "./page-messages";
 import { useOcrBooks } from "@/components/use-ocr-books";
+import { useCoarsePointer } from "@/lib/use-coarse-pointer";
 import {
   PageActions,
   PageContent,
@@ -68,6 +69,7 @@ export function MangaPage({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const coarsePointer = useCoarsePointer();
   const { seriesKey = "" } = useParams();
 
   const volumes = useMemo(
@@ -203,9 +205,13 @@ export function MangaPage({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="sm" onClick={() => fileRef.current?.click()}>
+          <Button
+            size="sm"
+            onClick={() => fileRef.current?.click()}
+            aria-label={t("manga.addVolume")}
+          >
             <Plus />
-            {t("manga.addVolume")}
+            <span className="max-xs:sr-only">{t("manga.addVolume")}</span>
           </Button>
         </PageActions>
       </PageHeader>
@@ -215,7 +221,9 @@ export function MangaPage({
           {volumes.map((volume, index) => (
             <div
               key={volume.id}
-              draggable
+              // Touch screens reorder nothing by drag: iOS would start a
+              // native drag on the same long press that opens the menu.
+              draggable={!coarsePointer}
               onDragStart={() => {
                 dragIndexRef.current = index;
               }}

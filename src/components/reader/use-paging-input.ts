@@ -105,8 +105,12 @@ export function usePagingInput({
     let downX = 0;
     let downY = 0;
     let downHadSelection = false;
+    // Touches page through useTouchPaging (bands + swipes); the click a tap
+    // synthesizes afterwards must not turn the page a second time.
+    let downWasTouch = false;
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
+      downWasTouch = event.pointerType !== "mouse";
       sawDown = true;
       downX = event.clientX;
       downY = event.clientY;
@@ -119,7 +123,7 @@ export function usePagingInput({
           Math.hypot(event.clientX - downX, event.clientY - downY) >
             DRAG_THRESHOLD_PX);
       sawDown = false;
-      if (dragClick) return;
+      if (dragClick || downWasTouch) return;
       if (window.getSelection()?.toString().trim()) return;
       const el = event.target as Element | null;
       if (

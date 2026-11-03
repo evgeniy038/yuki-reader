@@ -43,8 +43,10 @@ async function currentPage(page: Page): Promise<number> {
   return Number(attr);
 }
 
+// Pages of the set on screen — the pager keeps the neighbouring sets
+// preloaded off-stage, so count only the current one.
 async function imageCount(page: Page): Promise<number> {
-  return page.locator("[data-manga-page] img").count();
+  return page.locator("[data-manga-current] img").count();
 }
 
 // The rendered text of the first text-bearing block stays inside its box —
@@ -124,9 +126,11 @@ async function main(): Promise<void> {
   const coverSrc = await oshTile.locator("img").getAttribute("src");
   check(coverSrc?.startsWith("data:image/jpeg") ?? false, "ocr: cover rendered");
 
-  // Series page: one volume, numbered.
+  // Series page: one volume, numbered. The page is a lazy chunk — wait for
+  // the route itself, not just any tile (the shelf's would match at once).
   await oshTile.click();
-  await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
+  await page.waitForURL(/#\/manga\//, { timeout: 10_000 });
+  await page.waitForSelector('button[aria-label="Add volume"]', { timeout: 10_000 });
   check(
     (await page.locator("[data-book-id]").count()) === 1,
     "ocr: series page lists the volume",
@@ -145,12 +149,12 @@ async function main(): Promise<void> {
   check((await currentPage(page)) === 1, "reader: opens on page 1");
   check((await imageCount(page)) === 1, "reader: cover shows alone");
   const rendered = await page.evaluate(() => {
-    const img = document.querySelector<HTMLImageElement>("[data-manga-page] img");
+    const img = document.querySelector<HTMLImageElement>("[data-manga-current] img");
     return img ? img.complete && img.naturalWidth > 0 : false;
   });
   check(rendered, "reader: the scan renders");
   const fit = await page.evaluate(() => {
-    const host = document.querySelector("[data-manga-page] img");
+    const host = document.querySelector("[data-manga-current] img");
     if (!host) return { top: -9999, bottom: 99999, vh: 0 };
     const r = host.getBoundingClientRect();
     return { top: r.top, bottom: r.bottom, vh: window.innerHeight };
@@ -195,7 +199,7 @@ async function main(): Promise<void> {
   check((await currentPage(page)) === 2, "reader: left arrow moves forward");
   check((await imageCount(page)) === 2, "reader: spread shows two pages");
   const rtl = await page.evaluate(() => {
-    const imgs = [...document.querySelectorAll<HTMLImageElement>("[data-manga-page] img")];
+    const imgs = [...document.querySelectorAll<HTMLImageElement>("[data-manga-current] img")];
     if (imgs.length !== 2) return false;
     const [a, b] = imgs.map((img) => img.getBoundingClientRect().left);
     // DOM order is reading order; flex-row-reverse puts the earlier page right.
@@ -213,7 +217,7 @@ async function main(): Promise<void> {
   await page.waitForTimeout(300);
   const zoomed = await page.evaluate(
     () =>
-      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+      document.querySelector<HTMLDivElement>("[data-manga-current]")?.style
         .transform ?? "",
   );
   check(/scale\((?!1\))/.test(zoomed), "zoom: the wheel zooms the page");
@@ -223,7 +227,7 @@ async function main(): Promise<void> {
   await page.waitForTimeout(200);
   const panned = await page.evaluate(
     () =>
-      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+      document.querySelector<HTMLDivElement>("[data-manga-current]")?.style
         .transform ?? "",
   );
   check(panned !== zoomed && panned.includes("translate"), "zoom: drag pans");
@@ -233,7 +237,7 @@ async function main(): Promise<void> {
   await page.waitForTimeout(300);
   const zoomedOut = await page.evaluate(
     () =>
-      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+      document.querySelector<HTMLDivElement>("[data-manga-current]")?.style
         .transform ?? "",
   );
   check(
@@ -245,10 +249,11 @@ async function main(): Promise<void> {
   await settleOnPage(page, 2);
   const reset = await page.evaluate(
     () =>
-      document.querySelector<HTMLDivElement>("[data-manga-page] > div")?.style
+      document.querySelector<HTMLDivElement>("[data-manga-current]")?.style
         .transform ?? "",
   );
-  check(reset.includes("scale(1)"), "zoom: a page turn resets the zoom");
+  // Identity is written as no transform at all.
+  check(reset === "", "zoom: a page turn resets the zoom");
   await page.waitForTimeout(3_500); // bookmark dwell
 
   await exitToShelf(page); // a manga volume exits to its series page
@@ -307,7 +312,8 @@ async function main(): Promise<void> {
       "zip: one volume from the archive",
     );
     await kaguyaTile.click();
-    await page.waitForSelector("[data-book-id]", { timeout: 10_000 });
+    await page.waitForURL(/#\/manga\//, { timeout: 10_000 });
+    await page.waitForSelector('button[aria-label="Add volume"]', { timeout: 10_000 });
     check(
       (await page.locator("[data-book-id]").count()) === 1,
       "zip: series page lists the volume",

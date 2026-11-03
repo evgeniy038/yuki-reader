@@ -30,6 +30,10 @@ const FULLSCREEN_REVEAL_ZONE_PX = 4;
 // macOS menu bar over the page while the cursor is up there. That is the
 // same combined gesture Safari uses (bar + toolbar drop together), so the
 // pill parks just BELOW the bar (44px) and reveals from the same edge touch.
+// TOUCH: there is no cursor to throw at an edge — `touchVisible` (the
+// reader's middle-band tap) holds the pill up until the next tap or page
+// turn, buttons grow to finger size, and the pill clears the status bar.
+// Fullscreen only shows where the browser can do it (not on iPhone).
 export function ReaderChrome({
   onExit,
   settings,
@@ -44,6 +48,7 @@ export function ReaderChrome({
   onMangaFirstPageAsCoverChange,
   settingsOpen,
   onSettingsOpenChange,
+  touchVisible = false,
 }: {
   onExit: () => void;
   settings: ReadingSettings;
@@ -61,6 +66,8 @@ export function ReaderChrome({
   /** Controlled popover flag (an open popover pins the pill visible). */
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
+  /** Touch controls are up (middle-band tap) — the pill stays shown. */
+  touchVisible?: boolean;
 }) {
   const [pillVisible, setPillVisible] = useState(true);
   const { t } = useTranslation();
@@ -142,6 +149,11 @@ export function ReaderChrome({
     setSettingsOpen(open);
   };
 
+  const canFullscreen =
+    typeof document !== "undefined" && document.fullscreenEnabled === true;
+  const shown = pillVisible || touchVisible || settingsOpen;
+  const buttonSize = "pointer-coarse:size-10";
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.();
     else void document.exitFullscreen?.();
@@ -160,8 +172,8 @@ export function ReaderChrome({
         }}
         className={cn(
           "absolute left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-pill border border-subtle bg-raised p-1 shadow-floating transition-[transform,opacity] duration-200",
-          fullscreen ? "top-11" : "top-3",
-          pillVisible
+          fullscreen ? "top-11" : "top-safe-3",
+          shown
             ? "pointer-events-auto translate-y-0 opacity-100"
             : "pointer-events-none -translate-y-3 opacity-0",
         )}
@@ -170,6 +182,7 @@ export function ReaderChrome({
           variant="ghost"
           size="icon-sm"
           shape="round"
+          className={buttonSize}
           onClick={onExit}
           title={t("reader.back")}
           aria-label={t("reader.back")}
@@ -181,6 +194,7 @@ export function ReaderChrome({
             variant="ghost"
             size="icon-sm"
             shape="round"
+            className={buttonSize}
             onClick={() => onPanelChange?.(panel === "toc" ? null : "toc")}
             title={t("reader.toc")}
             aria-label={t("reader.toc")}
@@ -194,6 +208,7 @@ export function ReaderChrome({
             variant="ghost"
             size="icon-sm"
             shape="round"
+            className={buttonSize}
             onClick={() => onPanelChange?.(panel === "search" ? null : "search")}
             title={t("reader.search")}
             aria-label={t("reader.search")}
@@ -206,6 +221,7 @@ export function ReaderChrome({
           variant="ghost"
           size="icon-sm"
           shape="round"
+          className={buttonSize}
           onClick={toggleSettings}
           title={t("reader.settings")}
           aria-label={t("reader.settings")}
@@ -213,16 +229,19 @@ export function ReaderChrome({
         >
           <Gear />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          shape="round"
-          onClick={toggleFullscreen}
-          title={t("reader.fullscreen")}
-          aria-label={t("reader.fullscreen")}
-        >
-          <CornersOut />
-        </Button>
+        {canFullscreen ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            shape="round"
+            className={buttonSize}
+            onClick={toggleFullscreen}
+            title={t("reader.fullscreen")}
+            aria-label={t("reader.fullscreen")}
+          >
+            <CornersOut />
+          </Button>
+        ) : null}
       </div>
 
       {settingsOpen ? (

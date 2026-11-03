@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MokuroBlock } from "@/core/mokuro";
 import { fontSizeFor } from "@/core/ocr/font-size";
 import { OcrBlockBox } from "./ocr-block-box";
@@ -19,12 +19,16 @@ import { OcrBlockBox } from "./ocr-block-box";
 // Lazy OCR: a block with empty lines is a detect-only skeleton — hovering it
 // fires onRevealBlock so the worker recognizes just this crop, and the box
 // shows an ellipsis until the text lands (the reader swaps the blocks in).
+//
+// Touch has no hover: a tap on a box opens it (the click), a tap anywhere
+// else on the page closes it — the reader bumps `dismissKey`.
 export function MangaOcrOverlay({
   blocks,
   width,
   height,
   scale,
   reestimateFontSize = false,
+  dismissKey = 0,
   onRevealBlock,
 }: {
   blocks: MokuroBlock[];
@@ -37,11 +41,17 @@ export function MangaOcrOverlay({
       boxes cached by older engines pick up the current estimator. Sidecar
       blocks keep their exact font size. */
   reestimateFontSize?: boolean;
+  /** Changes when the reader wants every open box closed. */
+  dismissKey?: number;
   /** Hover on a not-yet-recognized skeleton block. */
   onRevealBlock?: (blockIndex: number) => void;
 }) {
   const [pinned, setPinned] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
+  useEffect(() => {
+    setPinned(null);
+    setHovered(null);
+  }, [dismissKey]);
   // Biggest first in the DOM, so stacking order = ascending area.
   const order = blocks
     .map((block, index) => ({ block, index }))

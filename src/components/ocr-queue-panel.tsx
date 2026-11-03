@@ -69,10 +69,17 @@ function Cover({ book, className }: { book: Book; className: string }) {
 export function OcrQueuePanel({
   books,
   defaultCollapsed = false,
+  placement = "shelf",
+  suppressed = false,
 }: {
   books: Book[];
   /** Reader mounts this collapsed — reading chrome stays minimal. */
   defaultCollapsed?: boolean;
+  /** Shelf: bottom-right (above the dock on a phone). Reader: bottom-left,
+      clear of the page counter on the right. */
+  placement?: "shelf" | "reader";
+  /** Hidden while something else owns the reader's bottom edge. */
+  suppressed?: boolean;
 }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<OcrStatus>({
@@ -110,7 +117,9 @@ export function OcrQueuePanel({
             ),
         )
       : null;
-  const visible = downloading || progress.length > 0 || status.error !== null;
+  const visible =
+    !suppressed &&
+    (downloading || progress.length > 0 || status.error !== null);
 
   const stageLabel = (entry: OcrBookProgress) =>
     entry.stage === "detect" ? t("ocr.stage.detect") : t("ocr.stage.recognize");
@@ -168,9 +177,14 @@ export function OcrQueuePanel({
       data-ocr-status=""
       role="status"
       aria-hidden={!visible}
-      className="fixed bottom-4 right-4 z-40"
+      className={
+        placement === "reader"
+          ? "fixed bottom-safe-3 left-safe-4 z-40"
+          : "fixed right-safe-4 bottom-above-dock z-40 sm:bottom-safe-4"
+      }
       style={{
-        transformOrigin: "100% 100%", // grows from its bottom-right anchor
+        // Grows from its anchor corner.
+        transformOrigin: placement === "reader" ? "0% 100%" : "100% 100%",
         transition: visible
           ? `opacity ${ENTER_EXIT_MS}ms ease-out, filter ${ENTER_EXIT_MS}ms ease-out, transform ${ENTER_EXIT_MS}ms ease-out, visibility 0s`
           : `opacity ${ENTER_EXIT_MS}ms ease-out, filter ${ENTER_EXIT_MS}ms ease-out, transform ${ENTER_EXIT_MS}ms ease-out, visibility 0s ${ENTER_EXIT_MS}ms`,
@@ -215,7 +229,7 @@ export function OcrQueuePanel({
         {/* Panel content (expanded state) — fixed width, height by content. */}
         <div
           ref={panelRef}
-          className="absolute bottom-0 right-0 w-80"
+          className="absolute bottom-0 right-0 w-80 max-w-[calc(100vw-2rem)]"
           style={{
             transition: expanded
               ? `opacity ${CONTENT_IN_MS}ms ease-out ${CONTENT_DELAY_MS}ms, filter ${CONTENT_IN_MS}ms ease-out ${CONTENT_DELAY_MS}ms`

@@ -49,6 +49,49 @@
   }
 }
 
+/* ——— Safe areas ———
+   Phone edges belong to the system: the Dynamic Island and status bar on
+   top, the home indicator below, the sensor housing on a side in
+   landscape. `*-safe-N` = the system inset plus N spacing steps, so a
+   floating control keeps its usual breathing room on a desktop (insets are
+   0 there) and clears the hardware on a phone. Physical sides on purpose —
+   the insets themselves are physical. */
+@utility pt-safe-* {
+  padding-top: calc(env(safe-area-inset-top, 0px) + --spacing(--value(number)));
+}
+@utility pb-safe-* {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + --spacing(--value(number)));
+}
+@utility pl-safe-* {
+  padding-left: calc(env(safe-area-inset-left, 0px) + --spacing(--value(number)));
+}
+@utility pr-safe-* {
+  padding-right: calc(env(safe-area-inset-right, 0px) + --spacing(--value(number)));
+}
+@utility top-safe-* {
+  top: calc(env(safe-area-inset-top, 0px) + --spacing(--value(number)));
+}
+@utility bottom-safe-* {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + --spacing(--value(number)));
+}
+@utility left-safe-* {
+  left: calc(env(safe-area-inset-left, 0px) + --spacing(--value(number)));
+}
+@utility right-safe-* {
+  right: calc(env(safe-area-inset-right, 0px) + --spacing(--value(number)));
+}
+
+@utility bottom-dock {
+  bottom: var(--dock-bottom);
+}
+@utility bottom-above-dock {
+  bottom: var(--above-dock);
+}
+/* Page bottom padding that keeps the last row scrollable clear of the dock. */
+@utility pb-dock {
+  padding-bottom: calc(var(--above-dock) + 1.5rem);
+}
+
 @utility icon-nav {
   width: var(--size-icon-nav);
   height: var(--size-icon-nav);

@@ -8,7 +8,9 @@ import {
   type ReadingSettings,
 } from "@/core/reading-settings";
 import type { OpenedData } from "@/components/library/use-shelf";
+import { OcrQueuePanel } from "@/components/ocr-queue-panel";
 import { DashRing } from "@/components/ui/dash-ring";
+import { useCoarsePointer } from "@/lib/use-coarse-pointer";
 import { useEscapeKey } from "@/lib/use-escape-key";
 import { ReadingView } from "./reading-view";
 import { MangaReadingView } from "./manga-reading-view";
@@ -45,8 +47,16 @@ function PdfViewFallback() {
 // auto-hiding chrome. Reader-only UI state
 // (side panels, the PDF outline flag) lives here — the app shell
 // just routes to this screen and feeds it the session's onProgress.
+//   Touch: the views own the gestures (bands, swipes, pinch) and report a
+// middle-band tap; the controls — the top pill and the bottom scrubber —
+// show and hide together from here. A phone opens a book with them up, so
+// the way out is never hidden; the first page turn puts them away.
+//   The book surface stays clear of the system insets (status bar and
+// Dynamic Island, home indicator, landscape sensor housing) and paints
+// them in the page color, as does the browser's own status-bar tint.
 export function ReaderScreen({
   book,
+  books,
   data,
   settings,
   onSettingsChange,
@@ -54,6 +64,8 @@ export function ReaderScreen({
   onExit,
 }: {
   book: Book;
+  /** The whole shelf — the OCR queue panel lists other volumes too. */
+  books: Book[];
   data: OpenedData;
   settings: ReadingSettings;
   onSettingsChange: (settings: ReadingSettings) => void;
@@ -70,6 +82,9 @@ export function ReaderScreen({
   // so it reports up and the chrome's TOC button follows.
   const [pdfHasOutline, setPdfHasOutline] = useState(false);
   const readerRef = useRef<HTMLDivElement>(null);
+  const coarse = useCoarsePointer();
+  // Touch controls (pill + scrubber bar). Phones open with them up.
+  const [controls, setControls] = useState(coarse);
 
   // One Escape for the whole reader, innermost layer first: settings popover,
   // then side panel, then exit — but PDF never exits on Escape.
@@ -93,6 +108,18 @@ export function ReaderScreen({
     setPdfHasOutline(false);
   }, [book.id]);
 
+  // The browser paints its status-bar area from theme-color: follow the page
+  // while reading, give the shelf its canvas back on the way out.
+  useEffect(() => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (!meta) return;
+    const previous = meta.content;
+    meta.content = readingTheme(settings.theme).bg;
+    return () => {
+      meta.content = previous;
+    };
+  }, [settings.theme]);
+
   // The reading surface's own custom properties: both book views and the
   // chrome read these, so a theme/font change repaints everything at once.
   const readingStyle = useMemo(() => {
@@ -109,12 +136,17 @@ export function ReaderScreen({
     } as CSSProperties;
   }, [settings]);
 
+  const controlsProps = {
+    controlsVisible: controls,
+    onControlsChange: setControls,
+  };
+
   return (
-    <div ref={readerRef} className="relative min-h-screen bg-canvas">
+    <div ref={readerRef} className="relative min-h-dvh bg-canvas">
       <div
-        style={readingStyle}
+        style={{ ...readingStyle, background: "var(--reading-bg)" }}
         data-furigana={settings.furigana ? undefined : "off"}
-        className="h-screen w-full"
+        className="h-dvh w-full pt-safe-0 pr-safe-0 pb-safe-0 pl-safe-0"
       >
         {book.format === "pdf" && data.pdfBytes ? (
           <Suspense fallback={<PdfViewFallback />}>
@@ -125,6 +157,7 @@ export function ReaderScreen({
               onPanelChange={setPanel}
               onOutlineChange={setPdfHasOutline}
               onProgress={onProgress}
+              {...controlsProps}
             />
           </Suspense>
         ) : book.format === "manga" ? (
@@ -133,6 +166,7 @@ export function ReaderScreen({
             initialProgress={book.progress}
             mangaFirstPageAsCover={settings.mangaFirstPageAsCover}
             onProgress={onProgress}
+            {...controlsProps}
           />
         ) : (
           <ReadingView
@@ -147,6 +181,7 @@ export function ReaderScreen({
             panel={panel}
             onPanelChange={setPanel}
             onProgress={onProgress}
+            {...controlsProps}
           />
         )}
       </div>
@@ -168,6 +203,13 @@ export function ReaderScreen({
         }
         panel={panel}
         onPanelChange={setPanel}
+        touchVisible={controls}
+      />
+      <OcrQueuePanel
+        books={books}
+        defaultCollapsed
+        placement="reader"
+        suppressed={controls}
       />
       <DictionaryLookupLayer
         rootRef={readerRef}

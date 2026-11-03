@@ -1,8 +1,8 @@
 # Tests
 
 Node-side units and parser smokes are self-contained (fixtures built on the
-fly). `pnpm test` runs all seven: epub, dictionaries, backup, shelf, stats,
-book-css, resources. Standalone extras:
+fly). `pnpm test` runs all eight: epub, dictionaries, backup, shelf, stats,
+book-css, resources, reader-touch. Standalone extras:
 
 ```
 pnpm tsx tests/ocr-download.ts
@@ -27,6 +27,15 @@ loads.
 shelf-collapse-smoke folds a plain section, and — when `YUKI_TEST_MANGA_DIR`
 is set — also the mixed novel+manga group: the whole group folds into one
 stack, and the manga h3 subsection folds on its own.
+
+## Phone reading (no fixtures, built-in demo book)
+
+`pnpm test:mobile` drives the demo book in a phone-sized Chrome with real
+CDP touch events and the iPhone Pro Max safe-area insets: controls on open
+and clear of the status bar, middle-band toggle with the scrubber bar,
+band taps and swipes in both reading directions, the 16px field guard.
+The pure touch geometry (bands, swipes, spring, manga neighbour sets, pan
+bounds) is unit-tested in `pnpm test:reader-touch` (part of `pnpm test`).
 
 ## Reader chrome and panels (no fixtures, built-in demo book)
 

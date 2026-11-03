@@ -101,7 +101,10 @@ export function BookTile({
   // reserve above the cover's edge: the spring's settle can only reveal
   // more ribbon, never open a gap at the seam. All motion is a transform
   // on a promoted layer (no scale — a squashing ribbon reads as a glitch);
-  // the hit area is a full 56px square.
+  // the hit area is a full 56px square. On a touch screen there is no hover
+  // to reveal it, so the square would be an invisible trap over the cover's
+  // corner: there the ribbon is display only and pinning lives in the
+  // long-press menu.
   const pinControl = onToggleFavorite ? (
     <button
       type="button"
@@ -109,7 +112,7 @@ export function BookTile({
       aria-label={t(book.favorite ? "library.menu.unpin" : "library.menu.pin")}
       aria-pressed={book.favorite}
       onClick={onToggleFavorite}
-      className="group/pin absolute right-0 top-0 z-10 h-14 w-14 cursor-pointer outline-none"
+      className="group/pin absolute right-0 top-0 z-10 h-14 w-14 cursor-pointer outline-none pointer-coarse:pointer-events-none"
     >
       <span className="absolute right-2.5 top-0 block h-[52px] w-7 overflow-hidden">
         <span

@@ -46,8 +46,8 @@ export function ReaderSettingsPopover({
       />
       <div
         className={cn(
-          "pointer-events-auto absolute left-1/2 z-40 flex w-64 origin-top -translate-x-1/2 animate-in flex-col gap-3 rounded-card border border-subtle bg-raised p-3 shadow-floating fade-in-0 zoom-in-95 duration-100",
-          fullscreen ? "top-24" : "top-16",
+          "pointer-events-auto absolute left-1/2 z-40 flex w-64 origin-top -translate-x-1/2 animate-in flex-col gap-3 rounded-card border border-subtle bg-raised p-3 shadow-floating fade-in-0 zoom-in-95 duration-100 pointer-coarse:w-72",
+          fullscreen ? "top-24" : "top-safe-16 pointer-coarse:top-safe-18",
         )}
       >
         <div className="flex flex-col gap-1">

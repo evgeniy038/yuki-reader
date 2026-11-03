@@ -27,7 +27,7 @@ export function UpdateToast() {
   };
 
   return (
-    <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
+    <div className="fixed bottom-above-dock left-1/2 z-50 -translate-x-1/2 animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
       <div className="flex items-center gap-4 rounded-card bg-raised px-4 py-3 shadow-floating">
         <p className="text-sm text-strong">{t("toast.updateReady")}</p>
         <Button size="sm" onClick={apply}>

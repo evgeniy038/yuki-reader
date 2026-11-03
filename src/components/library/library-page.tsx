@@ -230,9 +230,13 @@ export function LibraryPage({
                 ))}
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={() => fileRef.current?.click()}>
+            <Button
+              size="sm"
+              onClick={() => fileRef.current?.click()}
+              aria-label={t("library.addBook")}
+            >
               <Plus />
-              {t("library.addBook")}
+              <span className="max-xs:sr-only">{t("library.addBook")}</span>
             </Button>
           </PageActions>
         ) : null}

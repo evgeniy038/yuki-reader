@@ -45,7 +45,9 @@
   --text-lg--line-height: 1.5rem;
   --text-lg--font-weight: 500;
 
-  /* Breakpoints for the responsive library grid. */
+  /* Breakpoints for the responsive library grid. xs is the narrowest phone
+     class (320–360px) where header actions fold to icons. */
+  --breakpoint-xs: 23rem;
   --breakpoint-sm: 40rem;
   --breakpoint-md: 48rem;
   --breakpoint-lg: 64rem;
@@ -179,4 +181,10 @@
 
   /* Interaction. */
   --ds-focus-ring: oklch(24.314% 0.007 254.624);
+
+  /* The floating section dock: 16px off the bottom on a desktop, hugging
+     the home indicator on a phone (never under it). Toasts and the OCR
+     panel stack above it on phones — dock height 58px + an 8px gap. */
+  --dock-bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.25rem));
+  --above-dock: calc(var(--dock-bottom) + 4.125rem);
 }
