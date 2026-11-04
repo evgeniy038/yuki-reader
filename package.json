@@ -1,6 +1,6 @@
 {
   "name": "yuki",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "private": true,
   "type": "module",
   "description": "yuki — a quiet reading library",
@@ -34,8 +34,10 @@
     "test:resources": "tsx tests/resources-smoke.ts",
     "test:backup-smoke": "tsx tests/backup-smoke.ts",
     "test:reader-touch": "tsx tests/reader-touch-unit.ts",
+    "test:storage": "tsx tests/storage-unit.ts",
+    "test:zip": "tsx tests/zip-unit.ts",
     "test:mobile": "tsx tests/mobile-touch-smoke.ts",
-    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup && pnpm test:shelf && pnpm test:stats && pnpm test:book-css && pnpm test:resources && pnpm test:reader-touch",
+    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup && pnpm test:shelf && pnpm test:stats && pnpm test:book-css && pnpm test:resources && pnpm test:reader-touch && pnpm test:storage && pnpm test:zip",
     "preinstall": "npx only-allow pnpm"
   },
   "dependencies": {

@@ -3,6 +3,15 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.8] - 2026-11-03
+
+- The app starts faster and needs far less memory with a big library: a book's text and pictures load only when you open it — a shelf of 27 novels now starts with about a fifth of the memory, a shelf with PDFs with a fifteenth
+- Importing manga no longer freezes the app: archives and comic EPUBs unpack in the background, page after page, instead of all at once in memory — the shelf stays smooth while a volume comes in
+- Importing a pile of books at once keeps the app responsive — they are read in the background, a few at a time
+- Opening a book is quicker: counting its characters is about four times faster, with exactly the same numbers
+- OCR: drop several volumes at once and every one of them opens sooner — all volumes get their text boxes first, recognition comes after
+- OCR takes about 165 MB less memory while it works
+
 ## [1.3.7] - 2026-11-03
 
 - Phone: reading is made for your thumb now — tap the outer edges to turn pages (left goes forward in Japanese books and manga, right in English ones), tap the middle for the controls, or just swipe

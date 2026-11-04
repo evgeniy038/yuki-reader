@@ -1,8 +1,8 @@
 import {
-  loadAllBooks,
   loadManga,
   loadMangaOcrFlags,
   loadMangaOcrPage,
+  loadShelfBooks,
   type MangaOcrRecord,
 } from "../storage";
 import { ensureFiles, pool } from "./pool";
@@ -19,9 +19,9 @@ import type { OcrWorkerIn } from "./ocr.worker";
 // Every manga volume needing OCR goes through the same pipeline:
 //   detect — boxes for every page (fast; a volume stays gated on the shelf
 //            until all its pages have skeletons)
-//   march  — recognize pages in order, at the back of the queue, whenever a
-//            worker is free; measured at ~250-420 pages/min on an M3 Pro
-//            with WebGPU, depending on page density
+//   march  — recognize pages in order, after every queued detect job,
+//            whenever a worker is free; measured at ~230-420 pages/min on
+//            an M3 Pro with WebGPU, depending on page density
 //   hover  — a single block, always ahead of everything (recognizeBlockNow)
 // The listener sets feed the UI: status → model download + errors, books →
 // the per-volume queue panel (counts come from storage, never from queue
@@ -95,14 +95,18 @@ async function dispatch(): Promise<void> {
   while (pool && queue.length > 0) {
     const slot = pool.find((slot) => slot.state === "idle" && !slot.dead);
     if (!slot) return;
-    // Hovered blocks jump the queue; the rest stays FIFO (detect first,
-    // then the recognition march in page order). A page never gets a second
-    // active job — jobs for busy pages stay queued until the page releases.
-    let jobIndex = queue.findIndex(
-      (job) => job.kind === "block" && !busyPages.has(pageKey(job)),
-    );
-    if (jobIndex < 0) {
-      jobIndex = queue.findIndex((job) => !busyPages.has(pageKey(job)));
+    // Hovered blocks jump the queue, then every volume's detect pass, then
+    // the recognition march — each FIFO. Detect before ANY march: a batch
+    // import lifts every volume's gate in detect time instead of waiting
+    // for the volumes queued ahead of it to be fully recognized. A page
+    // never gets a second active job — jobs for busy pages stay queued
+    // until the page releases.
+    let jobIndex = -1;
+    for (const kind of ["block", "detect", "run"] as const) {
+      jobIndex = queue.findIndex(
+        (job) => job.kind === kind && !busyPages.has(pageKey(job)),
+      );
+      if (jobIndex >= 0) break;
     }
     // Every queued page is busy — keep the jobs, wait for a release.
     if (jobIndex < 0) return;
@@ -261,7 +265,7 @@ let resumed = false;
 export function resumeMangaOcr(): void {
   if (resumed) return;
   resumed = true;
-  void loadAllBooks().then(async (records) => {
+  void loadShelfBooks().then(async (records) => {
     for (const record of records) {
       if (record.format === "manga") await trackMangaOcr(record.id);
     }

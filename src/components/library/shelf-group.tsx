@@ -70,7 +70,6 @@ export function ShelfGroup({
   isLast,
   collapsed,
   onToggleSection,
-  openableIds,
   flashId,
   registerSection,
   sectionDrag,
@@ -90,7 +89,6 @@ export function ShelfGroup({
   isLast: boolean;
   collapsed: ReadonlySet<string>;
   onToggleSection: (id: string, next: boolean) => void;
-  openableIds: Set<string>;
   flashId: string | null;
   registerSection: (id: string) => (el: HTMLElement | null) => void;
   sectionDrag: SectionDrag;
@@ -115,7 +113,6 @@ export function ShelfGroup({
   const gridFor = (entries: { item: ShelfItem }[]) => (
     <LibraryGrid
       items={entries.map(({ item }) => item)}
-      openableIds={openableIds}
       flashId={flashId}
       onOpenBook={onOpenBook}
       onDetails={onDetails}

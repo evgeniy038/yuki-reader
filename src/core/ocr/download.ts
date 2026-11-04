@@ -1,4 +1,4 @@
-import { loadOcrModel, putOcrModel } from "../storage";
+import { hasOcrModel, loadOcrModel, putOcrModel } from "../storage";
 import type { OcrEp } from "./ort-runtime";
 
 // OCR model downloads. Every file is SAME-ORIGIN — shipped in the repo
@@ -63,7 +63,7 @@ export interface OcrModelFileSpec {
 }
 
 /** Model URLs per execution provider. Needs BASE_URL, so it stays a
-    function: evaluated only from downloadModelFiles, it keeps the module
+    function: evaluated only from cacheModelFiles, it keeps the module
     importable outside Vite (node tests drive downloadFiles). */
 function specsFor(ep: OcrEp): Record<keyof OcrModelFiles, OcrModelFileSpec> {
   const base = import.meta.env.BASE_URL;
@@ -251,29 +251,79 @@ async function modelBytes(
     onBytes(spec.size, spec.size);
     return cached;
   }
-  const bytes = await fetchRanged(spec.url, spec.size, onBytes);
-  if (bytes.length !== spec.size) {
-    throw new Error(`OCR model corrupted (${spec.url})`);
-  }
+  const bytes = await fetchModel(spec, onBytes);
   void putOcrModel(spec.url, bytes).catch(() => {});
   return bytes;
 }
 
-/** Download (once) every OCR model file. Main thread only — workers receive
-    the bytes over postMessage. */
-export async function downloadModelFiles(
-  ep: OcrEp,
-  onProgress?: (loaded: number, total: number) => void,
-): Promise<OcrModelFiles> {
-  return downloadFiles(specsFor(ep), onProgress);
+async function fetchModel(
+  spec: OcrModelFileSpec,
+  onBytes: (loaded: number, total: number) => void,
+): Promise<Uint8Array> {
+  const bytes = await fetchRanged(spec.url, spec.size, onBytes);
+  if (bytes.length !== spec.size) {
+    throw new Error(`OCR model corrupted (${spec.url})`);
+  }
+  return bytes;
 }
 
-/** Download every file in `specs`, reporting aggregate progress. Totals are
-    the known file sizes, so loaded never exceeds total. */
+/** How a worker gets one model file: from the cache under `url` — or, when
+    the cache refused the write (quota, private mode), the bytes themselves. */
+export interface OcrModelRef extends OcrModelFileSpec {
+  bytes?: Uint8Array;
+}
+
+export type OcrModelRefs = Record<keyof OcrModelFiles, OcrModelRef>;
+
+/** Main thread: make sure every model file for `ep` sits in the cache —
+    downloaded once, with progress — WITHOUT keeping the bytes. Each worker
+    then reads its own copy (readModelFiles): the main thread never holds
+    the ~165MB, never structured-clones it per worker (a ~0.5s freeze with
+    five workers), and a crash replacement needs nothing but the refs. */
+export async function cacheModelFiles(
+  ep: OcrEp,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<OcrModelRefs> {
+  return eachFile(specsFor(ep), onProgress, async (spec, onBytes) => {
+    if (await hasOcrModel(spec.url).catch(() => false)) {
+      onBytes(spec.size, spec.size);
+      return spec;
+    }
+    const bytes = await fetchModel(spec, onBytes);
+    try {
+      await putOcrModel(spec.url, bytes);
+      return spec;
+    } catch {
+      return { ...spec, bytes };
+    }
+  });
+}
+
+/** Worker: the model bytes behind the refs — handed over, cached, or (a
+    poisoned/evicted cache entry) fetched again and re-cached. */
+export async function readModelFiles(refs: OcrModelRefs): Promise<OcrModelFiles> {
+  return eachFile(refs, undefined, (ref, onBytes) =>
+    ref.bytes ? Promise.resolve(ref.bytes) : modelBytes(ref, onBytes),
+  );
+}
+
+/** Download every file in `specs` (cache first), reporting aggregate
+    progress. Totals are the known file sizes, so loaded never exceeds
+    total. */
 export async function downloadFiles(
   specs: Record<keyof OcrModelFiles, OcrModelFileSpec>,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<OcrModelFiles> {
+  return eachFile(specs, onProgress, modelBytes);
+}
+
+/** Run `perFile` over all four model files in parallel with one aggregate
+    progress callback. */
+async function eachFile<S extends OcrModelFileSpec, T>(
+  specs: Record<keyof OcrModelFiles, S>,
+  onProgress: ((loaded: number, total: number) => void) | undefined,
+  perFile: (spec: S, onBytes: (loaded: number, total: number) => void) => Promise<T>,
+): Promise<Record<keyof OcrModelFiles, T>> {
   const progress = new Map<string, { loaded: number; total: number }>();
   const report = (url: string) => (loaded: number, total: number) => {
     progress.set(
@@ -291,10 +341,10 @@ export async function downloadFiles(
   };
 
   const [detector, encoder, decoder, vocab] = await Promise.all([
-    modelBytes(specs.detector, report(specs.detector.url)),
-    modelBytes(specs.encoder, report(specs.encoder.url)),
-    modelBytes(specs.decoder, report(specs.decoder.url)),
-    modelBytes(specs.vocab, report(specs.vocab.url)),
+    perFile(specs.detector, report(specs.detector.url)),
+    perFile(specs.encoder, report(specs.encoder.url)),
+    perFile(specs.decoder, report(specs.decoder.url)),
+    perFile(specs.vocab, report(specs.vocab.url)),
   ]);
   return { detector, encoder, decoder, vocab };
 }

@@ -1,11 +1,12 @@
 import { mimeFromExtension } from "../mime";
 import {
-  loadAllBooks,
   loadAllDictionaries,
+  loadBookContent,
   loadDictionaryArchives,
   loadManga,
   loadMangaOcr,
   loadMangaPageBlob,
+  loadShelfBooks,
   loadStats,
   type BookRecord,
   type MangaRecord,
@@ -53,7 +54,9 @@ export async function exportBackupInProcess(
     options,
   };
 
-  const records = await loadAllBooks();
+  // Shelf records up front, each book's content only when its turn comes:
+  // the export never holds the whole library in memory at once.
+  const records = await loadShelfBooks();
   const dictionaries = options.dictionaries ? await loadAllDictionaries() : [];
   // The bar must move with the real work: packing a 200-page manga dwarfs a
   // book record, so pages are progress units, not just books. Manga records
@@ -86,8 +89,12 @@ export async function exportBackupInProcess(
   onProgress?.({ phase: "prepare", current: completed, total });
   if (options.books) {
     manifest.books = [];
-    for (const [bookIndex, record] of records.entries()) {
+    for (const [bookIndex, meta] of records.entries()) {
       if (token?.cancelled) throw new BackupCancelledError();
+      const record: BookRecord = {
+        ...meta,
+        ...((await loadBookContent(meta.id)) ?? { chapters: [] }),
+      };
       onProgress?.({
         phase: "prepare",
         current: completed,

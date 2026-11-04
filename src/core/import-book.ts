@@ -1,8 +1,17 @@
-import { parseEpub } from "./epub";
+import { blobToDataUrl } from "./data-url";
+import { epubEntryLookup, parseEpubFiles } from "./epub";
 import { mangaPagesOf } from "./epub-manga";
 import { mangaVolumeFromEpub, type ImportedMangaVolume } from "./import-manga";
 import { detectLanguage, type BookFormat, type Language } from "./library";
-import { deriveToc, type Chapter, type EpubResource, type TocEntry } from "./reading";
+import { unzipSync } from "fflate";
+import {
+  deriveToc,
+  type Chapter,
+  type EpubResource,
+  type ParsedEpub,
+  type TocEntry,
+} from "./reading";
+import { byOffset, openZip } from "./zip-entries";
 
 // Book-file import pipeline: raw file → everything the shelf and the readers
 // need. One place owns the EPUB/PDF split and every fallback (title from the
@@ -28,7 +37,7 @@ interface ImportedFile {
   pageCount?: number;
 }
 
-type ImportedBookFile =
+export type ImportedBookFile =
   | ({ kind: "book" } & ImportedFile)
   | { kind: "manga"; volume: ImportedMangaVolume };
 
@@ -39,17 +48,13 @@ function toLanguage(code: string | undefined): Language | undefined {
   return undefined;
 }
 
-export function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
+/** EPUBs up to this size are read whole (novels); bigger ones lazily. */
+const WHOLE_READ_MAX = 32 * 1024 * 1024;
+
+/** Raster images inside an EPUB — read only once the book's kind is known. */
+const RASTER = /\.(jpe?g|png|gif|webp|avif|bmp)$/i;
 
 export async function importBookFile(file: File): Promise<ImportedBookFile> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
   const isPdf =
     file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
@@ -59,6 +64,7 @@ export async function importBookFile(file: File): Promise<ImportedBookFile> {
     // and a cover render — no reflowed text, so ugly PDFs (scans, formulas,
     // layouts) survive untouched. pdf.js (~350 kB min) loads on demand here:
     // importing an EPUB never pays for it.
+    const bytes = new Uint8Array(await file.arrayBuffer());
     const { importPdf } = await import("./pdf");
     const parsed = await importPdf(bytes);
     return finalize(file, {
@@ -73,13 +79,66 @@ export async function importBookFile(file: File): Promise<ImportedBookFile> {
     });
   }
 
-  const parsed = parseEpub(bytes);
+  // EPUB. A small file is unpacked whole — one read beats a hundred small
+  // ones. A big one (an image-only comic is 100-250MB) is read lazily
+  // (zip-entries): text entries first — XHTML, OPF, CSS, small — with every
+  // raster image stubbed empty. That is enough to tell a comic from a book:
+  // a comic's pages then come straight from the archive (slices of the
+  // file, or inflated one by one) and never sit in memory together; a book
+  // reads its images and parses for real.
+  if (file.size <= WHOLE_READ_MAX) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return finishEpub(file, parseEpubFiles(unzipSync(bytes)));
+  }
+  const zip = await openZip(file);
+  const files: Record<string, Uint8Array> = {};
+  const images: string[] = [];
+  for (const [name, entry] of zip.entries) {
+    if (RASTER.test(name)) {
+      files[name] = new Uint8Array(0);
+      images.push(name);
+    } else {
+      files[name] = await zip.bytes(entry);
+    }
+  }
+  const outline = parseEpubFiles(files);
+  if (mangaPagesOf(outline)) {
+    // Every raster read once, in archive order; pages pick theirs by path.
+    const lookup = epubEntryLookup([...zip.entries.keys()]);
+    const blobs = new Map<string, Blob>();
+    for (const name of byOffset(zip.entries, images)) {
+      blobs.set(name, await zip.blob(zip.entries.get(name)!, ""));
+    }
+    return finishEpub(file, outline, async (page) => {
+      const blob = blobs.get(lookup(page.path) ?? "");
+      return blob ? new Blob([blob], { type: page.mime }) : null;
+    });
+  }
+  for (const name of byOffset(zip.entries, images)) {
+    files[name] = await zip.bytes(zip.entries.get(name)!);
+  }
+  return finishEpub(file, parseEpubFiles(files));
+}
+
+/** A parsed EPUB → a comic volume (pages as Blobs: `pageBlob`, or the
+    parsed bytes) when it is image-only, else a book. */
+async function finishEpub(
+  file: File,
+  parsed: ParsedEpub,
+  pageBlob: (page: EpubResource) => Promise<Blob | null> = async (page) =>
+    new Blob([page.bytes as BlobPart], { type: page.mime }),
+): Promise<ImportedBookFile> {
   const mangaPages = mangaPagesOf(parsed);
   if (mangaPages) {
+    const pages: { path: string; blob: Blob }[] = [];
+    for (const page of mangaPages) {
+      const blob = await pageBlob(page);
+      if (blob) pages.push({ path: page.path, blob });
+    }
     const title = parsed.metadata.title.trim();
     const volume = await mangaVolumeFromEpub(
       title === "" || title === "Untitled" ? file.name.replace(/\.epub$/i, "") : title,
-      mangaPages,
+      pages,
     );
     if (volume) return { kind: "manga", volume };
   }

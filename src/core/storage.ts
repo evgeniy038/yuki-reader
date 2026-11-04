@@ -3,10 +3,12 @@
 // storage/books.ts, storage/manga.ts, storage/dictionaries.ts and
 // storage/stats.ts. Import paths of existing consumers stay unchanged.
 
-export type { BookRecord } from "./storage/books";
+export type { BookContent, BookRecord } from "./storage/books";
 export {
   deleteBook,
   loadAllBooks,
+  loadBookContent,
+  loadShelfBooks,
   putBook,
   restoreBookProgress,
   saveProgress,
@@ -17,6 +19,7 @@ export type { MangaOcrRecord, MangaRecord } from "./storage/manga";
 export {
   OCR_ENGINE,
   deleteManga,
+  hasOcrModel,
   loadManga,
   loadMangaOcr,
   loadMangaOcrFlags,

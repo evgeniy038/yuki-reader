@@ -147,6 +147,13 @@ menu (right-click): "Open", "Details", "Rename", "Change cover", "Delete".
 **Book** — an imported file plus metadata: title, author, cover, **format**
 (epub | pdf | manga), **language**, date added, last-read date, progress.
 Re-importing the same file is rejected — no duplicates on the shelf.
+In storage a book is two halves: the **shelf record** (the metadata above —
+a few KB, read at startup, the only thing a progress save rewrites) and its
+**content** (chapters, images, PDF bytes — read when the book opens; a
+couple of recent books stay in memory). The shelf never holds the whole
+library's bytes. Imports (EPUB parsing, manga unpacking) run in an import
+worker, never on the UI thread; archives are read lazily from their zip
+directory — page by page, never the whole file in memory.
 
 ## Reading state
 
@@ -280,13 +287,15 @@ its pthread workers from that URL and worker scripts are COEP-checked as
 frame resources, else session init hangs with no error. The main thread is
 the scheduler: it owns the FIFO queue (hovered blocks jump it, everything
 else waits its turn), downloads the model files once — big ones over
-parallel HTTP ranges, then forever from IndexedDB — and hands each worker
-its own copy of the bytes (~165MB per worker). Per-page results land in
+parallel HTTP ranges, then forever from IndexedDB — and every worker reads
+its own copy from that cache (~165MB per worker); the main thread never
+holds the bytes. Per-page results land in
 `mangaOcr` (keyed `bookId/pageIndex`, with an engine version that forces a
 re-run when the pipeline changes). Every sidecar-less volume goes through
 the same pipeline: DETECT writes skeleton blocks for every page (final
-boxes, empty lines — ~10x cheaper), then the recognition MARCH works
-through the remaining pages in order at the back of the queue whenever a
+boxes, empty lines — ~10x cheaper; every queued volume's detect runs before
+any recognition, so a batch import un-gates every volume early), then the
+recognition MARCH works through the remaining pages in order whenever a
 worker is free, so a volume finishes on its own in a few minutes (~60-70
 pages/min measured on an M3 Pro with WebGPU; blocks go through the encoder
 AND the int8 decoder in 4-crop lockstep batches — the shipped merged

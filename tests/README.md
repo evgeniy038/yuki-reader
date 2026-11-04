@@ -1,8 +1,9 @@
 # Tests
 
 Node-side units and parser smokes are self-contained (fixtures built on the
-fly). `pnpm test` runs all eight: epub, dictionaries, backup, shelf, stats,
-book-css, resources, reader-touch. Standalone extras:
+fly). `pnpm test` runs all ten: epub, dictionaries, backup, shelf, stats,
+book-css, resources, reader-touch, storage (the v7 → v8 book split), zip
+(lazy archive reading vs unzipSync). Standalone extras:
 
 ```
 pnpm tsx tests/ocr-download.ts
@@ -101,3 +102,24 @@ YUKI_BENCH_ZIP=/path/vol.zip pnpm tsx tests/ocr-cancel-race.ts
 fixtures — update the checks in code when the files change.
 `layout-smoke` and `position-smoke` take a book folder as the first CLI
 argument.
+
+## Speed benchmark (`tests/perf-bench.ts`)
+
+Real books through the real UI, every duration timed inside the page
+(`perf-probes.ts`: conditions polled per animation frame, long tasks,
+keystroke→turned-page). Scenarios: `library` (EPUB import one/batch, open,
+page turns, startup + memory), `manga` (folder+sidecar, zip, cbz, comic
+EPUB; OCR downloads aborted), `ocr` (one volume end to end, pages/min;
+`YUKI_BENCH_OCR_DUMP=file` writes every page's text for byte-level A/B),
+`pdf`, `backup`. Profiles are temporary and removed after each scenario.
+
+```
+YUKI_TEST_BASE=http://localhost:1461 YUKI_TEST_EPUB_DIR=… YUKI_TEST_MANGA_DIR=… \
+  pnpm tsx tests/perf-bench.ts library manga --out /tmp/after.json
+```
+
+Measure a production build (`pnpm build && pnpm preview --port 1461`): the
+dev server's unbundled modules dominate startup. Compare A/B by alternating
+runs of both builds and taking the best of several — other load on the
+machine skews single runs badly. `YUKI_BENCH_ENGINE=webkit` runs the same
+scenarios in Playwright's WebKit (the closest stand-in for iPhone Safari).
