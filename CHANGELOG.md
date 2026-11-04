@@ -3,6 +3,13 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.2] - 2026-11-04
+
+- Sync: getting a book straight from your Mac no longer tells you to open yuki there while it's already open and answering — the tile says "Calling Mac…", then "Connecting…", and asks you to open yuki only if nobody picks up
+- Sync: use yuki in more than one browser on the Mac? The phone now calls all of them at once, and whichever is open sends the book
+- Sync: when a direct download can't happen, the message says why — the other device didn't answer, or it couldn't be reached over this Wi-Fi (a VPN can get in the way)
+- Sync: the Mac is ready to send books the moment yuki opens, and a VPN quietly dropping the connection no longer leaves it deaf to the phone
+
 ## [1.4.1] - 2026-11-04
 
 - Sync: books move between your devices up to ten times faster — a manga volume now goes up and comes down in a few dozen big encrypted pieces, several at once, instead of page by page, so it's mostly as quick as your connection allows
