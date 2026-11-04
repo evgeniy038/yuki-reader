@@ -3,6 +3,14 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.0] - 2026-11-04
+
+- Sync: your books travel now, not just your place in them — import a novel or a PDF on the Mac and it shows up on the phone by itself
+- Sync: turn on "Keep in the cloud" for a manga series and its volumes wait on your other devices as cloud tiles — tap one and it downloads and opens
+- Sync: done with a volume on the phone? Remove it from the device to free the space — it stays in the cloud and on your Mac
+- Sync: big uploads go a bit at a time and pick up where they stopped, so your reading never waits for them; a full cloud only pauses uploads and says so in Settings
+- Sync: when the cloud can't be reached, the message now says so plainly and hints at the VPN, instead of claiming there's no connection
+
 ## [1.3.9] - 2026-11-04
 
 - Icons are light outlines now and fill in only for what's active — the section you're in, the panel you opened, the book you pinned — so the interface reads calmer and the current place stands out at a glance
