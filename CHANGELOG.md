@@ -3,6 +3,14 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.1] - 2026-11-04
+
+- Sync: books move between your devices up to ten times faster — a manga volume now goes up and comes down in a few dozen big encrypted pieces, several at once, instead of page by page, so it's mostly as quick as your connection allows
+- Sync: reading positions and stats stay snappy no matter how many books you keep in the cloud
+- Sync: a flaky connection no longer stalls a transfer — it retries on its own and carries on where it stopped
+- Sync: manga doesn't need the cloud any more — a volume on your Mac shows up on the phone as "On Mac"; tap it while yuki is open on the Mac and it comes straight over your Wi-Fi, as big as it likes, without touching your cloud space
+- Sync: if yuki isn't open on the other device, the tile says so — open it there and the download starts on its own
+
 ## [1.4.0] - 2026-11-04
 
 - Sync: your books travel now, not just your place in them — import a novel or a PDF on the Mac and it shows up on the phone by itself
