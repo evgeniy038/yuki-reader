@@ -1,0 +1,131 @@
+import { withToken, type FetchLike, type ProviderAuth, type TokenKeeper } from "./oauth";
+import { QuotaError, type RemoteEntry, type RemoteFolder } from "./remote";
+
+// Dropbox, "App folder" access: the app sees only /Apps/<app name>, which is
+// its root ("/devices/…" here). PKCE with token_access_type=offline gives a
+// refresh token that never expires on its own — one sign-in per device.
+// Every host (api, content, the token endpoint) answers CORS. Dropbox
+// creates parent folders on upload by itself.
+
+const API = "https://api.dropboxapi.com/2";
+const CONTENT = "https://content.dropboxapi.com/2";
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null;
+
+export const dropboxAuth: ProviderAuth = {
+  kind: "dropbox",
+  tokenUrl: "https://api.dropboxapi.com/oauth2/token",
+  authorizeUrl: ({ clientId, challenge, state, redirectUri }) =>
+    `https://www.dropbox.com/oauth2/authorize?${new URLSearchParams({
+      client_id: clientId,
+      response_type: "code",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      token_access_type: "offline",
+      redirect_uri: redirectUri,
+      state,
+    }).toString()}`,
+  exchangeForm: ({ clientId, code, verifier, redirectUri }) => ({
+    grant_type: "authorization_code",
+    code,
+    client_id: clientId,
+    code_verifier: verifier,
+    redirect_uri: redirectUri,
+  }),
+  refreshForm: ({ clientId, refreshToken }) => ({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: clientId,
+  }),
+  folder: (keeper, fetchImpl) => new DropboxFolder(keeper, fetchImpl),
+};
+
+/** Dropbox reports "no such path" as a 409 with a tagged error body. */
+async function notFound(response: Response): Promise<boolean> {
+  if (response.status !== 409) return false;
+  const text = await response.clone().text();
+  return text.includes("not_found");
+}
+
+class DropboxFolder implements RemoteFolder {
+  readonly kind = "dropbox";
+
+  constructor(
+    private readonly keeper: TokenKeeper,
+    private readonly fetchImpl: FetchLike,
+  ) {}
+
+  private rpc(endpoint: string, arg: unknown): Promise<Response> {
+    return withToken(this.keeper, (token) =>
+      this.fetchImpl(`${API}/${endpoint}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(arg),
+      }),
+    );
+  }
+
+  private async fail(response: Response, what: string): Promise<never> {
+    const text = await response.clone().text();
+    if (response.status === 507 || text.includes("insufficient_space")) throw new QuotaError();
+    throw new Error(`Dropbox ${what}: ${response.status}`);
+  }
+
+  async list(dir: string): Promise<RemoteEntry[]> {
+    const out: RemoteEntry[] = [];
+    let response = await this.rpc("files/list_folder", {
+      path: `/${dir}`,
+      recursive: true,
+      include_deleted: false,
+    });
+    for (;;) {
+      if (await notFound(response)) return out;
+      if (!response.ok) await this.fail(response, "list");
+      const body: unknown = await response.json();
+      if (!isObject(body) || !Array.isArray(body.entries)) throw new Error("Dropbox sent a bad listing");
+      for (const entry of body.entries) {
+        if (!isObject(entry) || entry[".tag"] !== "file" || typeof entry.path_lower !== "string") continue;
+        out.push({
+          path: entry.path_lower.replace(/^\//, ""),
+          rev: typeof entry.rev === "string" ? entry.rev : "",
+          size: typeof entry.size === "number" ? entry.size : 0,
+        });
+      }
+      if (body.has_more !== true || typeof body.cursor !== "string") return out;
+      response = await this.rpc("files/list_folder/continue", { cursor: body.cursor });
+    }
+  }
+
+  async read(path: string): Promise<Uint8Array | null> {
+    const response = await withToken(this.keeper, (token) =>
+      this.fetchImpl(`${CONTENT}/files/download`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Dropbox-API-Arg": JSON.stringify({ path: `/${path}` }) },
+      }),
+    );
+    if (await notFound(response)) return null;
+    if (!response.ok) await this.fail(response, "download");
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  async write(path: string, bytes: Uint8Array): Promise<void> {
+    const response = await withToken(this.keeper, (token) =>
+      this.fetchImpl(`${CONTENT}/files/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/octet-stream",
+          "Dropbox-API-Arg": JSON.stringify({ path: `/${path}`, mode: "overwrite", mute: true }),
+        },
+        body: new Blob([bytes as BlobPart]),
+      }),
+    );
+    if (!response.ok) await this.fail(response, "upload");
+  }
+
+  async remove(path: string): Promise<void> {
+    const response = await this.rpc("files/delete_v2", { path: `/${path}` });
+    if (!response.ok && !(await notFound(response))) await this.fail(response, "delete");
+  }
+}

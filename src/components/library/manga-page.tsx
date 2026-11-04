@@ -24,6 +24,7 @@ import { RenameDialog } from "./rename-dialog";
 import { MoveToSeriesDialog } from "./move-to-series-dialog";
 import { PageMessages } from "./page-messages";
 import { useOcrBooks } from "@/components/use-ocr-books";
+import { syncEnabled } from "@/components/sync/sync-signal";
 import { useCoarsePointer } from "@/lib/use-coarse-pointer";
 import {
   PageActions,
@@ -302,9 +303,12 @@ export function MangaPage({
         <ConfirmDialog
           open
           title={t("library.delete.title")}
-          body={t("library.delete.body", {
-            title: volumes.find((v) => v.id === deletingId)?.title ?? "",
-          })}
+          body={[
+            t("library.delete.body", {
+              title: volumes.find((v) => v.id === deletingId)?.title ?? "",
+            }),
+            syncEnabled() ? t("library.delete.everywhere") : "",
+          ].join(" ").trim()}
           onConfirm={() => onDeleteBook(deletingId)}
           onClose={() => setDeletingId(null)}
         />
@@ -323,7 +327,10 @@ export function MangaPage({
         <ConfirmDialog
           open
           title={t("library.delete.title")}
-          body={t("manga.deleteSeries.body", { title: seriesName })}
+          body={[
+            t("manga.deleteSeries.body", { title: seriesName }),
+            syncEnabled() ? t("library.delete.everywhere") : "",
+          ].join(" ").trim()}
           onConfirm={() => onDeleteSeries(seriesName)}
           onClose={() => setDeletingSeries(false)}
         />

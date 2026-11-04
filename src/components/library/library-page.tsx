@@ -19,6 +19,7 @@ import {
 import { blobToDataUrl } from "@/core/data-url";
 import type { MangaInputItem } from "@/core/import-manga";
 import { importItemsOf } from "@/lib/import-files";
+import { onSyncApplied } from "@/components/sync/sync-signal";
 import { Button } from "@/components/ui/button";
 import { DashRing } from "@/components/ui/dash-ring";
 import { HiddenFileInput } from "@/components/ui/hidden-file-input";
@@ -89,6 +90,16 @@ export function LibraryPage({
   // Empty = the default ja → en → other order (nothing saved yet).
   const [groupOrder, setGroupOrder] = useState<string[]>(
     () => loadShelfGroupOrder() ?? [],
+  );
+  // Sort and section order are synced settings: follow the other devices.
+  useEffect(
+    () =>
+      onSyncApplied(({ settings }) => {
+        if (!settings) return;
+        setSort(loadShelfSort());
+        setGroupOrder(loadShelfGroupOrder() ?? []);
+      }),
+    [],
   );
   const {
     dialogs,

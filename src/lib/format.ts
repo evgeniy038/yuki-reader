@@ -66,3 +66,33 @@ export function speedLabel(amount: BookAmount): string | null {
     ? i18n.t("stats.speedChars", { count: speed.perHour })
     : i18n.t("stats.speedPages", { count: speed.perHour });
 }
+
+/** "2 minutes ago" / "2 мин назад" — for the sync status line. */
+export function formatTimeAgo(timestamp: number, now = Date.now()): string {
+  const fmt = new Intl.RelativeTimeFormat(lng(), { numeric: "auto", style: "short" });
+  const seconds = Math.round((timestamp - now) / 1000);
+  if (Math.abs(seconds) < 60) return fmt.format(seconds, "second");
+  const minutes = Math.round(seconds / 60);
+  if (Math.abs(minutes) < 60) return fmt.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return fmt.format(hours, "hour");
+  return fmt.format(Math.round(hours / 24), "day");
+}
+
+/** Transfer size: bytes, KB or MB in the active locale's number format. */
+export function formatBytes(bytes: number): string {
+  const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const;
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return new Intl.NumberFormat(lng(), {
+    style: "unit",
+    unit: units[unit],
+    // narrow: "347B" / "4.2kB" — "short" reads "347 byte" in English.
+    unitDisplay: "narrow",
+    maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0,
+  }).format(value);
+}

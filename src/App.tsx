@@ -30,6 +30,7 @@ import { useFileDrop } from "@/components/library/use-drag-drop";
 import { useGoalBook } from "@/components/library/use-goal-book";
 import { ReaderScreen } from "@/components/reader/reader-screen";
 import { useReadingSession } from "@/components/reader/use-reading-session";
+import { useSync } from "@/components/sync/use-sync";
 import { DashRing } from "@/components/ui/dash-ring";
 import { demoModeRequested, useDemoBook } from "@/components/use-demo-mode";
 
@@ -159,6 +160,18 @@ export default function App() {
     },
   });
 
+  // Device sync (lazy: loads only on devices that sync) — see use-sync.ts.
+  const { readerKey } = useSync({
+    books: shelf.books,
+    shelfReady: shelf.shelfReady,
+    setBooks: shelf.setBooks,
+    dataRef: shelf.dataRef,
+    removeBook: shelf.removeBook,
+    readingSettings,
+    setReadingSettings,
+    openedBook,
+  });
+
   const { dragging, handlers: dropHandlers } = useFileDrop(shelf.importFiles);
 
   // After a reload the OCR queue is gone but the results are not — rebuild
@@ -185,6 +198,7 @@ export default function App() {
   if (openedBook && openedData) {
     return (
       <ReaderScreen
+        key={readerKey}
         book={openedBook}
         books={shelf.books}
         data={openedData}

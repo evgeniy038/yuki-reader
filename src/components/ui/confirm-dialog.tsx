@@ -11,16 +11,19 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // The one shared destructive-confirm dialog: title + body + cancel/confirm.
+// The confirm button says "Delete" unless the action needs its own verb.
 export function ConfirmDialog({
   open,
   title,
   body,
+  confirmLabel,
   onConfirm,
   onClose,
 }: {
   open: boolean;
   title: string;
   body: string;
+  confirmLabel?: string;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -40,7 +43,7 @@ export function ConfirmDialog({
               onClose();
             }}
           >
-            {t("library.delete.confirm")}
+            {confirmLabel ?? t("library.delete.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

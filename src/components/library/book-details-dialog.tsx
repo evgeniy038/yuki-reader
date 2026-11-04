@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
 import { loadBookStats } from "@/core/storage";
+import { syncEnabled } from "@/components/sync/sync-signal";
 import type { BookAmount } from "@/core/stats";
 import { formatDateLong, formatDuration, formatNumber, speedLabel } from "@/lib/format";
 import {
@@ -33,7 +34,10 @@ export function BookDetailsDialog({
 
   useEffect(() => {
     let alive = true;
-    void loadBookStats(book.id).then((amount) => {
+    const load = syncEnabled()
+      ? import("@/core/sync/stats").then((sync) => sync.loadMergedBookStats(book.id))
+      : loadBookStats(book.id);
+    void load.then((amount) => {
       if (alive) setReading(amount);
     });
     return () => {

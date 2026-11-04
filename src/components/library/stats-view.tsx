@@ -11,6 +11,7 @@ import {
 import { DashRing } from "@/components/ui/dash-ring";
 import type { Book } from "@/core/library";
 import { loadStats } from "@/core/storage";
+import { onSyncApplied, syncEnabled } from "@/components/sync/sync-signal";
 import { dayKey, streaks, totals, type DailyStats } from "@/core/stats";
 import { speedLabel } from "@/lib/format";
 import type { GoalBook } from "./use-goal-book";
@@ -57,13 +58,25 @@ export function StatsView({
     [books],
   );
 
+  // With sync on, the days of every synced device add up (each publishes
+  // only its own counters); a finished round reloads them.
   useEffect(() => {
     let alive = true;
-    void loadStats().then((loaded) => {
-      if (alive) setDays(loaded);
+    const load = () => {
+      const days = syncEnabled()
+        ? import("@/core/sync/stats").then((sync) => sync.loadMergedStats())
+        : loadStats();
+      void days.then((loaded) => {
+        if (alive) setDays(loaded);
+      });
+    };
+    load();
+    const off = onSyncApplied(({ stats }) => {
+      if (stats) load();
     });
     return () => {
       alive = false;
+      off();
     };
   }, []);
 
