@@ -1,9 +1,10 @@
 # Tests
 
 Node-side units and parser smokes are self-contained (fixtures built on the
-fly). `pnpm test` runs all ten: epub, dictionaries, backup, shelf, stats,
+fly). `pnpm test` runs all eleven: epub, dictionaries, backup, shelf, stats,
 book-css, resources, reader-touch, storage (the v7 → v8 book split), zip
-(lazy archive reading vs unzipSync). Standalone extras:
+(lazy archive reading vs unzipSync), ocr-lines (the OCR line splitter on
+synthetic glyph rasters). Standalone extras:
 
 ```
 pnpm tsx tests/ocr-download.ts
@@ -56,23 +57,48 @@ dropped.
 
 ## OCR quality gate (`tests/ocr-quality.ts`)
 
-Runs the production pipeline (`src/core/ocr/pipeline.ts`, same parameters,
-`sharp` instead of canvas) over whole volumes in Node and measures accuracy:
+Runs the production pipeline (`src/core/ocr/`, same parameters; the line
+splitter is the production module itself) over whole volumes in Node and
+measures accuracy. Pixels come from a real headless Chrome canvas
+(`--canvas chrome`, the default): the app resamples every model input with
+OffscreenCanvas `drawImage`, and Chrome's resampler — not sharp's — decides
+what the models see. Two scorecards:
 
-- against the `.mokuro` reference (IoU block matching + CER), and/or
-- against `tests/golden/<vol>-01.json` — vision-verified blocks (box =
-  IoU matching, box=null = per-page text matching).
+- vs the `.mokuro` sidecar — IoU block matching + CER over every page
+  (broad, but the reference is itself an OCR run: closeness to mokuro, not
+  truth);
+- vs `tests/golden/<vol>-01.json` — vision-verified blocks (box = IoU
+  matching, box=null = per-page text matching). Pages are found by image
+  name, so a folder that loses a file does not shift the truth. Blocks
+  marked `src: "vision (A/B disagreement, adjudicated on the crop)"` were
+  sampled where two pipeline variants disagreed and read off the crop by
+  eye — the hard cases the consensus blocks miss.
 
 ```
 pnpm tsx tests/ocr-quality.ts --vol kaguya [--pages all|3,20] \
-  [--models q8|merged|q4f16|fp32|l0] [--det s|full|fp16] [--dump] \
-  [--gate [--gate-recall 0.85] [--gate-cer 0.10] [--gate-runaway 0]]
+  [--models merged|q4f16|q8|fp32|l0] [--det full|fp16|s] [--dump] \
+  [--canvas chrome|sharp] [--smoothing high|default|low|medium] [--no-gray] \
+  [--no-lines | --split-below 18] [--beams 4] [--rec mocr|baberu|ppocr] \
+  [--conf 0.4] [--mokuro other.mokuro] [--tag name] \
+  [--gate [--gate-recall R] [--gate-cer C] [--gate-runaway N]]
 ```
 
-`--gate` exits 1 on recall / meanCER regressions or runaway outliers on the
-golden pages. Reports go to `/tmp/ocr-quality/`. Models are read from
-`/tmp/yuki-ocr-models/` (snapshot of production models + fp32/l0 for A/B;
-`fp16` — webgpu detector, production default).
+Defaults are the shipped pipeline (smoothing "high", grayscale crops, dense
+blocks read line by line, detector confidence 0.35); the `--no-*` flags
+switch a stage off for A/B, and `--smoothing default --no-gray --no-lines
+--conf 0.4` is the pipeline before them. A volume with neither reference
+still lists its blocks in the report (`unrefReports`) and counts runaways.
+`--gate` exits 1 on recall / meanCER regressions or runaway loops (one
+glyph 20+ times, a 2–4-glyph cycle 10+ times, or a 5–12-glyph phrase 4+
+times) on the golden pages; the
+thresholds live in each golden file's `gate` (the shipped pipeline's scores
+plus a margin), CLI flags override. Reports go to `YUKI_OCR_QUALITY_OUT`
+(default `/tmp/ocr-quality/`). Models are read from `YUKI_OCR_MODEL_DIR`
+(default `/tmp/yuki-ocr-models/`: a snapshot of `public/ocr-models` under the
+names in the harness's MODEL_SETS/DETECTORS, plus fp32/fp16 A/B files);
+`--rec baberu|ppocr` A/B recognizers come from `YUKI_OCR_ALT_DIR`.
+`YUKI_TEST_MANGA_EXTRA_DIR` adds the ふらいんぐうぃっち / おじさまと猫
+volumes; `YUKI_OCR_THREADS` caps onnxruntime's threads.
 
 ## Shipped decoder recipe
 

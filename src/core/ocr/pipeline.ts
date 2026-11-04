@@ -1,19 +1,21 @@
 import { ort, type Tensor } from "./ort-runtime";
 import type { MokuroBlock } from "../mokuro";
 import type { OcrModels } from "./models";
-import { fontSizeFor } from "./font-size";
 import { decodeBlocks, type OcrTiming } from "./decode";
 import {
+  blockLuma,
   chwPixels,
   cropRect,
   detBlock,
   detectOrdered,
   type Det,
 } from "./detect";
+import { splitLines } from "./lines";
 
 // The OCR pipeline proper: ogkalu comic-text-and-bubble-detector at 640²
-// finds text blocks (detect.ts) → each crop (padded, NOT rotated — manga-ocr
-// reads vertical text natively) goes through the manga-ocr vision encoder at
+// finds text blocks (detect.ts) → a block too dense to read whole is split
+// into its lines (lines.ts) → each crop (padded, NOT rotated — manga-ocr reads
+// vertical text natively) goes through the manga-ocr vision encoder at
 // 224² and a greedy char-WordPiece decoder (decode.ts). This file keeps the
 // recognize march — crops, batched encode/decode, the page entry points —
 // and re-exports the detect pass, so consumers keep importing ./pipeline.
@@ -27,33 +29,9 @@ export function setOcrDebugTiming(on: boolean): void {
   debugTiming = on;
 }
 
-async function ocrCrop(
-  models: OcrModels,
-  bitmap: ImageBitmap,
-  det: Det,
-  timing?: OcrTiming,
-): Promise<string> {
-  const rect = cropRect(det, bitmap.width, bitmap.height);
-  if (!rect) return "";
-  const t0 = performance.now();
-  const px = chwPixels(bitmap, rect.sx, rect.sy, rect.sw, rect.sh, CROP_SIZE, true);
-  const t1 = performance.now();
-  const input = new ort.Tensor("float32", px, [1, 3, CROP_SIZE, CROP_SIZE]);
-  const encOut = await models.encoder.run({ pixel_values: input });
-  input.dispose();
-  const hidden = encOut.last_hidden_state!;
-  const t2 = performance.now();
-  const [text = ""] = await decodeBlocks(models, hidden, timing);
-  hidden.dispose();
-  if (timing) {
-    timing.crop += t1 - t0;
-    timing.enc += t2 - t1;
-  }
-  return text;
-}
-
 /** Recognize the text of one previously detected block (hover-triggered
-    lazy OCR). Returns null when the crop reads as empty. */
+    lazy OCR) — the same read as the march, so a hovered block and a
+    marched one never differ. Returns null when the crop reads as empty. */
 export async function recognizeBlock(
   models: OcrModels,
   bitmap: ImageBitmap,
@@ -61,16 +39,17 @@ export async function recognizeBlock(
 ): Promise<MokuroBlock | null> {
   const [x1, y1, x2, y2] = block.box;
   const det: Det = { x1, y1, x2, y2, cls: 1, conf: 1 };
-  const text = await ocrCrop(models, bitmap, det);
-  if (!text) return null;
-  const width = x2 - x1;
-  const height = y2 - y1;
-  const vertical = height > width * 1.2;
+  const [read] = await recognizeDets(models, bitmap, [det], {
+    crop: 0,
+    enc: 0,
+    dec: 0,
+  });
+  if (!read) return null;
   return {
     ...block,
-    vertical,
-    font_size: fontSizeFor(width, height, text.length),
-    lines: [text],
+    vertical: read.vertical,
+    font_size: read.font_size,
+    lines: read.lines,
   };
 }
 
@@ -103,46 +82,88 @@ async function encodeBatch(
   return encOut.last_hidden_state!;
 }
 
-/** Read a list of detections: crop each (padded), encode AND decode in
-    batches of BLOCK_BATCH, return overlay-ready blocks in input order
-    (empty reads dropped). The batched decode is the point — batching only
-    the encoder with a per-block decode measured a net loss (the GPU sync
-    wait just moved into the dec phase). Shared by ocrPage and
-    ocrPageFromSkeleton so identical rects give identical blocks. Strictly
-    SEQUENTIAL: onnxruntime-web crashes when two sessions run concurrently
-    in one runtime instance (OrtRun "__next_prime overflow"). */
+/** How one block is read: its whole padded crop, or line by line — each
+    line one or more chunks whose texts concatenate. */
+interface ReadPlan {
+  det: Det;
+  vertical: boolean;
+  lines: { sx: number; sy: number; sw: number; sh: number }[][];
+}
+
+/** A dense block reads line by line: at 224² a block of many columns
+    leaves each glyph a sliver of the encoder's input, a line alone gets
+    the whole crop (lines.ts decides when that pays). Every other block
+    keeps its padded whole-block crop. */
+function planRead(bitmap: ImageBitmap, det: Det): ReadPlan {
+  const vertical = det.y2 - det.y1 > (det.x2 - det.x1) * 1.2;
+  const region = blockLuma(bitmap, det);
+  const split = region ? splitLines(region.gray, vertical) : null;
+  if (region && split) {
+    const lines = split.lines.map((chunks) =>
+      chunks.flatMap((c) => {
+        const sx = Math.max(0, Math.round(region.left + c.x1));
+        const sy = Math.max(0, Math.round(region.top + c.y1));
+        const sw = Math.min(bitmap.width, Math.round(region.left + c.x2)) - sx;
+        const sh = Math.min(bitmap.height, Math.round(region.top + c.y2)) - sy;
+        return sw >= 4 && sh >= 4 ? [{ sx, sy, sw, sh }] : [];
+      }),
+    );
+    return { det, vertical: split.vertical, lines };
+  }
+  const rect = cropRect(det, bitmap.width, bitmap.height);
+  return { det, vertical, lines: rect ? [[rect]] : [] };
+}
+
+/** Read a list of detections: plan each block (whole crop or its lines),
+    encode AND decode every crop in batches of BLOCK_BATCH, return
+    overlay-ready blocks in input order (empty reads dropped). The batched
+    decode is the point — batching only the encoder with a per-block decode
+    measured a net loss (the GPU sync wait just moved into the dec phase).
+    Shared by ocrPage, ocrPageFromSkeleton and recognizeBlock so identical
+    rects give identical blocks. Strictly SEQUENTIAL: onnxruntime-web
+    crashes when two sessions run concurrently in one runtime instance
+    (OrtRun "__next_prime overflow"). */
 async function recognizeDets(
   models: OcrModels,
   bitmap: ImageBitmap,
   dets: Det[],
   timing: OcrTiming,
 ): Promise<MokuroBlock[]> {
-  const valid: { det: Det; px: Float32Array }[] = [];
-  for (const det of dets) {
-    const rect = cropRect(det, bitmap.width, bitmap.height);
-    if (!rect) continue;
-    const t0 = performance.now();
-    valid.push({
-      det,
-      px: chwPixels(bitmap, rect.sx, rect.sy, rect.sw, rect.sh, CROP_SIZE, true),
-    });
-    timing.crop += performance.now() - t0;
-  }
-  const blocks: MokuroBlock[] = [];
-  for (let start = 0; start < valid.length; start += BLOCK_BATCH) {
-    const batch = valid.slice(start, start + BLOCK_BATCH);
+  const t0 = performance.now();
+  const plans = dets.map((det) => planRead(bitmap, det));
+  const crops: { plan: number; line: number; px: Float32Array }[] = [];
+  plans.forEach((plan, p) =>
+    plan.lines.forEach((chunks, line) => {
+      for (const r of chunks) {
+        crops.push({
+          plan: p,
+          line,
+          px: chwPixels(bitmap, r.sx, r.sy, r.sw, r.sh, CROP_SIZE, true),
+        });
+      }
+    }),
+  );
+  timing.crop += performance.now() - t0;
+  const texts: string[] = [];
+  for (let start = 0; start < crops.length; start += BLOCK_BATCH) {
+    const batch = crops.slice(start, start + BLOCK_BATCH);
     const hidden = await encodeBatch(
       models,
       batch.map(({ px }) => px),
       timing,
     );
-    const texts = await decodeBlocks(models, hidden, timing);
+    texts.push(...(await decodeBlocks(models, hidden, timing)));
     hidden.dispose();
-    for (let j = 0; j < batch.length; j++) {
-      const text = texts[j]!;
-      if (text) blocks.push(detBlock(batch[j]!.det, text));
-    }
   }
+  const lineTexts = plans.map((plan) => plan.lines.map(() => ""));
+  crops.forEach((crop, i) => {
+    lineTexts[crop.plan]![crop.line] += texts[i] ?? "";
+  });
+  const blocks: MokuroBlock[] = [];
+  plans.forEach((plan, p) => {
+    const lines = lineTexts[p]!.filter(Boolean);
+    if (lines.length > 0) blocks.push(detBlock(plan.det, lines, plan.vertical));
+  });
   return blocks;
 }
 

@@ -3,6 +3,11 @@
   "volume": "01",
   "source": "vision transcription (no .mokuro reference exists for this volume)",
   "note": "boxes are null — to be filled by matching against an OCR run (tests/ocr-quality.ts --vol steinsgate). Blocks are in reading order per page.",
+  "gate": {
+    "recall": 0.84,
+    "cer": 0.045,
+    "runaways": 0
+  },
   "pages": [
     {
       "page": 3,

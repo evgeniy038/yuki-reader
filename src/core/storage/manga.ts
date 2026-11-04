@@ -91,8 +91,10 @@ export async function deleteManga(id: string): Promise<void> {
 /** Current OCR pipeline version. Results stored with an older engine are
     treated as missing and re-run. 2 = decoder runaway guard, 3 = lazy OCR
     (detect-only skeleton records + KV-cache merged decoder), 4 = full 43MB
-    detector (measured 2x better CER). */
-export const OCR_ENGINE = 4;
+    detector (measured 2x better CER), 5 = antialiased resampling (detector
+    threshold recalibrated for it), grayscale crops and line-by-line reads
+    of dense blocks. */
+export const OCR_ENGINE = 5;
 
 // OCR writes are atomic at the storage boundary: every write opens the manga
 // store in the SAME readwrite transaction as the OCR store, serializing with

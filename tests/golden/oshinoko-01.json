@@ -2,6 +2,11 @@
   "series": "oshinoko",
   "volume": "01",
   "source": "vision-verified + ours/mokuro consensus (report-oshinoko-q8-s)",
+  "gate": {
+    "recall": 0.98,
+    "cer": 0.06,
+    "runaways": 0
+  },
   "imgWidth": 850,
   "imgHeight": 1200,
   "pages": [
@@ -738,6 +743,22 @@
       ]
     },
     {
+      "page": 21,
+      "img": "0024.jpg",
+      "blocks": [
+        {
+          "box": [
+            233,
+            424,
+            328,
+            558
+          ],
+          "text": "そう思うだろさりなちゃん",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
       "page": 25,
       "img": "0026.jpg",
       "blocks": [
@@ -980,6 +1001,38 @@
       ]
     },
     {
+      "page": 28,
+      "img": "0031.jpg",
+      "blocks": [
+        {
+          "box": [
+            567,
+            953,
+            699,
+            1128
+          ],
+          "text": "君の場合帝王切開の可能性が高い",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 31,
+      "img": "0034.jpg",
+      "blocks": [
+        {
+          "box": [
+            545,
+            251,
+            636,
+            392
+          ],
+          "text": "まぁ来れなくても代わりの先生来てくれるし",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
       "page": 41,
       "img": "0042.jpg",
       "blocks": [
@@ -1134,6 +1187,38 @@
           ],
           "text": "なぜ前世の記憶が残っている?一体どういう原理で?",
           "src": "consensus"
+        }
+      ]
+    },
+    {
+      "page": 45,
+      "img": "0048.jpg",
+      "blocks": [
+        {
+          "box": [
+            106,
+            692,
+            254,
+            880
+          ],
+          "text": "でも私才能あるなって思った人の名前は覚えられるよ佐藤社長",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 47,
+      "img": "0050.jpg",
+      "blocks": [
+        {
+          "box": [
+            414,
+            1131,
+            664,
+            1186
+          ],
+          "text": "WEEKLYYOUNGJUMP",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     },
@@ -1482,6 +1567,408 @@
           ],
           "text": "苺プロだって知らん事務所",
           "src": "consensus"
+        }
+      ]
+    },
+    {
+      "page": 64,
+      "img": "0069.jpg",
+      "blocks": [
+        {
+          "box": [
+            624,
+            91,
+            787,
+            286
+          ],
+          "text": "さすがにアイドルに授乳させるのは大人としての一線を越えてしまう気がする！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 70,
+      "img": "0075.jpg",
+      "blocks": [
+        {
+          "box": [
+            651,
+            445,
+            754,
+            597
+          ],
+          "text": "まさか自分の子供が自分のオタとかマジキモいもん…",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            468,
+            632,
+            565,
+            839
+          ],
+          "text": "まあ女のアイドルオタって俺の周りには居なかったが…",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 76,
+      "img": "0081.jpg",
+      "blocks": [
+        {
+          "box": [
+            529,
+            132,
+            619,
+            265
+          ],
+          "text": "っていうか赤ちゃんがしゃべっ……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 79,
+      "img": "0084.jpg",
+      "blocks": [
+        {
+          "box": [
+            410,
+            1129,
+            668,
+            1185
+          ],
+          "text": "WEEKLYYOUNGJUMP",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 80,
+      "img": "0085.jpg",
+      "blocks": [
+        {
+          "box": [
+            644,
+            680,
+            763,
+            815
+          ],
+          "text": "しかしなかなか迫真の演技だったな",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 82,
+      "img": "0087.jpg",
+      "blocks": [
+        {
+          "box": [
+            627,
+            636,
+            741,
+            812
+          ],
+          "text": "アイちゃんの事は世界で一番好きだけど……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 84,
+      "img": "0089.jpg",
+      "blocks": [
+        {
+          "box": [
+            91,
+            66,
+            134,
+            427
+          ],
+          "text": "◆とあるファンの証言―。",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 90,
+      "img": "0095.jpg",
+      "blocks": [
+        {
+          "box": [
+            262,
+            693,
+            386,
+            871
+          ],
+          "text": "セット売りでやっと仕事が取れる現状で",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 94,
+      "img": "0099.jpg",
+      "blocks": [
+        {
+          "box": [
+            180,
+            502,
+            292,
+            671
+          ],
+          "text": "こんなの社長にバレたら怒られるの私なんですからね……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 109,
+      "img": "0114.jpg",
+      "blocks": [
+        {
+          "box": [
+            38,
+            86,
+            177,
+            270
+          ],
+          "text": "あっいえ我々赤ん坊ですがそのような粗相はしないよう努めますので！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 121,
+      "img": "0126.jpg",
+      "blocks": [
+        {
+          "box": [
+            140,
+            693,
+            250,
+            840
+          ],
+          "text": "さぁ俺はどっちに見える？",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            179,
+            1123,
+            507,
+            1170
+          ],
+          "text": "漫画界スター同士のタッグ!赤坂アカ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 123,
+      "img": "0128.jpg",
+      "blocks": [
+        {
+          "box": [
+            607,
+            452,
+            693,
+            594
+          ],
+          "text": "アイさんが息子のバーターって……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 127,
+      "img": "0132.jpg",
+      "blocks": [
+        {
+          "box": [
+            527,
+            57,
+            686,
+            269
+          ],
+          "text": "どうせカットしなきゃいけないほどへったくそな演技したんでしょ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 136,
+      "img": "0141.jpg",
+      "blocks": [
+        {
+          "box": [
+            177,
+            1023,
+            289,
+            1134
+          ],
+          "text": "僕はこの業界に片足を突っ込んだ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            571,
+            492,
+            696,
+            686
+          ],
+          "text": "すごい演技よりぴったりの演技が出来る役者になれ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 139,
+      "img": "0144.jpg",
+      "blocks": [
+        {
+          "box": [
+            41,
+            20,
+            584,
+            65
+          ],
+          "text": "天才漫画家・赤坂アカ“2作品同時週刊連載”!!!",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 141,
+      "img": "0146.jpg",
+      "blocks": [
+        {
+          "box": [
+            608,
+            818,
+            704,
+            981
+          ],
+          "text": "まぁトータルではママの方が可愛いけどね",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 145,
+      "img": "0150.jpg",
+      "blocks": [
+        {
+          "box": [
+            158,
+            586,
+            264,
+            738
+          ],
+          "text": "何度か挑戦したけど出来なかった",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 147,
+      "img": "0152.jpg",
+      "blocks": [
+        {
+          "box": [
+            384,
+            832,
+            485,
+            1004
+          ],
+          "text": "もしかして私のライブ映像観たの？",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 157,
+      "img": "0162.jpg",
+      "blocks": [
+        {
+          "box": [
+            566,
+            210,
+            676,
+            370
+          ],
+          "text": "子供達も結構大きくなったんだよ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            648,
+            439,
+            721,
+            499
+          ],
+          "text": "第八話星野アイ前編",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 171,
+      "img": "0176.jpg",
+      "blocks": [
+        {
+          "box": [
+            410,
+            1128,
+            663,
+            1186
+          ],
+          "text": "WEEKLYYOUNGJUMP",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 191,
+      "img": "0197.jpg",
+      "blocks": [
+        {
+          "box": [
+            633,
+            1082,
+            847,
+            1184
+          ],
+          "text": "漫画界",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 215,
+      "img": "_06.jpg",
+      "blocks": [
+        {
+          "box": [
+            177,
+            144,
+            589,
+            182
+          ],
+          "text": "OSHINOKO1CONTENTS",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            303,
+            503,
+            586,
+            527
+          ],
+          "text": "……127",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     }
