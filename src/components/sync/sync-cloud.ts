@@ -2,12 +2,12 @@ import type { Book } from "@/core/library";
 import { trackMangaOcr } from "@/core/ocr/ocr";
 import { OCR_ENGINE, type BookRecord } from "@/core/storage";
 import { installPack, PACK_VERSION, packDir, readManifest, type PackManifest } from "@/core/sync/book-pack";
+import { holdersOf } from "@/core/sync/catalog";
 import { folderName } from "@/core/sync/crypto";
 import type { BookKey, BookRegs, DeviceInfo } from "@/core/sync/model";
 import type { PersonalState } from "@/core/sync/pack-stream";
-import type { RemoteFolder } from "@/core/sync/remote";
 import { syncStore } from "@/core/sync/store";
-import { fetchFromPeer, servePeers } from "./p2p";
+import { fetchFromPeer, servePeers, type DirectStage } from "./p2p";
 import { packSourceOf } from "./sync-bridge";
 import { currentHost, device, folder, getView, onRoundDone, patchView, remotes, requestSync, type SyncView } from "./sync-controller";
 
@@ -23,7 +23,9 @@ import { currentHost, device, folder, getView, onRoundDone, patchView, remotes, 
 // A tap prefers the cloud when the pack is there (always reachable). A
 // downloaded volume can go again ("remove from this device") without
 // leaving the cloud or the other devices. Every syncing device answers the
-// others' requests while it is open.
+// others' requests while it is open — from the moment the app starts, not
+// after its first round (a round can take a while, or fail on its own).
+// A direct request rings every device that holds the book.
 
 const AUTO_BYTES = 25 * 1024 * 1024;
 const active = new Set<BookKey>();
@@ -46,10 +48,9 @@ async function manifestOf(
   return manifest;
 }
 
-/** Who to ask directly for `key`: a device whose catalog lists it. */
-async function holderOf(key: BookKey): Promise<DeviceInfo | undefined> {
-  const catalogs = await syncStore.remoteCatalogs();
-  return remotes().find((state) => catalogs.get(state.device.id)?.catalog.books[key])?.device;
+/** Who to ask directly for `key`: every device whose catalog lists it. */
+async function holders(key: BookKey): Promise<DeviceInfo[]> {
+  return holdersOf(key, remotes().map((state) => state.device), await syncStore.remoteCatalogs());
 }
 
 /** Rebuild the list from the merged registers and the catalogs; fetch the
@@ -58,11 +59,10 @@ async function refresh(): Promise<void> {
   const host = currentHost();
   const [shadow, keys, catalogs] = await Promise.all([syncStore.shadow(), syncStore.bookKeys(), syncStore.remoteCatalogs()]);
   if (!host || !shadow) return;
-  startServing();
   const localIds = new Set(host.books().map((book) => book.id));
   const localKeys = new Set([...keys].filter(([id]) => localIds.has(id)).map(([, key]) => key));
   const cache = await syncStore.packManifests();
-  const devices = new Map(remotes().map((state) => [state.device.id, state.device]));
+  const devices = remotes().map((state) => state.device);
   const cloud: SyncCloudItem[] = [];
   const titled = (key: BookKey, base: PackManifest["desc"]) => {
     const regs = shadow.books[key];
@@ -79,13 +79,13 @@ async function refresh(): Promise<void> {
   for (const key of cache.keys()) if (!cloud.some((item) => item.key === key)) cache.delete(key);
   await syncStore.setPackManifests(cache);
   // Then everything another device holds that isn't in the cloud.
-  for (const [deviceId, { catalog }] of catalogs) {
-    const from = devices.get(deviceId);
-    if (!from) continue;
+  for (const { catalog } of catalogs.values()) {
     for (const [key, desc] of Object.entries(catalog.books)) {
       if (localKeys.has(key) || shadow.books[key]?.deleted?.v === true) continue;
       if (cloud.some((item) => item.key === key)) continue;
-      cloud.push({ key, desc: titled(key, desc), from });
+      // Named after the same device a tap rings first.
+      const from = holdersOf(key, devices, catalogs)[0];
+      if (from) cloud.push({ key, desc: titled(key, desc), from });
     }
   }
   // A volume another device (or the cloud) also holds can leave this one.
@@ -107,6 +107,7 @@ async function refresh(): Promise<void> {
 type SyncCloudItem = SyncView["cloud"][number];
 
 onRoundDone(refresh);
+startServing();
 
 /** Answer the other devices' requests while this page is open. */
 function startServing(): void {
@@ -120,10 +121,7 @@ function startServing(): void {
       const id = [...(await syncStore.bookKeys())].find(([localId, k]) => k === key && host?.books().some((b) => b.id === localId))?.[0];
       return host && id ? packSourceOf(host, id) : null;
     },
-    wake: (remote: RemoteFolder, signal: AbortSignal) =>
-      remote.watch
-        ? remote.watch("signal", signal)
-        : new Promise((resolve) => setTimeout(resolve, document.visibilityState === "visible" ? 3_000 : 15_000)),
+    idle: () => new Promise((resolve) => setTimeout(resolve, document.visibilityState === "visible" ? 3_000 : 15_000)),
   });
 }
 
@@ -134,11 +132,11 @@ function setProgress(key: BookKey, value: number | null): void {
   patchView({ downloads });
 }
 
-function setWaiting(key: BookKey, on: boolean): void {
-  const waiting = { ...getView().waiting };
-  if (on) waiting[key] = true;
-  else delete waiting[key];
-  patchView({ waiting });
+function setStage(key: BookKey, stage: DirectStage | null): void {
+  const direct = { ...getView().direct };
+  if (stage) direct[key] = stage;
+  else delete direct[key];
+  patchView({ direct });
 }
 
 function personalOf(regs: BookRegs | undefined): PersonalState {
@@ -172,25 +170,25 @@ export async function download(key: BookKey): Promise<string | null> {
     if (manifest && regs?.file) {
       record = await installPack(remote, vault, packDir(regs.file.d, await folderName(vault.keys, key)), manifest, id, personal, progress);
     } else {
-      const holder = await holderOf(key);
-      if (!holder) throw new Error("No device has this book any more");
+      const peers = await holders(key);
+      if (peers.length === 0) throw new Error("No device has this book any more");
       try {
         record = await fetchFromPeer({
           remote,
           vault,
           me: (await device()).id,
-          peer: holder.id,
+          peers: peers.map((peer) => peer.id),
           key,
           id,
           personal,
-          onWaiting: () => setWaiting(key, true),
+          onStage: (stage) => setStage(key, stage),
           onProgress: (done, total) => {
-            setWaiting(key, false);
+            setStage(key, null);
             progress(done, total);
           },
         });
       } finally {
-        setWaiting(key, false);
+        setStage(key, null);
       }
     }
     const keys = await syncStore.bookKeys();

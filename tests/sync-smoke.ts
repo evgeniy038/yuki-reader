@@ -1,7 +1,6 @@
 // Two-device sync, end to end in real Chrome: two browser profiles are two
-// devices (separate IndexedDB + localStorage); Yandex Disk — OAuth, the REST
-// API and its upload/download hosts — is emulated by request interception
-// over one in-memory folder, so no account, no network. Books are built on
+// devices (separate IndexedDB + localStorage); Yandex Disk is emulated
+// (tests/sync-smoke-cloud.ts), so no account, no network. Books are built on
 // the fly. Covered: the Mac connects (PKCE redirect, a fresh vault, the
 // recovery key shown once); the phone connects and opens the library with
 // that key; a reading position, a pin and a setting travel Mac → phone;
@@ -19,8 +18,9 @@ import sharp from "sharp";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
-import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
+import { chromium, type BrowserContext, type Page } from "playwright-core";
 import { exitToShelf } from "./import-open.ts";
+import { fake, files, yandex } from "./sync-smoke-cloud.ts";
 
 const BASE = process.env.YUKI_TEST_BASE ?? "http://localhost:1420";
 
@@ -63,75 +63,6 @@ async function mangaVolume(root: string, title: string, colors: string[], width:
     })),
   }));
   return [...pages, sidecar];
-}
-
-// --- The fake Yandex (one folder for every device) ----------------------------
-const files = new Map<string, Uint8Array>();
-const dirs = new Set<string>([""]);
-const hrefs = new Map<string, string>();
-let hrefSeq = 0;
-let tokenExchanges = 0;
-/** The cloud is unreachable (the app itself stays cached and usable). */
-let cloudDown = false;
-const cors = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
-  "access-control-allow-headers": "Authorization, Content-Type",
-};
-const json = (route: Route, status: number, body: unknown) =>
-  route.fulfill({ status, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify(body) });
-
-async function yandex(route: Route): Promise<void> {
-  const request = route.request();
-  const url = new URL(request.url());
-  if (cloudDown) return route.abort("internetdisconnected");
-  if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
-  if (url.pathname === "/authorize") {
-    const back = `${BASE}/?code=code-${hrefSeq++}&state=${url.searchParams.get("state")}`;
-    return route.fulfill({ status: 302, headers: { location: back } });
-  }
-  if (url.pathname === "/token") {
-    const form = new URLSearchParams(request.postData() ?? "");
-    if (!form.get("code_verifier") || form.has("client_secret")) return json(route, 400, { error: "invalid_request" });
-    tokenExchanges += 1;
-    return json(route, 200, { access_token: "tok", refresh_token: "ref", expires_in: 31_536_000 });
-  }
-  if (url.hostname.includes("uploader") || url.hostname.includes("downloader")) {
-    const path = hrefs.get(url.pathname);
-    if (path === undefined) return json(route, 404, {});
-    if (request.method() === "PUT") {
-      files.set(path, new Uint8Array(request.postDataBuffer() ?? Buffer.alloc(0)));
-      return route.fulfill({ status: 201, headers: cors });
-    }
-    const file = files.get(path);
-    return file ? route.fulfill({ status: 200, headers: cors, body: Buffer.from(file) }) : json(route, 404, {});
-  }
-  if (request.headers().authorization !== "OAuth tok") return json(route, 401, { error: "UnauthorizedError" });
-  const path = (url.searchParams.get("path") ?? "").replace(/^app:\//, "");
-  if (url.pathname.endsWith("/upload")) {
-    const id = `/upload/${hrefSeq++}`;
-    hrefs.set(id, path);
-    return json(route, 200, { href: `https://uploader1j.disk.yandex.net${id}`, method: "PUT" });
-  }
-  if (url.pathname.endsWith("/download")) {
-    if (!files.has(path)) return json(route, 404, { error: "DiskNotFoundError" });
-    const id = `/download/${hrefSeq++}`;
-    hrefs.set(id, path);
-    return json(route, 200, { href: `https://downloader.disk.yandex.ru${id}` });
-  }
-  if (request.method() === "PUT") {
-    if (dirs.has(path)) return json(route, 409, {});
-    dirs.add(path);
-    return json(route, 201, {});
-  }
-  if (request.method() === "DELETE") return json(route, files.delete(path) ? 204 : 404, {});
-  if (!dirs.has(path)) return json(route, 404, { error: "DiskNotFoundError" });
-  const child = (p: string) => p !== path && p.startsWith(path === "" ? "" : `${path}/`) && !p.slice(path.length + 1).includes("/");
-  const items = [
-    ...[...dirs].filter(child).map((d) => ({ name: d.slice(path.length + 1), type: "dir" })),
-    ...[...files].filter(([f]) => child(f)).map(([f, b]) => ({ name: f.slice(path.length + 1), type: "file", md5: String(b.length) + f, modified: String(b[b.length - 1]), size: b.length })),
-  ];
-  return json(route, 200, { _embedded: { items, total: items.length } });
 }
 
 async function device(browser: Awaited<ReturnType<typeof chromium.launch>>): Promise<{ context: BrowserContext; page: Page }> {
@@ -207,7 +138,7 @@ async function main(): Promise<void> {
     await mac.page.waitForSelector("[data-sync-new-key]", { timeout: 30_000 });
     const recoveryKey = (await mac.page.locator("[data-sync-key]").textContent())?.trim() ?? "";
     check(/^[0-9A-Z*~$=]{4}(-[0-9A-Z*~$=]{3,4}){6}$/.test(recoveryKey), "the Mac shows a recovery key once");
-    check(tokenExchanges === 1, "the code was exchanged with PKCE, no secret");
+    check(fake.tokenExchanges === 1, "the code was exchanged with PKCE, no secret");
     check(!new URL(mac.page.url()).search.includes("code="), "the code is gone from the address bar");
     await mac.page.getByRole("switch", { name: "I saved the key" }).click();
     await mac.page.locator("[data-sync-key-done]").click();
@@ -296,8 +227,21 @@ async function main(): Promise<void> {
     const fromMac = phone.page.locator('[data-cloud-from="device"]');
     await fromMac.first().waitFor({ timeout: 15_000 }).catch(() => {});
     check((await fromMac.count()) === 1, "the phone offers the Mac's volume as a tile from that device");
+    // Every stage the tile shows on the way, through a slow (VPN-like) cloud.
+    await phone.page.evaluate(() => {
+      new MutationObserver(() => {
+        const stage = document.querySelector("[data-cloud-stage]")?.getAttribute("data-cloud-stage");
+        const seen = document.body.dataset.stages ?? "";
+        if (stage && !seen.endsWith(stage)) document.body.dataset.stages = seen ? `${seen},${stage}` : stage;
+      }).observe(document.body, { subtree: true, childList: true, attributes: true });
+    });
+    fake.latencyMs = 700;
     await fromMac.first().click();
-    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 60_000 }).catch(() => {});
+    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 90_000 }).catch(() => {});
+    fake.latencyMs = 0;
+    const stages = (await phone.page.evaluate(() => document.body.dataset.stages ?? "")).split(",");
+    check(stages[0] === "ringing" && stages.includes("connecting"), `the tile calls the Mac, then connects (${stages.join(" → ")})`);
+    check(!stages.includes("closed"), "…and never asks to open yuki on a Mac that is open, even through a slow cloud");
     const shown = await phone.page
       .locator("[data-manga-current] img")
       .first()
@@ -349,7 +293,7 @@ async function main(): Promise<void> {
     check(again === afterResync, "syncing again doesn't count anything twice");
 
     // --- Offline: the phone keeps reading, then catches up. ----------------
-    cloudDown = true;
+    fake.down = true;
     await phone.page.goto(`${BASE}/#/`);
     await read(phone.page, 4, 4_000);
     const offlineProgress = await progressOf(phone.page, "台所の本");
@@ -358,7 +302,7 @@ async function main(): Promise<void> {
     await phone.page.locator("[data-sync-now]").click();
     await phone.page.waitForSelector('[data-sync-status="error"]', { timeout: 30_000 }).catch(() => {});
     check((await phone.page.locator('[data-sync-status="error"]').count()) === 1, "an unreachable cloud shows as a calm sync error");
-    cloudDown = false;
+    fake.down = false;
     await syncNow(phone.page);
     await syncNow(mac.page);
     check(Math.abs((await progressOf(mac.page, "台所の本")) - offlineProgress) < 1e-9, "the offline reading reached the Mac once back online");
@@ -372,9 +316,9 @@ async function main(): Promise<void> {
     await syncNow(phone.page);
     await phone.page.goto(`${BASE}/#/`);
     await phone.page.locator('[data-cloud-from="device"]').first().click();
-    const waiting = phone.page.locator("[data-cloud-waiting]");
-    await waiting.waitFor({ timeout: 15_000 }).catch(() => {});
-    check(((await waiting.textContent().catch(() => "")) ?? "").includes("Open yuki on"), "with the Mac closed, the tile asks to open yuki there");
+    const closed = phone.page.locator('[data-cloud-stage="closed"]');
+    await closed.waitFor({ timeout: 40_000 }).catch(() => {});
+    check(((await closed.textContent().catch(() => "")) ?? "").includes("Open yuki on Mac"), "with the Mac closed, the tile asks to open yuki there");
 
     await phone.context.close();
   } finally {

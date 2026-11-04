@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { strict as assert } from "node:assert";
 import { planPack, type PackSource } from "../src/core/sync/book-pack.ts";
-import { catalogPath } from "../src/core/sync/catalog.ts";
+import { catalogPath, holdersOf } from "../src/core/sync/catalog.ts";
 import { syncRound, type LocalBridge } from "../src/core/sync/engine.ts";
 import { createInstaller, streamPack } from "../src/core/sync/pack-stream.ts";
 import type { RemoteEntry, RemoteFolder } from "../src/core/sync/remote.ts";
@@ -188,6 +188,20 @@ const random = (max: number): number => {
   seen = (await phoneStore.remoteCatalogs()).get("mac")?.catalog.books["m1:four"];
   assert.equal(seen, undefined, "a book gone from the Mac leaves its catalog");
   console.log("  ✓ catalogs: published sealed, read by the others, rewritten only on change");
+}
+
+// --- who to ring: every device that holds it, the first named on the tile -
+{
+  const desc = { title: "t", format: "manga" as const, size: 1 };
+  const catalogs = new Map([
+    ["mac-safari", { catalog: { v: 1 as const, books: { k: desc } } }],
+    ["mac-chrome", { catalog: { v: 1 as const, books: { k: desc } } }],
+    ["ipad", { catalog: { v: 1 as const, books: {} } }],
+  ]);
+  const devices = [{ id: "ipad" }, { id: "mac-safari" }, { id: "gone" }, { id: "mac-chrome" }];
+  assert.deepEqual(holdersOf("k", devices, catalogs).map((d) => d.id), ["mac-safari", "mac-chrome"], "both Macs are rung, not just the first");
+  assert.deepEqual(holdersOf("other", devices, catalogs), [], "nobody holds it: nobody is rung");
+  console.log("  ✓ holders: every device that holds the book, in order");
 }
 
 console.log("sync-p2p-unit: all checks passed");

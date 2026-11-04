@@ -458,11 +458,16 @@ small covers); a tap rings that device through the cloud (a sealed WebRTC
 offer and answer, good for two minutes) and the book comes over a direct
 encrypted connection as the same stream a cloud pack is cut from — at the
 speed of the home network, no size limit, nothing stored in the cloud. Both
-devices need yuki open meanwhile: every syncing device answers while it is
-open (Dropbox wakes it at once through its long-poll, Yandex is asked every
-few seconds). With the other device closed the tile says **Open yuki on
-Mac**, and the transfer starts once it is opened (within a minute and a
-half). A tap prefers the cloud when the pack is there. There is no relay:
+devices need yuki open meanwhile: every syncing device answers from the
+moment the app opens (Dropbox wakes it at once through its long-poll, Yandex
+is asked every few seconds). A tap rings EVERY device whose catalog lists
+the book (two browsers on one Mac are two devices) and the first to answer
+sends it. The tile says where it stands: **Calling Mac…**, **Connecting…**,
+and only after 20 s without an answer **Open yuki on Mac** — over a VPN a
+ring that is answered takes 5–10 s, so anything sooner would cry wolf. The
+transfer starts once the device is opened (within a minute and a half); a
+failure says which way it failed — nobody answered, or no direct connection
+came up. A tap prefers the cloud when the pack is there. There is no relay:
 two devices that can't reach each other directly (strict NAT on different
 networks) can't swap books this way — the cloud path remains.
 

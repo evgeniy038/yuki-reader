@@ -9,6 +9,7 @@ import type { PackDesc } from "@/core/sync/book-pack";
 import type { DeviceInfo } from "@/core/sync/model";
 import { loadReadingSettings, type ReadingSettings } from "@/core/reading-settings";
 import type { OpenedData } from "@/components/library/use-shelf";
+import type { DirectStage } from "./p2p";
 import type { SyncHost } from "./sync-bridge";
 import { deviceLabel } from "./sync-labels";
 import { isAuthRedirect, syncEnabled } from "./sync-signal";
@@ -23,8 +24,8 @@ export interface CloudShelf {
   books: { key: string; desc: PackDesc; from?: DeviceInfo }[];
   /** content key → 0..1 */
   downloads: Record<string, number>;
-  /** Direct transfers waiting for the other device to open yuki. */
-  waiting: Record<string, true>;
+  /** Direct transfers before their first byte: ringing, closed, connecting. */
+  direct: Record<string, DirectStage>;
   /** Local ids that can leave this device and stay in the cloud. */
   inCloud: ReadonlySet<string>;
   /** Resolves to the downloaded book's id (null: already on its way). */
@@ -59,10 +60,10 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
   const actions = useRef<Actions | null>(null);
   const cloudModule = useRef<Cloud | null>(null);
   const [readerKey, setReaderKey] = useState(0);
-  const [cloudView, setCloudView] = useState<Pick<CloudShelf, "books" | "downloads" | "waiting" | "inCloud">>({
+  const [cloudView, setCloudView] = useState<Pick<CloudShelf, "books" | "downloads" | "direct" | "inCloud">>({
     books: [],
     downloads: {},
-    waiting: {},
+    direct: {},
     inCloud: NO_CLOUD,
   });
 
@@ -120,12 +121,12 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
           last &&
           last.cloud === view.cloud &&
           last.downloads === view.downloads &&
-          last.waiting === view.waiting &&
+          last.direct === view.direct &&
           last.inCloud === view.inCloud
         )
           return;
         last = view;
-        setCloudView({ books: view.cloud, downloads: view.downloads, waiting: view.waiting, inCloud: new Set(view.inCloud) });
+        setCloudView({ books: view.cloud, downloads: view.downloads, direct: view.direct, inCloud: new Set(view.inCloud) });
       };
       unsubscribe = sync.subscribe(mirror);
       mirror();

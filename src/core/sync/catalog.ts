@@ -19,6 +19,16 @@ export const CATALOG = /^devices\/([^/]+)\/catalog\.bin$/;
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** The devices whose catalog lists `key`, in the order given — all of them
+    are rung for a direct transfer, the first named on the tile. */
+export function holdersOf<D extends { id: string }>(
+  key: BookKey,
+  devices: D[],
+  catalogs: Map<string, { catalog: Catalog }>,
+): D[] {
+  return devices.filter((device) => catalogs.get(device.id)?.catalog.books[key] !== undefined);
+}
+
 export function parseCatalog(value: unknown): Catalog | undefined {
   if (!isObject(value) || value.v !== 1) return undefined;
   const listed = value.books;

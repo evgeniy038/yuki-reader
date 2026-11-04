@@ -6,6 +6,7 @@ import type { PackDesc } from "@/core/sync/book-pack";
 import type { BookKey } from "@/core/sync/model";
 import { syncStore, type SyncStatus } from "@/core/sync/store";
 import { createVault, inspectVault, unlockVault, VaultError, VAULT_PATH, RECOVERY_SLOT_PATH, type VaultErrorCode } from "@/core/sync/vault";
+import type { DirectStage } from "./p2p";
 import { createBridge, type SyncHost } from "./sync-bridge";
 import { CLIENT_IDS, describeDevice, PROVIDERS, redirectUri } from "./sync-config";
 import { emitSyncApplied, setSyncEnabled } from "./sync-signal";
@@ -38,13 +39,13 @@ export interface SyncView {
   cloud: { key: BookKey; desc: PackDesc; from?: DeviceInfo }[];
   /** Downloads in flight: content key → 0..1. */
   downloads: Record<BookKey, number>;
-  /** Direct transfers still waiting for the other device to answer. */
-  waiting: Record<BookKey, true>;
+  /** Direct transfers before their first byte: ringing, closed, connecting. */
+  direct: Record<BookKey, DirectStage>;
   /** Local ids whose files are in the cloud — "remove from this device". */
   inCloud: string[];
 }
 
-let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, waiting: {}, inCloud: [] };
+let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, direct: {}, inCloud: [] };
 const roundListeners = new Set<() => Promise<void>>();
 const listeners = new Set<() => void>();
 let host: SyncHost | null = null;
@@ -344,7 +345,7 @@ export async function disconnect(): Promise<void> {
   await syncStore.clear();
   setSyncEnabled(false);
   remotesCache = [];
-  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, waiting: {}, inCloud: [] });
+  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, direct: {}, inCloud: [] });
 }
 
 /** Lost recovery key: wipe the unreadable cloud copy and make a new vault

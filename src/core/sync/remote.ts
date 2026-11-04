@@ -22,9 +22,11 @@ export interface RemoteFolder {
   /** Create or overwrite. */
   write(path: string, bytes: Uint8Array): Promise<void>;
   remove(path: string): Promise<void>;
-  /** Resolve when something under `dir` may have changed — a long-poll
-      where the provider has one. Absent: callers poll on a timer. */
-  watch?(dir: string, signal: AbortSignal): Promise<void>;
+  /** Start watching `dir`: every change from this moment on counts — so arm
+      it BEFORE listing, and nothing written in between slips by. The wait
+      it returns resolves on the first such change, or after a while anyway
+      (a long-poll where the provider has one). Absent: poll on a timer. */
+  watch?(dir: string): Promise<(signal: AbortSignal) => Promise<void>>;
 }
 
 /** The provider refused our credentials for good (revoked, expired refresh

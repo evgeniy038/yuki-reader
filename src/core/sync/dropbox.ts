@@ -9,6 +9,12 @@ import { QuotaError, type RemoteEntry, type RemoteFolder } from "./remote";
 
 const API = "https://api.dropboxapi.com/2";
 const CONTENT = "https://content.dropboxapi.com/2";
+const NOTIFY = "https://notify.dropboxapi.com/2/files/list_folder/longpoll";
+/** Dropbox's own long-poll timeout, and ours on top: a VPN or proxy can drop
+    an idle connection without closing it, and a long-poll that never comes
+    back would leave this device deaf to the others. */
+const LONGPOLL_S = 30;
+const LONGPOLL_GUARD_MS = (LONGPOLL_S + 15) * 1000;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -97,7 +103,7 @@ class DropboxFolder implements RemoteFolder {
     }
   }
 
-  async watch(dir: string, signal: AbortSignal): Promise<void> {
+  async watch(dir: string): Promise<(signal: AbortSignal) => Promise<void>> {
     const cursorFor = () => this.rpc("files/list_folder/get_latest_cursor", { path: `/${dir}`, recursive: true });
     let response = await cursorFor();
     if (await notFound(response)) {
@@ -107,17 +113,32 @@ class DropboxFolder implements RemoteFolder {
     if (!response.ok) await this.fail(response, "watch");
     const body: unknown = await response.json();
     if (!isObject(body) || typeof body.cursor !== "string") throw new Error("Dropbox sent no cursor");
-    // The long-poll takes no token; a plain-text body keeps it a simple
-    // request (Dropbox's documented browser path, no preflight).
-    const poll = await this.fetchImpl("https://notify.dropboxapi.com/2/files/list_folder/longpoll", {
-      method: "POST",
-      headers: { "Content-Type": "text/plain; charset=dropbox-cors-hack" },
-      body: JSON.stringify({ cursor: body.cursor, timeout: 90 }),
-      signal,
-    });
-    const result: unknown = await poll.json().catch(() => null);
-    const backoff = isObject(result) && typeof result.backoff === "number" ? result.backoff : 0;
-    if (backoff > 0) await new Promise((resolve) => setTimeout(resolve, backoff * 1000));
+    const cursor = body.cursor;
+    return async (signal) => {
+      const guard = new AbortController();
+      const stop = () => guard.abort();
+      signal.addEventListener("abort", stop, { once: true });
+      const timer = setTimeout(stop, LONGPOLL_GUARD_MS);
+      try {
+        // The long-poll takes no token; a plain-text body keeps it a simple
+        // request (Dropbox's documented browser path, no preflight).
+        const poll = await this.fetchImpl(NOTIFY, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain; charset=dropbox-cors-hack" },
+          body: JSON.stringify({ cursor, timeout: LONGPOLL_S }),
+          signal: guard.signal,
+        }).catch((error: unknown) => {
+          if (signal.aborted) throw error;
+          return null; // our guard gave up on a silent connection: look again
+        });
+        const result: unknown = poll ? await poll.json().catch(() => null) : null;
+        const backoff = isObject(result) && typeof result.backoff === "number" ? result.backoff : 0;
+        if (backoff > 0) await new Promise((resolve) => setTimeout(resolve, backoff * 1000));
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", stop);
+      }
+    };
   }
 
   async read(path: string): Promise<Uint8Array | null> {

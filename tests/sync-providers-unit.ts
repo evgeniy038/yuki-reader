@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { mock } from "node:test";
 import { dropboxAuth } from "../src/core/sync/dropbox.ts";
 import { pkcePair, postTokenForm, TokenKeeper, type FetchLike, type ProviderAuth } from "../src/core/sync/oauth.ts";
 import { AuthRequiredError, QuotaError } from "../src/core/sync/remote.ts";
@@ -167,6 +168,66 @@ async function exercise(name: string, auth: ProviderAuth, cloud: FakeCloud): Pro
 
 await exercise("yandex", yandexAuth, yandexFake());
 await exercise("dropbox", dropboxAuth, dropboxFake());
+
+// Dropbox's watch (how a device hears a doorbell): armed BEFORE the look,
+// so a doorbell written between the look and the wait still wakes it; the
+// long-poll carries no token; a line that goes silent (a VPN dropping an
+// idle connection) doesn't leave the device deaf; stopping really stops.
+{
+  let changes = 0;
+  let made = false;
+  let hang = false;
+  const cursors = new Map<string, number>();
+  const fetchImpl: FetchLike = async (url, init) => {
+    if (url.endsWith("/files/list_folder/get_latest_cursor")) {
+      if (!made) return json(409, { error_summary: "path/not_found/" });
+      const cursor = `c${cursors.size}`;
+      cursors.set(cursor, changes);
+      return json(200, { cursor });
+    }
+    if (url.endsWith("/files/create_folder_v2")) {
+      made = true;
+      return json(200, {});
+    }
+    if (url.endsWith("/files/list_folder/longpoll")) {
+      assert.equal(header(init, "Authorization"), undefined, "the long-poll carries no token");
+      assert.match(header(init, "Content-Type") ?? "", /dropbox-cors-hack/, "…and stays a simple request");
+      const body = JSON.parse(String(init?.body)) as { cursor: string; timeout: number };
+      assert.ok(body.timeout <= 30, "a short long-poll: idle lines get dropped");
+      if (changes > (cursors.get(body.cursor) ?? Infinity)) return json(200, { changes: true });
+      if (!hang) return json(200, { changes: false });
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      });
+    }
+    return json(400, {});
+  };
+  const keeper = new TokenKeeper(
+    { kind: "dropbox", accessToken: "fresh", refreshToken: "r", expiresAt: Date.now() + 3_600_000 },
+    dropboxAuth, "client-id", async () => {}, fetchImpl,
+  );
+  const folder = dropboxAuth.folder(keeper, fetchImpl);
+  assert.ok(folder.watch, "Dropbox can watch");
+  const wait = await folder.watch("signal");
+  assert.ok(made, "a missing folder is made, so it can be watched");
+  changes += 1; // a doorbell lands while the device is still looking
+  hang = true; // …and the line would otherwise sit silent
+  await wait(new AbortController().signal); // returns at once: the change counts
+  const quiet = await folder.watch("signal");
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const silent = quiet(new AbortController().signal);
+    mock.timers.tick(45_000);
+    await silent; // our guard gave up on the silent line: look again
+  } finally {
+    mock.timers.reset();
+  }
+  const stop = new AbortController();
+  const stopped = (await folder.watch("signal"))(stop.signal);
+  stop.abort();
+  await assert.rejects(stopped, "stopping the watch stops it");
+  console.log("  ✓ dropbox watch: armed before the look, no token, silent lines and stop handled");
+}
 
 // Authorize URLs: PKCE S256, state, exact redirect; Dropbox asks for offline.
 const { verifier, challenge } = await pkcePair();

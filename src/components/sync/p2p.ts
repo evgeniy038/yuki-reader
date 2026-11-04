@@ -21,12 +21,29 @@ const FRAME = 64 * 1024;
 /** Stop queueing while this much is still unsent (memory + fairness). */
 const HIGH_WATER = 4 * 1024 * 1024;
 const ANSWER_WAIT_MS = 90_000;
+/** No answer this long: the other device is most likely closed — say so.
+    Not sooner: over a VPN every cloud request costs ~0.5–0.9 s, and a ring
+    that IS answered takes 5–10 s to come back. */
+const CLOSED_AFTER_MS = 20_000;
 const OPEN_WAIT_MS = 20_000;
 
+/** Where a direct transfer stands before the first byte. */
+export type DirectStage = "ringing" | "closed" | "connecting";
+
+/** No device answered the doorbell (yuki isn't open on any of them). */
 export class PeerUnavailableError extends Error {
   constructor() {
     super("The other device didn't answer");
     this.name = "PeerUnavailableError";
+  }
+}
+
+/** A device answered, but no direct connection came up (different networks
+    behind strict routers, or a VPN in the way). */
+export class PeerUnreachableError extends Error {
+  constructor() {
+    super("The other device answered but couldn't be reached directly");
+    this.name = "PeerUnreachableError";
   }
 }
 
@@ -74,102 +91,155 @@ function gathered(pc: RTCPeerConnection): Promise<void> {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Ask `peer` for book `key` and store it as `id`. Throws
-    PeerUnavailableError when the other device doesn't pick up in time. */
+interface Call {
+  peer: string;
+  pc: RTCPeerConnection;
+  channel: RTCDataChannel;
+}
+
+/** Poll every rung device's answer until one comes back for `session`. */
+async function firstAnswer(
+  remote: RemoteFolder,
+  vault: VaultBinding,
+  me: string,
+  session: string,
+  calls: Call[],
+  onClosed: () => void,
+): Promise<Call> {
+  const started = Date.now();
+  let warned = false;
+  for (;;) {
+    for (const call of calls) {
+      const answer = await readSignal(remote, vault, answerPath(call.peer, me));
+      if (answer?.session === session) {
+        await call.pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
+        return call;
+      }
+    }
+    const waited = Date.now() - started;
+    if (!warned && waited > CLOSED_AFTER_MS) {
+      warned = true;
+      onClosed();
+    }
+    if (waited > ANSWER_WAIT_MS) throw new PeerUnavailableError();
+    await sleep(1_000);
+  }
+}
+
+/** The channel opens, or the connection fails / takes too long. */
+function opened({ pc, channel }: Call): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (channel.readyState === "open") return resolve();
+    const fail = () => {
+      window.clearTimeout(timer);
+      reject(new PeerUnreachableError());
+    };
+    const timer = window.setTimeout(fail, OPEN_WAIT_MS);
+    pc.addEventListener("connectionstatechange", () => {
+      if (pc.connectionState === "failed") fail();
+    });
+    channel.addEventListener("open", () => {
+      window.clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}
+
+/** Ask for the book on an open channel and store it as `id`. */
+function receive(
+  channel: RTCDataChannel,
+  opts: { key: BookKey; id: string; personal: PersonalState; onProgress: (done: number, total: number) => void },
+): Promise<BookRecord> {
+  return new Promise<BookRecord>((resolve, reject) => {
+    let installer: ReturnType<typeof createInstaller> | null = null;
+    let total = 0;
+    // Messages are handled strictly in order: storage writes are async.
+    let queue = Promise.resolve();
+    const fail = (error: unknown) => {
+      reject(error);
+      channel.close();
+    };
+    channel.addEventListener("message", (event: MessageEvent) => {
+      const data: unknown = event.data;
+      queue = queue
+        .then(async () => {
+          if (typeof data === "string") {
+            const message = parseMessage(data);
+            if (!message) throw new Error("The other device sent something unexpected");
+            if (message.t === "manifest") {
+              total = message.manifest.size;
+              installer = createInstaller(message.manifest, opts.id, opts.personal);
+            } else if (message.t === "end") {
+              if (!installer) throw new Error("The book never started");
+              resolve(await installer.finish());
+            } else if (message.t === "error") {
+              throw new Error(message.reason || "The other device couldn't send the book");
+            }
+            return;
+          }
+          if (!(data instanceof ArrayBuffer) || !installer) throw new Error("The book arrived out of order");
+          await installer.push(new Uint8Array(data));
+          opts.onProgress(installer.received, total);
+        })
+        .catch(async (error: unknown) => {
+          await installer?.abort();
+          fail(error);
+        });
+    });
+    channel.addEventListener("close", () => {
+      void queue.then(() => fail(new PeerUnavailableError()));
+    });
+    channel.send(JSON.stringify({ t: "get", key: opts.key } satisfies Message));
+  });
+}
+
+/** Ask the devices in `peers` for book `key` — every one is rung at once,
+    the first to answer sends it — and store it as `id`. Throws
+    PeerUnavailableError when none picks up in time, PeerUnreachableError
+    when one does but no direct connection comes up. */
 export async function fetchFromPeer(opts: {
   remote: RemoteFolder;
   vault: VaultBinding;
   me: string;
-  peer: string;
+  peers: string[];
   key: BookKey;
   id: string;
   personal: PersonalState;
-  /** The other device hasn't answered after a few seconds (closed?). */
-  onWaiting: () => void;
+  onStage: (stage: DirectStage) => void;
   onProgress: (done: number, total: number) => void;
 }): Promise<BookRecord> {
-  const { remote, vault, me, peer } = opts;
-  const pc = new RTCPeerConnection(ICE);
-  const channel = pc.createDataChannel("yuki-book", { ordered: true });
-  channel.binaryType = "arraybuffer";
+  const { remote, vault, me } = opts;
   const session = crypto.randomUUID();
+  const calls: Call[] = opts.peers.map((peer) => {
+    const pc = new RTCPeerConnection(ICE);
+    const channel = pc.createDataChannel("yuki-book", { ordered: true });
+    channel.binaryType = "arraybuffer";
+    return { peer, pc, channel };
+  });
   try {
-    await pc.setLocalDescription(await pc.createOffer());
-    await gathered(pc);
-    await writeSignal(remote, vault, offerPath(me, peer), {
-      v: 1,
-      session,
-      sdp: pc.localDescription?.sdp ?? "",
-      at: Date.now(),
-    });
-    const started = Date.now();
-    let warned = false;
-    for (;;) {
-      const answer = await readSignal(remote, vault, answerPath(peer, me));
-      if (answer?.session === session) {
-        await pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
-        break;
-      }
-      if (!warned && Date.now() - started > 4_000) {
-        warned = true;
-        opts.onWaiting();
-      }
-      if (Date.now() - started > ANSWER_WAIT_MS) throw new PeerUnavailableError();
-      await sleep(1_000);
-    }
-    await new Promise<void>((resolve, reject) => {
-      if (channel.readyState === "open") return resolve();
-      const timer = window.setTimeout(() => reject(new PeerUnavailableError()), OPEN_WAIT_MS);
-      channel.addEventListener("open", () => {
-        window.clearTimeout(timer);
-        resolve();
-      }, { once: true });
-    });
-
-    return await new Promise<BookRecord>((resolve, reject) => {
-      let installer: ReturnType<typeof createInstaller> | null = null;
-      let total = 0;
-      // Messages are handled strictly in order: storage writes are async.
-      let queue = Promise.resolve();
-      const fail = (error: unknown) => {
-        reject(error);
-        channel.close();
-      };
-      channel.addEventListener("message", (event: MessageEvent) => {
-        const data: unknown = event.data;
-        queue = queue
-          .then(async () => {
-            if (typeof data === "string") {
-              const message = parseMessage(data);
-              if (!message) throw new Error("The other device sent something unexpected");
-              if (message.t === "manifest") {
-                total = message.manifest.size;
-                installer = createInstaller(message.manifest, opts.id, opts.personal);
-              } else if (message.t === "end") {
-                if (!installer) throw new Error("The book never started");
-                resolve(await installer.finish());
-              } else if (message.t === "error") {
-                throw new Error(message.reason || "The other device couldn't send the book");
-              }
-              return;
-            }
-            if (!(data instanceof ArrayBuffer) || !installer) throw new Error("The book arrived out of order");
-            await installer.push(new Uint8Array(data));
-            opts.onProgress(installer.received, total);
-          })
-          .catch(async (error: unknown) => {
-            await installer?.abort();
-            fail(error);
-          });
-      });
-      channel.addEventListener("close", () => {
-        void queue.then(() => fail(new PeerUnavailableError()));
-      });
-      channel.send(JSON.stringify({ t: "get", key: opts.key } satisfies Message));
-    });
+    opts.onStage("ringing");
+    await Promise.all(
+      calls.map(async ({ peer, pc }) => {
+        await pc.setLocalDescription(await pc.createOffer());
+        await gathered(pc);
+        await writeSignal(remote, vault, offerPath(me, peer), {
+          v: 1,
+          session,
+          sdp: pc.localDescription?.sdp ?? "",
+          at: Date.now(),
+        });
+      }),
+    );
+    const call = await firstAnswer(remote, vault, me, session, calls, () => opts.onStage("closed"));
+    for (const other of calls) if (other !== call) other.pc.close();
+    opts.onStage("connecting");
+    await opened(call);
+    return await receive(call.channel, opts);
   } finally {
-    pc.close();
-    void remote.remove(offerPath(me, peer)).catch(() => {});
+    for (const { peer, pc } of calls) {
+      pc.close();
+      void remote.remove(offerPath(me, peer)).catch(() => {});
+    }
   }
 }
 
@@ -195,14 +265,15 @@ async function sendBook(channel: RTCDataChannel, source: PackSource | null): Pro
 }
 
 /** Answer other devices' doorbells and serve the books they ask for while
-    this page is open. `wake` resolves when signal/ may have changed (a
-    long-poll where the cloud has one, a short timer otherwise). */
+    this page is open. Between looks it waits on the cloud's watch when it
+    has one (armed before each look, so no doorbell slips in between), on
+    `idle` otherwise. */
 export function servePeers(opts: {
   remote: () => Promise<RemoteFolder | null>;
   vault: () => Promise<VaultBinding | undefined>;
   me: () => Promise<string>;
   packSource: (key: BookKey) => Promise<PackSource | null>;
-  wake: (remote: RemoteFolder, signal: AbortSignal) => Promise<void>;
+  idle: () => Promise<void>;
 }): () => void {
   const abort = new AbortController();
   const answered = new Set<string>();
@@ -258,11 +329,12 @@ export function servePeers(opts: {
           await sleep(10_000);
           continue;
         }
+        const changed = remote.watch ? await remote.watch("signal") : null;
         for (const entry of await remote.list("signal")) {
           const match = OFFER.exec(entry.path);
           if (match && match[2] === me && match[1] !== me) await answer(remote, vault, me, match[1]!, entry.path);
         }
-        await opts.wake(remote, abort.signal);
+        await (changed ? changed(abort.signal) : opts.idle());
       } catch {
         await sleep(5_000);
       }
