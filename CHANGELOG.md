@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.4] - 2026-11-04
+
+- Reading: don't like the page sliding? Turn off "Page-turn animation" in Settings → Reading (or right in the reader's quick settings on a phone) — taps and swipes then just flip the page, in novels, PDFs and manga alike
+
 ## [1.4.3] - 2026-11-04
 
 - Sync: fixed the phone's page crashing and reloading over and over ("a problem repeatedly occurred") — sync no longer loads every book into memory on each start, so reading and syncing stay light even with a big library
