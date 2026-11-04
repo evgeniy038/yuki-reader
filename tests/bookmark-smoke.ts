@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   const epubPath = join(NOVELS_DIR, file);
 
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
 
   // Context 1: the bookmark moves only after a 3s dwell on a page.
   {

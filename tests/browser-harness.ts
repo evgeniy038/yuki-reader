@@ -1,8 +1,13 @@
 // Shared scaffold for the browser smokes: the dev-server guard (reuse a
 // server already on the base URL, or spawn `pnpm dev` and wait) and the
-// standard headless Chrome launch (1280×800). Smokes with a special setup —
+// standard headless Chromium launch (1280×800). Smokes with a special setup —
 // headed mode, another viewport, an env-configured base, a persistent
 // profile — keep their own local versions.
+//
+// Every smoke launches Playwright's own Chromium (`channel: "chromium"`, set
+// up by `node node_modules/playwright-core/cli.js install chromium --no-shell`),
+// never the system Chrome: each system-Chrome launch copies the 1.4 GB app
+// into a code-sign clone under /var/folders, and a killed run leaks it.
 import { spawn } from "node:child_process";
 import {
   chromium,
@@ -42,7 +47,7 @@ export async function launchBrowser(): Promise<{
   context: BrowserContext;
   page: Page;
 }> {
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
   });

@@ -223,7 +223,7 @@ async function checkBook(page: Page, name: string, fwd: string): Promise<string[
 
 async function main(): Promise<void> {
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   const allProblems: string[] = [];
 
   for (const demo of [

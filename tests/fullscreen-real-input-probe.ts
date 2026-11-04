@@ -56,7 +56,7 @@ async function pillState(page: Page) {
 
 async function main(): Promise<void> {
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: false });
+  const browser = await chromium.launch({ channel: "chromium", headless: false });
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 
   await page.goto(`${BASE}/?demo=h`);

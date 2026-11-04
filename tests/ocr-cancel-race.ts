@@ -225,7 +225,7 @@ async function main(): Promise<void> {
   const userDataDir =
     PROFILE_DIR ?? mkdtempSync(join(tmpdir(), "yuki-cancel-race-"));
   const browser = await chromium.launchPersistentContext(userDataDir, {
-    channel: "chrome",
+    channel: "chromium",
     headless: true,
     viewport: { width: 1280, height: 800 },
     locale: "en-US",

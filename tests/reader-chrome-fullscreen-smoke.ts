@@ -114,7 +114,7 @@ async function checkToggle(
 async function main(): Promise<void> {
   await ensureServer();
   const browser = await chromium.launch({
-    channel: "chrome",
+    channel: "chromium",
     headless: process.env.HEADED !== "1",
   });
   const context = await browser.newContext({

@@ -97,7 +97,7 @@ async function seriesTile(page: Page, name: string) {
 
 async function main(): Promise<void> {
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     locale: "en-US",

@@ -57,7 +57,7 @@ async function wheelOverPanel(page: Page, name: "toc" | "search"): Promise<void>
 async function main(): Promise<void> {
   await ensureServer();
   const browser = await chromium.launch({
-    channel: "chrome",
+    channel: "chromium",
     headless: process.env.HEADED !== "1",
   });
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();

@@ -393,7 +393,7 @@ async function checkPage(
 
 async function main(): Promise<void> {
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   const allProblems: string[] = [];
 
   // Deterministic demo books first: vertical (ja) and horizontal (en).

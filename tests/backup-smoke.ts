@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   console.log(`fixtures: ${epubFile} + ${mangaFile} (${sourceImages.length} pages)`);
 
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
 
   // === A. Seed a library with real books, give the novel progress. =========
   const page = await freshPage(browser);

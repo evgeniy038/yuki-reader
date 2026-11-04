@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const epubPath = join(NOVELS_DIR, file);
 
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
   });

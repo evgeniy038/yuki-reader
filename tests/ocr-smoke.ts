@@ -131,7 +131,7 @@ async function main(): Promise<void> {
   );
   if (!zipName) throw new Error("no kaguya zip fixture");
 
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     locale: "en-US",

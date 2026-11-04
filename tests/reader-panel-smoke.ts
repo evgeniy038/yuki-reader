@@ -180,7 +180,7 @@ async function pdfFlow(browser: import("playwright-core").Browser): Promise<void
 
 async function main(): Promise<void> {
   await ensureServer();
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   await epubFlow(browser);
   await pdfFlow(browser);
   await browser.close();

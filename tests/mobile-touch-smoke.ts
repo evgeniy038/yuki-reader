@@ -65,7 +65,7 @@ async function settle(page: Page): Promise<void> {
 }
 
 await ensureServer(BASE);
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+const browser = await chromium.launch({ channel: "chromium", headless: true });
 const context = await browser.newContext({
   viewport: { width: WIDTH, height: HEIGHT },
   deviceScaleFactor: 2,
