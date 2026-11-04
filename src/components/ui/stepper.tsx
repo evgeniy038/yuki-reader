@@ -1,4 +1,4 @@
-import { Minus, Plus } from "@phosphor-icons/react";
+import { Minus, Plus } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 
 // Numeric stepper: minus / tabular value / plus, one control for the one action

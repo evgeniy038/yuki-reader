@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CaretLeft, CornersOut, Gear, List, MagnifyingGlass } from "@phosphor-icons/react";
+import { CaretLeft, CornersOut, Gear, List, MagnifyingGlass } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

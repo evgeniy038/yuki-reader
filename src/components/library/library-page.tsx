@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { Plus } from "@phosphor-icons/react";
+import { Plus } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import {
   buildShelfItems,

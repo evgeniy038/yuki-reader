@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Book } from "@phosphor-icons/react";
+import { Book } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { Stepper } from "@/components/ui/stepper";
 import { SegmentedControl } from "@/components/ui/segmented-control";

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { UploadSimple } from "@phosphor-icons/react";
+import { UploadSimple } from "@/components/ui/icons";
 import type {
   BackupOperationProgress,
   BackupOptions,

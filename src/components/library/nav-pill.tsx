@@ -1,4 +1,4 @@
-import { Books, ChartLine, Gear } from "@phosphor-icons/react";
+import { Books, ChartLine, Gear } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { useSlidingIndicator } from "@/lib/use-sliding-indicator";
 

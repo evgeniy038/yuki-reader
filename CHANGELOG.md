@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.8] - 2026-11-04
+
+- New icons drawn just for yuki: every button, menu and tab now shares one calm, solid look that stays crisp even at the smallest sizes
+
 ## [1.3.7] - 2026-11-03
 
 - Phone: reading is made for your thumb now — tap the outer edges to turn pages (left goes forward in Japanese books and manga, right in English ones), tap the middle for the controls, or just swipe

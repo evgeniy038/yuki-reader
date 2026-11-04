@@ -4,7 +4,7 @@ import {
   CheckCircle,
   DownloadSimple,
   UploadSimple,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -106,7 +106,7 @@ export function BackupSection() {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
       toast.success(t("settings.backup.exported"), {
-        icon: <CheckCircle className="size-4 text-primary" weight="fill" />,
+        icon: <CheckCircle className="size-4 text-primary" />,
       });
       setOpen(null);
     } catch (cause) {
@@ -134,7 +134,7 @@ export function BackupSection() {
       toast.success(
         t("settings.backup.imported", { progress: summary.progress }),
         {
-          icon: <CheckCircle className="size-4 text-primary" weight="fill" />,
+          icon: <CheckCircle className="size-4 text-primary" />,
         },
       );
       setOpen(null);

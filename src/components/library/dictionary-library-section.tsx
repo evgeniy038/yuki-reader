@@ -7,7 +7,7 @@ import {
   FileArrowUp,
   Plus,
   Trash,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -135,7 +135,7 @@ export function DictionaryLibrarySection() {
     );
     if (installed) {
       toast.success(t("settings.dictionaries.ready", { title: item.title }), {
-        icon: <CheckCircle className="size-4 text-primary" weight="fill" />,
+        icon: <CheckCircle className="size-4 text-primary" />,
       });
     }
   };

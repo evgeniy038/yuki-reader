@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CaretDown } from "@phosphor-icons/react";
+import { CaretDown } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { changelog, type ChangelogEntry } from "@/lib/changelog";
 import { cn } from "@/lib/utils";

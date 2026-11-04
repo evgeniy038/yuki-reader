@@ -1,4 +1,4 @@
-import { Star } from "@phosphor-icons/react";
+import { Star } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import type { ShelfItem } from "@/core/library";
 import { ContextMenuItem } from "@/components/ui/context-menu";
@@ -67,7 +67,7 @@ export function LibraryGrid({
             onToggleFavorite={() => onToggleFavorite(item.book.id)}
             menuExtra={
               <ContextMenuItem onClick={() => onToggleFavorite(item.book.id)}>
-                <Star weight={item.book.favorite ? "fill" : "regular"} />
+                <Star />
                 {t(item.book.favorite ? "library.menu.unpin" : "library.menu.pin")}
               </ContextMenuItem>
             }
