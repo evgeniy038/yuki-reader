@@ -12,7 +12,8 @@
 //   VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480
 //   YUKI_TEST_BASE=http://localhost:1480 pnpm tsx tests/sync-smoke.ts
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import sharp from "sharp";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
@@ -118,8 +119,9 @@ async function device(browser: Awaited<ReturnType<typeof chromium.launch>>): Pro
 }
 
 // --- Helpers ------------------------------------------------------------------
-async function read(page: Page, turns: number, linger: number): Promise<void> {
-  await page.locator("[data-book-id]").first().click();
+async function read(page: Page, turns: number, linger: number, title = "台所の本"): Promise<void> {
+  // By title: books arriving from the other device share the shelf now.
+  await page.locator("[data-book-id]").filter({ hasText: title }).first().click();
   await page.waitForSelector(".book-content", { timeout: 30_000 });
   await page.waitForTimeout(800);
   for (let i = 0; i < turns; i += 1) {
@@ -157,7 +159,7 @@ async function main(): Promise<void> {
   const other = join(dir, "other.epub");
   writeFileSync(kitchen, epub("台所の本", "わたしがこの世でいちばん好きな場所は台所だと思う"));
   writeFileSync(other, epub("変な家の本", "その家には奇妙な間取りがあった"));
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   try {
     // --- Mac: a library, a reading position, a pin, then connect. ---------
     const mac = await device(browser);
@@ -210,6 +212,64 @@ async function main(): Promise<void> {
     await syncNow(phone.page);
     const theme = await phone.page.evaluate(() => JSON.parse(localStorage.getItem("yuki:reading") ?? "{}").theme);
     check(theme === "sepia", "the Mac's reading theme reached the phone");
+
+    // --- A book only the phone had arrives on the Mac by itself. -----------
+    check(
+      [...files.keys()].filter((f) => /^devices\/[^/]+\/books\/[0-9a-f]{32}\/manifest\.bin$/.test(f)).length === 2,
+      "each book's files went up once, by whoever had it first",
+    );
+    const arrived = await mac.page.evaluate(async () => {
+      const storage = await import("/src/core/storage.ts");
+      const book = (await storage.loadShelfBooks()).find((b) => b.title === "変な家の本");
+      return book ? ((await storage.loadBookContent(book.id))?.chapters[0]?.html.includes("奇妙な間取り") ?? false) : false;
+    });
+    check(arrived, "a book only the phone had arrived on the Mac with its text");
+    const sealedText = [...files.values()].map((b) => Buffer.from(b).toString("latin1")).join("");
+    check(!sealedText.includes(Buffer.from("奇妙な間取り").toString("latin1")), "the book's text is unreadable in the cloud");
+
+    // --- Manga stays home unless kept in the cloud; then it's a tile there. --
+    const scans = join(dir, "manga");
+    mkdirSync(scans);
+    const pagePaths: string[] = [];
+    for (const [i, color] of [[1, "#c33"], [2, "#36c"]] as const) {
+      const path = join(scans, `p${i}.png`);
+      await sharp({ create: { width: 300, height: 420, channels: 3, background: color } }).png().toFile(path);
+      pagePaths.push(path);
+    }
+    // A sidecar with a box on every page: nothing for the in-app OCR to do.
+    const sidecar = join(scans, "テスト漫画 第01巻.mokuro");
+    writeFileSync(sidecar, JSON.stringify({
+      version: "0.2.1",
+      title: "テスト漫画",
+      volume: "テスト漫画 第01巻",
+      pages: [1, 2].map((i) => ({
+        img_path: `p${i}.png`, img_width: 300, img_height: 420,
+        blocks: [{ box: [20, 20, 120, 160], vertical: true, font_size: 24, lines: ["テスト"] }],
+      })),
+    }));
+    await mac.page.goto(`${BASE}/#/`);
+    await mac.page.setInputFiles('input[accept*=".mokuro"]', [...pagePaths, sidecar]);
+    const series = mac.page.locator("[data-book-id]").filter({ hasText: "テスト漫画" }).first();
+    await series.waitFor({ timeout: 30_000 });
+    await syncNow(mac.page);
+    const manifests = () => [...files.keys()].filter((f) => /\/books\/[0-9a-f]{32}\/manifest\.bin$/.test(f)).length;
+    check(manifests() === 2, "a manga volume doesn't go up on its own");
+    await mac.page.goto(`${BASE}/#/`);
+    await mac.page.locator("[data-book-id]").filter({ hasText: "テスト漫画" }).first().click();
+    await mac.page.getByRole("button", { name: "series actions" }).click();
+    await mac.page.locator('[data-keep-in-cloud="off"]').click();
+    await syncNow(mac.page);
+    check(manifests() === 3, "\"Keep in the cloud\" sends the volume up");
+    await syncNow(phone.page);
+    await phone.page.goto(`${BASE}/#/`);
+    const tile = phone.page.locator("[data-cloud-book]");
+    await tile.first().waitFor({ timeout: 15_000 }).catch(() => {});
+    check((await tile.count()) === 1, "the phone shows the volume as a cloud tile");
+    await tile.first().click();
+    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 30_000 }).catch(() => {});
+    check((await phone.page.locator("[data-manga-current] img").count()) >= 1, "a tap downloads the volume and opens it");
+    await phone.page.goto(`${BASE}/#/`);
+    check((await phone.page.locator("[data-cloud-book]").count()) === 0, "…and it's a book on the shelf now, not a tile");
 
     // --- Reading on the phone travels back; its time counts on the Mac. ----
     await phone.page.goto(`${BASE}/#/`);

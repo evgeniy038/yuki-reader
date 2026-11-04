@@ -1,13 +1,12 @@
 import { syncRound } from "@/core/sync/engine";
-import { Hlc } from "@/core/sync/hlc";
-import { furthestElsewhere } from "@/core/sync/merge";
-import { writeSyncedSettings } from "@/core/sync/local";
 import type { DeviceInfo, DeviceState } from "@/core/sync/model";
 import { newState, pkcePair, postTokenForm, TokenKeeper } from "@/core/sync/oauth";
 import { AuthRequiredError, QuotaError, type ProviderKind, type RemoteFolder } from "@/core/sync/remote";
+import type { PackDesc } from "@/core/sync/book-pack";
+import type { BookKey } from "@/core/sync/model";
 import { syncStore, type SyncStatus } from "@/core/sync/store";
 import { createVault, inspectVault, unlockVault, VaultError, VAULT_PATH, RECOVERY_SLOT_PATH, type VaultErrorCode } from "@/core/sync/vault";
-import { createBridge, writePatches, type SyncHost } from "./sync-bridge";
+import { createBridge, type SyncHost } from "./sync-bridge";
 import { CLIENT_IDS, describeDevice, PROVIDERS, redirectUri } from "./sync-config";
 import { emitSyncApplied, setSyncEnabled } from "./sync-signal";
 
@@ -34,15 +33,35 @@ export interface SyncView {
   snapshotAt?: number;
   /** Last sign-in attempt failed. */
   signInFailed?: boolean;
+  /** Books in the cloud that this device doesn't hold (sync-cloud.ts). */
+  cloud: { key: BookKey; desc: PackDesc }[];
+  /** Downloads in flight: content key → 0..1. */
+  downloads: Record<BookKey, number>;
+  /** Local ids whose files are in the cloud — "remove from this device". */
+  inCloud: string[];
 }
 
-let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [] };
+let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, inCloud: [] };
+const roundListeners = new Set<() => Promise<void>>();
 const listeners = new Set<() => void>();
 let host: SyncHost | null = null;
 let remotesCache: DeviceState[] = [];
 let rerun = false;
 let timer = 0;
 let triggersOn = false;
+
+/** sync-cloud.ts hooks in here: it runs after every successful round. */
+export function onRoundDone(listener: () => Promise<void>): void {
+  roundListeners.add(listener);
+}
+
+export const currentHost = (): SyncHost | null => host;
+/** Other devices' states from the last round. */
+export const remotes = (): DeviceState[] => remotesCache;
+
+export function patchView(patch: Partial<SyncView>): void {
+  setView(patch);
+}
 
 function setView(patch: Partial<SyncView>): void {
   view = { ...view, ...patch };
@@ -62,14 +81,14 @@ export function attachHost(next: SyncHost): () => void {
   };
 }
 
-async function device(): Promise<DeviceInfo> {
+export async function device(): Promise<DeviceInfo> {
   const known = await syncStore.device();
   const info = describeDevice(known?.id ?? crypto.randomUUID().replace(/-/g, ""));
   if (!known || known.platform !== info.platform || known.app !== info.app) await syncStore.setDevice(info);
   return info;
 }
 
-async function folder(): Promise<RemoteFolder | null> {
+export async function folder(): Promise<RemoteFolder | null> {
   const session = await syncStore.session();
   if (!session) return null;
   const auth = PROVIDERS[session.kind];
@@ -241,12 +260,30 @@ async function round(): Promise<void> {
       setView({ phase: found.kind === "vault" ? { kind: "locked", provider: session.kind, error: "changed" } : { kind: "damaged", provider: session.kind } });
       return;
     }
-    const report = await syncRound({ remote, store: syncStore, vault, device: await device(), bridge: await createBridge(host) });
-    const status: SyncStatus = { at: Date.now(), ok: true, sent: report.sent, received: report.received, bytes: report.bytes, heldDeletions: report.heldDeletions };
+    const report = await syncRound({
+      remote,
+      store: syncStore,
+      vault,
+      device: await device(),
+      bridge: await createBridge(host),
+      filesDeadline: Date.now() + FILES_BUDGET_MS,
+    });
+    const status: SyncStatus = {
+      at: Date.now(),
+      ok: true,
+      sent: report.sent,
+      received: report.received,
+      bytes: report.bytes,
+      heldDeletions: report.heldDeletions,
+      ...(report.filesFull ? { full: true } : {}),
+    };
     await syncStore.setStatus(status);
     setView({ status, snapshotAt: (await syncStore.snapshot())?.at });
     await refreshDevices(report.remotes);
     emitSyncApplied({ books: report.received > 0, settings: report.received > 0, stats: true });
+    for (const listener of roundListeners) await listener();
+    // A book upload ran out of budget: carry on shortly, not in a minute.
+    if (report.filesPending) rerun = true;
   } catch (error) {
     const previous = view.status;
     const status: SyncStatus = { at: Date.now(), ok: false, sent: 0, received: 0, bytes: 0, error: errorOf(error), heldDeletions: previous?.heldDeletions ?? [] };
@@ -256,6 +293,10 @@ async function round(): Promise<void> {
     setView({ syncing: false });
   }
 }
+
+/** Book uploads per round stop between parts after this long, so a 300 MB
+    volume never holds the reading state back; the next round resumes. */
+const FILES_BUDGET_MS = 25_000;
 
 /** One round now (queued behind a running one). */
 export async function syncNow(): Promise<void> {
@@ -300,7 +341,7 @@ export async function disconnect(): Promise<void> {
   await syncStore.clear();
   setSyncEnabled(false);
   remotesCache = [];
-  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined });
+  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, inCloud: [] });
 }
 
 /** Lost recovery key: wipe the unreadable cloud copy and make a new vault
@@ -315,72 +356,4 @@ export async function startOver(): Promise<void> {
   await syncStore.resetVaultData();
   remotesCache = [];
   await afterSignIn(session.kind);
-}
-
-/** Put back what the first sync overwrote; the values become fresh edits. */
-export async function undoFirstSync(): Promise<void> {
-  const snapshot = await syncStore.snapshot();
-  if (!snapshot || !host) return;
-  const current = new Map(host.books().map((book) => [book.id, book]));
-  const patches = snapshot.books
-    .filter((book) => current.has(book.id))
-    .map((book) => ({
-      id: book.id,
-      key: "",
-      progress: book.progress,
-      lastReadAt: book.lastReadAt,
-      favorite: book.favorite,
-      title: book.title,
-      series: book.series ?? null,
-      volumeIndex: book.volumeIndex ?? null,
-    }));
-  await writePatches(patches, current);
-  host.patch(patches);
-  const keys = await syncStore.bookKeys();
-  host.settingsApplied(writeSyncedSettings(snapshot.settings, (key) => [...keys].find(([, k]) => k === key)?.[0]));
-  await syncStore.setSnapshot(null);
-  setView({ snapshotAt: undefined });
-  requestSync(0);
-}
-
-/** Answer the mass-deletion guard. */
-export async function resolveHeldDeletions(remove: boolean): Promise<void> {
-  const ids = view.status?.heldDeletions ?? [];
-  if (ids.length === 0) return;
-  if (remove) {
-    host?.remove(ids);
-  } else {
-    // Keep them: stamp presence, which wins over the tombstones everywhere.
-    const [shadow, keys, self] = await Promise.all([syncStore.shadow(), syncStore.bookKeys(), device()]);
-    const hlc = new Hlc(await syncStore.hlc());
-    if (shadow) {
-      for (const id of ids) {
-        const key = keys.get(id);
-        const regs = key ? shadow.books[key] : undefined;
-        if (key && regs) shadow.books[key] = { ...regs, deleted: { v: false, t: hlc.now(), d: self.id } };
-      }
-      await syncStore.setShadow(shadow);
-      await syncStore.setHlc(hlc.value);
-    }
-  }
-  if (view.status) setView({ status: { ...view.status, heldDeletions: [] } });
-  requestSync(0);
-}
-
-/** "Continue from 45% · iPhone": the furthest place another device read. */
-export async function offerFor(bookId: string, progress: number): Promise<{ p: number; device: DeviceInfo } | undefined> {
-  const key = (await syncStore.bookKeys()).get(bookId);
-  if (!key) return undefined;
-  const best = furthestElsewhere(remotesCache, key, progress);
-  return best ? { p: best.p, device: best.device } : undefined;
-}
-
-/** Move a book's stored position (the offer's action). */
-export async function jumpTo(bookId: string, progress: number): Promise<void> {
-  if (!host) return;
-  const current = new Map(host.books().map((book) => [book.id, book]));
-  const patch = { id: bookId, key: "", progress, lastReadAt: Date.now() };
-  await writePatches([patch], current);
-  host.patch([patch]);
-  requestSync();
 }

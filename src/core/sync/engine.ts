@@ -20,6 +20,7 @@ import {
   type DeviceState,
   type MonthStats,
 } from "./model";
+import { syncFiles, type FileBridge } from "./files";
 import { syncOcr, type OcrBridge } from "./ocr-sync";
 import type { RemoteEntry, RemoteFolder } from "./remote";
 import type { PreSyncSnapshot, SyncStore, VaultBinding } from "./store";
@@ -31,12 +32,14 @@ import type { PreSyncSnapshot, SyncStore, VaultBinding } from "./store";
 //      A file that fails is "unknown": the last good copy stays in use;
 //   2. stamp local edits, merge, plan, hand the plan to the app;
 //   3. publish this device's state (only when something changed) and its
-//      own stats months (only the months whose content changed).
+//      own stats months (only the months whose content changed);
+//   4. move book files (files.ts) on a time budget, then publish again if
+//      an upload finished — reading state never waits for a big upload.
 // The engine never deletes anything in the cloud and never treats a missing
 // file as "empty".
 
 /** The app side of a round: what the library looks like, how to change it. */
-export interface LocalBridge extends OcrBridge {
+export interface LocalBridge extends OcrBridge, FileBridge {
   /** Lean shelf state; books whose content key isn't known yet are left out. */
   snapshot(): Promise<LocalState>;
   apply(plan: LocalPlan, basis: LocalState): Promise<void>;
@@ -52,6 +55,8 @@ export interface EngineContext {
   vault: VaultBinding;
   device: DeviceInfo;
   bridge: LocalBridge;
+  /** Book-file uploads stop between parts after this moment (ms epoch). */
+  filesDeadline?: number;
 }
 
 export interface RoundReport {
@@ -61,6 +66,10 @@ export interface RoundReport {
   heldDeletions: string[];
   /** Other devices' current states — for the device list and the offers. */
   remotes: DeviceState[];
+  /** A book upload is still on its way — the next round continues it. */
+  filesPending: boolean;
+  /** The cloud is full: book files stopped, reading sync goes on. */
+  filesFull: boolean;
 }
 
 const STATE = /^devices\/([^/]+)\/state\.bin$/;
@@ -178,17 +187,19 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   bytes += await syncOcr(remote, vault, device, bridge, merged, local, hlc, ocrApplied);
 
   // 3. Push.
-  const body = { books: merged.books, settings: merged.settings };
-  const hash = await sha256Hex(canonical(body));
-  const published = await store.published();
-  if (hash !== published.hash) {
+  const publish = async (): Promise<void> => {
+    const body = { books: merged.books, settings: merged.settings };
+    const hash = await sha256Hex(canonical(body));
+    const published = await store.published();
+    if (hash === published.hash) return;
     const next: DeviceState = { v: 1, vault: vault.id, seq: published.seq + 1, device, ...body };
     const path = statePath(device.id);
     const sealed = await sealJson(vault.keys, vault.id, path, next);
     await remote.write(path, sealed);
     bytes += sealed.length;
     await store.setPublished({ seq: next.seq, hash });
-  }
+  };
+  await publish();
   const months = monthsOf(await bridge.localStats(), (id) => bridge.keyOf(id));
   const publishedStats = await store.publishedStats();
   for (const [month, days] of months) {
@@ -200,6 +211,13 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
     bytes += sealed.length;
     publishedStats[month] = monthHash;
   }
+
+  // 4. Book files, then their registers.
+  const files = await syncFiles(
+    remote, vault, device, bridge, merged, local, hlc, ctx.filesDeadline ?? Date.now() + 30_000,
+  );
+  bytes += files.bytes;
+  await publish();
 
   await store.setShadow({ books: merged.books, settings: merged.settings, held });
   await store.setRemotes([...remotes.values()]);
@@ -213,5 +231,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
     bytes,
     heldDeletions: plan.heldDeletions.map((d) => d.id),
     remotes: remoteStates,
+    filesPending: files.pending,
+    filesFull: files.full,
   };
 }

@@ -429,10 +429,23 @@ renames and series, deletions, the daily statistics and the taste settings
 (interface language, reading theme, font, weight, furigana, the manga cover
 option, the daily goal, shelf sort and section order). Font size, line height,
 margins and folded sections stay per device: a phone and a Mac want different
-ones. Book files themselves don't travel (yet): each device imports its own,
-and the library recognizes them as the same book by content. Manga **OCR
-results** do travel: a volume recognized on one device arrives with its text
-on the others, and their OCR queue simply finds those pages done.
+ones. Manga **OCR results** travel too: a volume recognized on one device
+arrives with its text on the others, and their OCR queue simply finds those
+pages done.
+
+**Book files** follow: a book imported on one device appears on the others.
+EPUB and PDF go to the cloud on their own; a manga volume only when its
+series is set to **Keep in the cloud** (series menu) — a volume weighs
+hundreds of MB and free clouds hold 2–5 GB. A book is uploaded once, by the
+device that had it first, in encrypted parts that resume where a broken
+upload stopped; uploads run a little each round, so reading state never
+waits for them. On another device a novel or a PDF up to 25 MB just
+arrives; manga and bigger files wait in the shelf's **In the cloud**
+section as tiles — a tap downloads the book and opens it. A downloaded
+volume can be **removed from this device**: it stays in the cloud and on
+every other device. A book deleted everywhere, or a series no longer kept in
+the cloud, has its files taken out of the cloud by the device that uploaded
+them. A full cloud stops uploads (Settings says so), never reading sync.
 
 There is no yuki server. The person connects THEIR cloud — **Yandex Disk** or
 **Dropbox**, the only two that let a static site sign in once with no secret

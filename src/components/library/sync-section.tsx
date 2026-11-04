@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { ArrowsClockwise, CloudCheck, CloudSlash, CloudArrowUp } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import * as sync from "@/components/sync/sync-controller";
+import * as syncActions from "@/components/sync/sync-actions";
 import { CLIENT_IDS, PROVIDER_ORDER } from "@/components/sync/sync-config";
 import { deviceLabel } from "@/components/sync/sync-labels";
 import { formatBytes, formatNumber, formatTimeAgo } from "@/lib/format";
@@ -132,6 +133,11 @@ export function SyncSection() {
                     })}
                   </span>
                 ) : null}
+                {status?.full ? (
+                  <span className="block truncate text-xs text-destructive" data-sync-full="">
+                    {t("settings.sync.full", { provider: providerName(phase.provider) })}
+                  </span>
+                ) : null}
               </span>
             </div>
             {status?.error === "auth" ? (
@@ -149,10 +155,10 @@ export function SyncSection() {
             <SettingsBlock key="held">
               <p className="text-sm text-default">{t("settings.sync.held", { count: held.length })}</p>
               <div className="mt-3 flex gap-2">
-                <Button variant="destructive" onClick={() => void sync.resolveHeldDeletions(true)}>
+                <Button variant="destructive" onClick={() => void syncActions.resolveHeldDeletions(true)}>
                   {t("settings.sync.heldDelete")}
                 </Button>
-                <Button variant="secondary" onClick={() => void sync.resolveHeldDeletions(false)}>
+                <Button variant="secondary" onClick={() => void syncActions.resolveHeldDeletions(false)}>
                   {t("settings.sync.heldKeep")}
                 </Button>
               </div>
@@ -171,7 +177,7 @@ export function SyncSection() {
           </SettingsBlock>,
           ...(view.snapshotAt !== undefined && Date.now() - view.snapshotAt < UNDO_WINDOW_MS ? [
             <SettingsRow key="undo" label={t("settings.sync.undoHint")}>
-              <Button variant="secondary" onClick={() => void sync.undoFirstSync()}>
+              <Button variant="secondary" onClick={() => void syncActions.undoFirstSync()}>
                 {t("settings.sync.undo")}
               </Button>
             </SettingsRow>,

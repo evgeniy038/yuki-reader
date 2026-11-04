@@ -195,6 +195,15 @@ export function useShelf(demoMode: boolean) {
     void updateBookMeta(id, { cover });
   };
 
+  // Manga, with sync on: keep these volumes' files in the cloud (or not).
+  const setKeepInCloud = (ids: string[], keepInCloud: boolean) => {
+    const wanted = new Set(ids);
+    setBooks((prev) =>
+      prev.map((book) => (wanted.has(book.id) ? { ...book, keepInCloud } : book)),
+    );
+    for (const id of ids) void updateBookMeta(id, { keepInCloud });
+  };
+
   const toggleFavorite = (id: string) => {
     const target = books.find((book) => book.id === id);
     if (!target) return;
@@ -227,5 +236,6 @@ export function useShelf(demoMode: boolean) {
     setVolumeOrder,
     changeCover,
     toggleFavorite,
+    setKeepInCloud,
   };
 }

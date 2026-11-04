@@ -94,6 +94,8 @@ function device(id: string, books: LocalBook[], days: DailyStats[], settings: Re
         ocr.set(localId, pages);
         ocrApplied.push(localId);
       },
+      // Book files are covered by sync-files-unit.ts; here no book has any.
+      packSource: async () => null,
     },
   };
   return dev;

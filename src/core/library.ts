@@ -26,6 +26,8 @@ export interface Book {
   lastReadAt?: number;
   /** Pinned to the top of its shelf section. */
   favorite?: boolean;
+  /** Manga, with sync on: keep this volume's files in the cloud too. */
+  keepInCloud?: boolean;
 }
 
 // ---------------------------------------------------------------------------

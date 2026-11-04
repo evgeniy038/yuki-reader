@@ -25,6 +25,8 @@ export interface LocalBook {
   favorite: boolean;
   series?: string;
   volumeIndex?: number;
+  /** Manga: keep this volume's files in the cloud. */
+  keep?: boolean;
 }
 
 export interface LocalState {
@@ -90,6 +92,7 @@ export function stampLocalEdits(
       if (book.series !== undefined) regs.series = { v: book.series, t: claim, d: me };
       if (book.volumeIndex !== undefined)
         regs.volumeIndex = { v: book.volumeIndex, t: claim, d: me };
+      if (book.keep) regs.keep = { v: true, t: claim, d: me };
       books[book.key] = regs;
       continue;
     }
@@ -113,6 +116,9 @@ export function stampLocalEdits(
     }
     if ((book.volumeIndex ?? null) !== (base.volumeIndex?.v ?? null)) {
       next.volumeIndex = { v: book.volumeIndex ?? null, t: hlc.now(), d: me };
+    }
+    if ((book.keep ?? false) !== (base.keep?.v ?? false)) {
+      next.keep = { v: book.keep ?? false, t: hlc.now(), d: me };
     }
     // Present here although the registers say removed: re-imported.
     if (base.deleted?.v === true) next.deleted = { v: false, t: hlc.now(), d: me };
@@ -160,6 +166,8 @@ export function mergeStates(
         copy.volumeIndex = trusted(theirs.volumeIndex);
         copy.deleted = trusted(theirs.deleted);
         copy.ocr = trusted(theirs.ocr);
+        copy.file = trusted(theirs.file);
+        copy.keep = trusted(theirs.keep);
         books[key] = dropUndefined(copy);
         continue;
       }
@@ -173,6 +181,8 @@ export function mergeStates(
         volumeIndex: later(ours.volumeIndex, trusted(theirs.volumeIndex)),
         deleted: later(ours.deleted, trusted(theirs.deleted)),
         ocr: newerOcr(ours.ocr, trusted(theirs.ocr)),
+        file: later(ours.file, trusted(theirs.file)),
+        keep: later(ours.keep, trusted(theirs.keep)),
       });
     }
   }
@@ -211,6 +221,7 @@ export interface BookPatch {
   /** null clears the field. */
   series?: string | null;
   volumeIndex?: number | null;
+  keep?: boolean;
 }
 
 export interface LocalPlan {
@@ -257,6 +268,7 @@ export function planLocal(
     if (regs.volumeIndex && regs.volumeIndex.v !== (book.volumeIndex ?? null)) {
       patch.volumeIndex = regs.volumeIndex.v;
     }
+    if (regs.keep && regs.keep.v !== (book.keep ?? false)) patch.keep = regs.keep.v;
     if (Object.keys(patch).length > 2) plan.patches.push(patch);
   }
   if (plan.deletions.length > deletionLimit(local.books.length)) {

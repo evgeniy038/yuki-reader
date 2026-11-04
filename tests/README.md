@@ -39,11 +39,17 @@ recovery key (`sync-unit`); two devices on one in-memory cloud folder with the
 real engine and sync database — join, positions, stats sum, rollback and
 tamper ignored, deletes (`sync-engine-unit`); and both cloud adapters against
 fakes of the Yandex Disk and Dropbox HTTP APIs — token refresh on 401, dead
-grant, full disk, no client secret anywhere (`sync-providers-unit`).
+grant, full disk, no client secret anywhere (`sync-providers-unit`); and the
+book files — a pack round-trips byte for byte, a broken upload resumes with
+the manifest last, a tampered part never becomes a half-stored book, novels
+go up alone, manga only when kept in the cloud, uploads run on a budget and a
+deleted book's pack comes down (`sync-files-unit`).
 
 `pnpm test:sync-smoke` drives two Chrome profiles as two devices through the
 real UI, with Yandex Disk (OAuth, REST, upload/download hosts) emulated by
-request interception. Start a dev server with a provider id first:
+request interception — including a novel that arrives on the other device by
+itself and a manga volume kept in the cloud that waits there as a tile, opened
+with a tap. Start a dev server with a provider id first:
 
 ```
 VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480

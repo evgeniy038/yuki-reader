@@ -30,6 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { CloudShelf } from "@/components/sync/use-sync";
+import { CloudSection } from "./cloud-shelf";
 import { LibraryEmpty } from "./library-empty";
 import {
   PageActions,
@@ -65,6 +67,7 @@ export function LibraryPage({
   onOpenSeries,
   onRenameSeries,
   onDeleteSeries,
+  cloud,
 }: {
   books: Book[];
   shelfReady: boolean;
@@ -81,6 +84,8 @@ export function LibraryPage({
   onOpenSeries: (series: string) => void;
   onRenameSeries: (series: string, next: string) => void;
   onDeleteSeries: (series: string) => void;
+  /** Books in the cloud that aren't on this device (sync on). */
+  cloud?: CloudShelf;
 }) {
   const { t } = useTranslation();
   const [sort, setSort] = useState<ShelfSort>(() => loadShelfSort());
@@ -256,51 +261,56 @@ export function LibraryPage({
           <div className="grid flex-1 place-items-center">
             <DashRing className="size-6 text-muted-content" />
           </div>
+        ) : books.length === 0 && cloud && cloud.books.length > 0 ? (
+          <CloudSection cloud={cloud} />
         ) : books.length === 0 ? (
           <LibraryEmpty onAdd={() => fileRef.current?.click()} />
         ) : (
-          <div
-            onDragOver={sectionDrag.onContainerDragOver}
-            onDrop={sectionDrag.onContainerDrop}
-          >
-            {displayEntries.map((entry, index) =>
-              entry.type === "ghost" ? (
-                <ShelfGhostSlot
-                  key="__ghost"
-                  ghostHeight={ghostHeight}
-                  label={
-                    dragGroup
-                      ? `${shelfGroupLabel(t, dragGroup.id)} · ${dragGroup.items.length}`
-                      : null
-                  }
-                  isLast={index === displayEntries.length - 1}
-                  registerSection={registerSection}
-                />
-              ) : (
-                <ShelfGroup
-                  key={entry.group.id}
-                  group={entry.group}
-                  groupsCount={groups.length}
-                  isLast={index === displayEntries.length - 1}
-                  collapsed={collapsed}
-                  onToggleSection={toggleSection}
-                  flashId={flashId}
-                  registerSection={registerSection}
-                  sectionDrag={sectionDrag}
-                  dragGroupId={dragGroupId}
-                  onOpenBook={onOpenBook}
-                  onDetails={setDetailsId}
-                  onRename={setRenamingId}
-                  onChangeCover={pickCoverFor}
-                  onDelete={setDeletingId}
-                  onToggleFavorite={onToggleFavorite}
-                  onOpenSeries={onOpenSeries}
-                  onRenameSeries={setRenamingSeries}
-                  onDeleteSeries={setDeletingSeries}
-                />
-              ),
-            )}
-          </div>
+          <>
+            <div
+              onDragOver={sectionDrag.onContainerDragOver}
+              onDrop={sectionDrag.onContainerDrop}
+            >
+              {displayEntries.map((entry, index) =>
+                entry.type === "ghost" ? (
+                  <ShelfGhostSlot
+                    key="__ghost"
+                    ghostHeight={ghostHeight}
+                    label={
+                      dragGroup
+                        ? `${shelfGroupLabel(t, dragGroup.id)} · ${dragGroup.items.length}`
+                        : null
+                    }
+                    isLast={index === displayEntries.length - 1}
+                    registerSection={registerSection}
+                  />
+                ) : (
+                  <ShelfGroup
+                    key={entry.group.id}
+                    group={entry.group}
+                    groupsCount={groups.length}
+                    isLast={index === displayEntries.length - 1}
+                    collapsed={collapsed}
+                    onToggleSection={toggleSection}
+                    flashId={flashId}
+                    registerSection={registerSection}
+                    sectionDrag={sectionDrag}
+                    dragGroupId={dragGroupId}
+                    onOpenBook={onOpenBook}
+                    onDetails={setDetailsId}
+                    onRename={setRenamingId}
+                    onChangeCover={pickCoverFor}
+                    onDelete={setDeletingId}
+                    onToggleFavorite={onToggleFavorite}
+                    onOpenSeries={onOpenSeries}
+                    onRenameSeries={setRenamingSeries}
+                    onDeleteSeries={setDeletingSeries}
+                  />
+                ),
+              )}
+            </div>
+            {cloud ? <CloudSection cloud={cloud} /> : null}
+          </>
         )}
       </PageContent>
       {dialogs}

@@ -12,6 +12,7 @@ import { toBlock, type MokuroBlock } from "../mokuro";
 //   keys/recovery.json                  the vault key wrapped by the recovery key
 //   devices/<deviceId>/state.bin        DeviceState: registers, the device's full merged view
 //   devices/<deviceId>/stats/<YYYY-MM>.bin  MonthStats: this device's OWN counters only
+//   devices/<deviceId>/books/<folder>/…     book packs this device uploaded (book-pack.ts)
 // A device writes ONLY under its own devices/<id>/ — no shared mutable file,
 // so neither provider needs conditional writes.
 
@@ -44,6 +45,12 @@ export interface BookRegs {
   /** A finished OCR pack of this manga volume: v = OCR engine version, d =
       the device that published it (devices/<d>/ocr/<folder>.bin). */
   ocr?: Reg<number>;
+  /** The book's own files in the cloud: v = pack format version (0 = taken
+      back), d = the device that uploaded them (devices/<d>/books/<folder>/). */
+  file?: Reg<number>;
+  /** Manga only: "keep this volume in the cloud" — EPUB and PDF always go,
+      manga volumes only on request (they are hundreds of MB each). */
+  keep?: Reg<boolean>;
 }
 
 export type DevicePlatform = "iphone" | "ipad" | "mac" | "android" | "windows" | "linux" | "other";
@@ -127,6 +134,10 @@ function parseBookRegs(value: unknown): BookRegs | undefined {
   if (deleted) regs.deleted = deleted;
   const ocr = reg(value.ocr, isNum);
   if (ocr) regs.ocr = ocr;
+  const file = reg(value.file, isNum);
+  if (file) regs.file = file;
+  const keep = reg(value.keep, isBool);
+  if (keep) regs.keep = keep;
   return regs;
 }
 

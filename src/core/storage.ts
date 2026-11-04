@@ -30,6 +30,8 @@ export {
   putMangaOcrDetect,
   putMangaOcrFinal,
   putMangaOcrRecords,
+  putMangaPageBlob,
+  putMangaRecord,
   putMangaVolume,
   putOcrModel,
 } from "./storage/manga";

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import i18n from "@/lib/i18n";
 import { useLatest } from "@/lib/use-latest";
 import type { Book } from "@/core/library";
+import type { PackDesc } from "@/core/sync/book-pack";
 import { loadReadingSettings, type ReadingSettings } from "@/core/reading-settings";
 import type { OpenedData } from "@/components/library/use-shelf";
 import type { SyncHost } from "./sync-bridge";
@@ -12,6 +13,22 @@ import { deviceLabel } from "./sync-labels";
 import { isAuthRedirect, syncEnabled } from "./sync-signal";
 
 type Controller = typeof import("./sync-controller");
+type Actions = typeof import("./sync-actions");
+type Cloud = typeof import("./sync-cloud");
+
+/** The shelf's view of the cloud (empty while sync is off). */
+export interface CloudShelf {
+  books: { key: string; desc: PackDesc }[];
+  /** content key → 0..1 */
+  downloads: Record<string, number>;
+  /** Local ids that can leave this device and stay in the cloud. */
+  inCloud: ReadonlySet<string>;
+  /** Resolves to the downloaded book's id (null: already on its way). */
+  download: (key: string) => Promise<string | null>;
+  removeDownload: (id: string) => void;
+}
+
+const NO_CLOUD: CloudShelf["inCloud"] = new Set();
 
 interface SyncDeps {
   books: Book[];
@@ -30,12 +47,19 @@ interface SyncDeps {
 // the reading settings schedules a round (debounced); the controller adds
 // the open/return/online/minute triggers itself. Returns a key that remounts
 // the reader when the "continue from 45% · iPhone" offer is taken.
-export function useSync(deps: SyncDeps): { readerKey: number } {
+export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf } {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const latest = useLatest(deps);
   const controller = useRef<Controller | null>(null);
+  const actions = useRef<Actions | null>(null);
+  const cloudModule = useRef<Cloud | null>(null);
   const [readerKey, setReaderKey] = useState(0);
+  const [cloudView, setCloudView] = useState<Pick<CloudShelf, "books" | "downloads" | "inCloud">>({
+    books: [],
+    downloads: {},
+    inCloud: NO_CLOUD,
+  });
 
   useEffect(() => {
     const redirect = isAuthRedirect(window.location.search);
@@ -57,6 +81,7 @@ export function useSync(deps: SyncDeps): { readerKey: number } {
             if (patch.favorite !== undefined) next.favorite = patch.favorite;
             if (patch.series !== undefined) next.series = patch.series ?? undefined;
             if (patch.volumeIndex !== undefined) next.volumeIndex = patch.volumeIndex ?? undefined;
+            if (patch.keep !== undefined) next.keepInCloud = patch.keep;
             if (patch.title !== undefined) {
               next.title = patch.title;
               const data = latest.current.dataRef.current.get(book.id);
@@ -69,14 +94,29 @@ export function useSync(deps: SyncDeps): { readerKey: number } {
       remove: (ids) => {
         for (const id of ids) latest.current.removeBook(id);
       },
+      add: (book) => {
+        latest.current.setBooks((prev) => (prev.some((b) => b.id === book.id) ? prev : [book, ...prev]));
+      },
       settingsApplied: (applied) => {
         if (applied.reading) latest.current.setReadingSettings(loadReadingSettings());
         if (applied.lang) void i18n.changeLanguage(applied.lang);
       },
     };
-    void import("./sync-controller").then(async (sync) => {
+    let unsubscribe = () => {};
+    void Promise.all([import("./sync-controller"), import("./sync-actions"), import("./sync-cloud")]).then(async ([sync, post, cloud]) => {
       if (!alive) return;
       controller.current = sync;
+      actions.current = post;
+      cloudModule.current = cloud;
+      let last: ReturnType<typeof sync.getView> | null = null;
+      const mirror = () => {
+        const view = sync.getView();
+        if (last && last.cloud === view.cloud && last.downloads === view.downloads && last.inCloud === view.inCloud) return;
+        last = view;
+        setCloudView({ books: view.cloud, downloads: view.downloads, inCloud: new Set(view.inCloud) });
+      };
+      unsubscribe = sync.subscribe(mirror);
+      mirror();
       detach = sync.attachHost(host);
       await sync.init();
       if (redirect) {
@@ -92,6 +132,7 @@ export function useSync(deps: SyncDeps): { readerKey: number } {
     return () => {
       alive = false;
       detach();
+      unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -105,7 +146,7 @@ export function useSync(deps: SyncDeps): { readerKey: number } {
   // Opening a book: offer the furthest place another device really read.
   const openedId = deps.openedBook?.id;
   useEffect(() => {
-    const sync = controller.current;
+    const sync = actions.current;
     const book = latest.current.openedBook;
     if (!sync || !book) return;
     let alive = true;
@@ -130,5 +171,12 @@ export function useSync(deps: SyncDeps): { readerKey: number } {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openedId]);
 
-  return { readerKey };
+  const cloud: CloudShelf = {
+    ...cloudView,
+    download: async (key) => (cloudModule.current ? cloudModule.current.download(key) : null),
+    removeDownload: (id) => {
+      void cloudModule.current?.removeDownload(id);
+    },
+  };
+  return { readerKey, cloud };
 }

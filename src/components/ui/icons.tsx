@@ -298,6 +298,11 @@ export const CloudArrowUp = glyph("CloudArrowUp", {
   cut: "M8 12V8.25M6.25 10L8 8.25L9.75 10",
 });
 
+export const CloudArrowDown = glyph("CloudArrowDown", {
+  fill: cloud,
+  cut: "M8 8.25V12M6.25 10.25L8 12L9.75 10.25",
+});
+
 export const CloudCheck = glyph("CloudCheck", {
   fill: cloud,
   cut: "M5.75 10.5L7.25 12L10.25 9",

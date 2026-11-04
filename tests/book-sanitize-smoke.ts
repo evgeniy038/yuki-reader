@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   const epubPath = join(dir, "hostile.epub");
   writeFileSync(epubPath, hostileEpub());
 
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ channel: "chromium", headless: true });
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();

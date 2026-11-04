@@ -56,6 +56,19 @@ export async function putMangaVolume(
   ]);
 }
 
+/** One page blob on its own — a download lands a volume page by page, so a
+    300 MB volume never sits in a phone's memory whole. The record goes
+    last (putMangaRecord): until then the volume doesn't exist. */
+export async function putMangaPageBlob(id: string, index: number, blob: Blob): Promise<void> {
+  const db = await open();
+  await db.put(MANGA_PAGES, blob, `${id}/${index}`);
+}
+
+export async function putMangaRecord(record: MangaRecord): Promise<void> {
+  const db = await open();
+  await db.put(MANGA, record);
+}
+
 export async function loadManga(id: string): Promise<MangaRecord | undefined> {
   const db = await open();
   return db.get(MANGA, id);

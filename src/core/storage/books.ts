@@ -135,6 +135,7 @@ export async function updateBookMeta(
       | "series"
       | "volumeIndex"
       | "favorite"
+      | "keepInCloud"
     >
   >,
 ): Promise<void> {

@@ -161,7 +161,7 @@ export default function App() {
   });
 
   // Device sync (lazy: loads only on devices that sync) — see use-sync.ts.
-  const { readerKey } = useSync({
+  const { readerKey, cloud } = useSync({
     books: shelf.books,
     shelfReady: shelf.shelfReady,
     setBooks: shelf.setBooks,
@@ -280,6 +280,9 @@ export default function App() {
                   onDeleteSeries={shelf.removeSeries}
                   onReorder={shelf.setVolumeOrder}
                   onAddVolumes={shelf.importManga}
+                  onKeepInCloud={shelf.setKeepInCloud}
+                  inCloud={cloud.inCloud}
+                  onRemoveDownload={cloud.removeDownload}
                 />
               </Suspense>
             }
@@ -305,6 +308,7 @@ export default function App() {
                 }
                 onRenameSeries={shelf.renameSeries}
                 onDeleteSeries={shelf.removeSeries}
+                cloud={cloud}
               />
             }
           />

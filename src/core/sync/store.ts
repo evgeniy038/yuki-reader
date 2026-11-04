@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { VaultKeys } from "./crypto";
+import { parsePackManifest, type PackManifest } from "./book-pack";
 import type { JoinMode, Shadow } from "./merge";
 import {
   parseDeviceInfo,
@@ -51,6 +52,8 @@ export interface SyncStatus {
   error?: "network" | "auth" | "quota" | "vault" | "unknown";
   /** Tombstones held back by the mass-deletion guard (local ids). */
   heldDeletions: string[];
+  /** The cloud ran out of space for book files (reading sync still works). */
+  full?: boolean;
 }
 
 /** Values the first round overwrote, kept for "undo the first sync". */
@@ -218,6 +221,7 @@ export function createSyncStore(dbName = "yuki-sync") {
         bytes: isNum(v.bytes) ? v.bytes : 0,
         heldDeletions: Array.isArray(v.heldDeletions) ? v.heldDeletions.filter(isStr) : [],
         ...(error ? { error } : {}),
+        ...(v.full === true ? { full: true } : {}),
       };
     },
     setStatus: (status: SyncStatus) => put("status", status),
@@ -269,11 +273,27 @@ export function createSyncStore(dbName = "yuki-sync") {
     },
     setRecoveryToShow: (key: string | null) => put("recoveryToShow", key),
 
+    /** Cloud books' manifests (covers, sizes) by content key, with the
+        `file` register stamp they belong to — fetched once per pack. */
+    async packManifests(): Promise<Map<BookKey, { t: number; manifest: PackManifest }>> {
+      const v = await get("packManifests");
+      const out = new Map<BookKey, { t: number; manifest: PackManifest }>();
+      if (!isObject(v)) return out;
+      for (const [key, entry] of Object.entries(v)) {
+        if (!isObject(entry) || !isNum(entry.t)) continue;
+        const manifest = parsePackManifest(entry.manifest);
+        if (manifest) out.set(key, { t: entry.t, manifest });
+      }
+      return out;
+    },
+    setPackManifests: (value: Map<BookKey, { t: number; manifest: PackManifest }>) =>
+      put("packManifests", Object.fromEntries(value)),
+
     /** Drop everything tied to the current vault (keeps the device and the
         provider session) — before starting over with a new vault. */
     async resetVaultData(): Promise<void> {
       const database = await db();
-      for (const key of ["vault", "shadow", "published", "remotes", "remoteStats", "publishedStats", "snapshot", "status", "recoveryToShow", "hlc", "ocrApplied"]) {
+      for (const key of ["vault", "shadow", "published", "remotes", "remoteStats", "publishedStats", "snapshot", "status", "recoveryToShow", "hlc", "ocrApplied", "packManifests"]) {
         await database.delete(KV, key);
       }
     },

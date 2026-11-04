@@ -1,8 +1,10 @@
 import type { Book } from "@/core/library";
 import type { MokuroBlock } from "@/core/mokuro";
 import {
+  loadBookContent,
   loadManga,
   loadMangaOcr,
+  loadMangaPageBlob,
   loadStats,
   OCR_ENGINE,
   putMangaOcrRecords,
@@ -35,6 +37,8 @@ export interface SyncHost {
   patch(patches: BookPatch[]): void;
   /** The shelf's own removal (storage, payload map, OCR queue). */
   remove(ids: string[]): void;
+  /** A book that just arrived from the cloud (already in storage). */
+  add(book: Book): void;
   settingsApplied(applied: AppliedSettings): void;
 }
 
@@ -49,6 +53,7 @@ export function toLocalBook(book: Book, key: BookKey): LocalBook {
     ...(book.lastReadAt !== undefined ? { lastReadAt: book.lastReadAt } : {}),
     ...(book.series !== undefined ? { series: book.series } : {}),
     ...(book.volumeIndex !== undefined ? { volumeIndex: book.volumeIndex } : {}),
+    ...(book.keepInCloud ? { keep: true } : {}),
   };
 }
 
@@ -58,7 +63,8 @@ const sameShelfFields = (a: LocalBook, b: LocalBook): boolean =>
   a.favorite === b.favorite &&
   a.title === b.title &&
   a.series === b.series &&
-  a.volumeIndex === b.volumeIndex;
+  a.volumeIndex === b.volumeIndex &&
+  a.keep === b.keep;
 
 /** Storage writes for patches (the on-screen state is the host's job). */
 export async function writePatches(patches: BookPatch[], current: Map<string, Book>): Promise<void> {
@@ -74,6 +80,7 @@ export async function writePatches(patches: BookPatch[], current: Map<string, Bo
     if (patch.title !== undefined) meta.title = patch.title;
     if (patch.series !== undefined) meta.series = patch.series ?? undefined;
     if (patch.volumeIndex !== undefined) meta.volumeIndex = patch.volumeIndex ?? undefined;
+    if (patch.keep !== undefined) meta.keepInCloud = patch.keep;
     if (Object.keys(meta).length > 0) await updateBookMeta(patch.id, meta);
   }
 }
@@ -154,5 +161,15 @@ export async function createBridge(host: SyncHost): Promise<LocalBridge> {
     ocrEngine: OCR_ENGINE,
     finishedOcr,
     applyOcr,
+    packSource: async (id) => {
+      const book = host.books().find((b) => b.id === id);
+      if (!book) return null;
+      const content = await loadBookContent(id);
+      if (!content) return null;
+      const record = { ...book, ...content };
+      if (book.format !== "manga") return { record };
+      const manga = await loadManga(id);
+      return manga ? { record, manga: { record: manga, page: (index) => loadMangaPageBlob(id, index) } } : null;
+    },
   };
 }

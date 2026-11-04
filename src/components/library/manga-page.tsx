@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
-import { CaretLeft, DotsThree, FolderPlus, PencilSimple, Plus, Trash } from "@/components/ui/icons";
+import { CaretLeft, CloudArrowUp, CloudSlash, DotsThree, FolderPlus, PencilSimple, Plus, Trash } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { normalizeSeriesKey } from "@/core/mokuro";
@@ -38,7 +38,9 @@ import {
 // number; drag a tile onto another to reorder (positions persist as the
 // volumes' numbers). The context menu carries volume actions — open, rename,
 // move to another series, delete. "Add volume" imports straight INTO this
-// series, whatever the file names say.
+// series, whatever the file names say. With sync on, the series menu keeps
+// the volumes in the cloud too, and a volume already there can leave this
+// device without leaving the library.
 export function MangaPage({
   books,
   shelfReady,
@@ -53,6 +55,9 @@ export function MangaPage({
   onDeleteSeries,
   onReorder,
   onAddVolumes,
+  onKeepInCloud,
+  inCloud,
+  onRemoveDownload,
 }: {
   books: Book[];
   shelfReady: boolean;
@@ -67,6 +72,12 @@ export function MangaPage({
   onDeleteSeries: (series: string) => void;
   onReorder: (orderedIds: string[]) => void;
   onAddVolumes: (items: MangaInputItem[], targetSeries: string) => void;
+  /** Keep (or stop keeping) these volumes' files in the cloud. */
+  onKeepInCloud?: (ids: string[], keep: boolean) => void;
+  /** Volumes whose files are in the cloud. */
+  inCloud?: ReadonlySet<string>;
+  /** Free this device of a volume that stays in the cloud. */
+  onRemoveDownload?: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -90,6 +101,7 @@ export function MangaPage({
     [books, seriesKey],
   );
   const seriesName = volumes[0]?.series ?? "";
+  const keepAll = volumes.length > 0 && volumes.every((volume) => volume.keepInCloud === true);
 
   // Every series on the shelf (for the move dialog), minus this one.
   const otherSeries = useMemo(
@@ -196,6 +208,15 @@ export function MangaPage({
                 <FolderPlus />
                 {t("manga.seriesMenu.move")}
               </DropdownMenuItem>
+              {onKeepInCloud && syncEnabled() ? (
+                <DropdownMenuItem
+                  data-keep-in-cloud={keepAll ? "on" : "off"}
+                  onClick={() => onKeepInCloud(volumes.map((volume) => volume.id), !keepAll)}
+                >
+                  {keepAll ? <CloudSlash /> : <CloudArrowUp />}
+                  {t(keepAll ? "manga.seriesMenu.keepInCloudOff" : "manga.seriesMenu.keepInCloud")}
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
@@ -251,12 +272,20 @@ export function MangaPage({
                     : undefined
                 }
                 menuExtra={
-                  <ContextMenuItem
-                    onClick={() => setMovingId(volume.id)}
-                  >
-                    <FolderPlus />
-                    {t("manga.moveToSeries")}
-                  </ContextMenuItem>
+                  <>
+                    <ContextMenuItem
+                      onClick={() => setMovingId(volume.id)}
+                    >
+                      <FolderPlus />
+                      {t("manga.moveToSeries")}
+                    </ContextMenuItem>
+                    {onRemoveDownload && inCloud?.has(volume.id) ? (
+                      <ContextMenuItem onClick={() => onRemoveDownload(volume.id)}>
+                        <CloudSlash />
+                        {t("library.menu.removeDownload")}
+                      </ContextMenuItem>
+                    ) : null}
+                  </>
                 }
                 onOpen={() => {
                   if (!gatedIds.has(volume.id)) onOpenBook(volume.id);
