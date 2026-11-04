@@ -3,6 +3,12 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.3] - 2026-11-04
+
+- Sync: fixed the phone's page crashing and reloading over and over ("a problem repeatedly occurred") — sync no longer loads every book into memory on each start, so reading and syncing stay light even with a big library
+- Sync: a phone no longer re-sends books your Mac already put in the cloud, which was eating its memory and battery after the last update
+- Sync: a big manga volume coming straight from the Mac arrives at the pace the phone can store it, instead of piling up in memory
+
 ## [1.4.2] - 2026-11-04
 
 - Sync: getting a book straight from your Mac no longer tells you to open yuki there while it's already open and answering — the tile says "Calling Mac…", then "Connecting…", and asks you to open yuki only if nobody picks up
