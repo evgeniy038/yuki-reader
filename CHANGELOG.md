@@ -3,6 +3,12 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.8] - 2026-11-04
+
+- Manga text recognition reads crowded speech bubbles, long captions and small print far more accurately — blocks too dense to read in one go are now read column by column
+- Finds more of the small text — asides, sound effects, page numbers — and colored pages read as cleanly as black-and-white ones
+- Manga you already imported is quietly read again with the improved recognition in the background
+
 ## [1.3.7] - 2026-11-03
 
 - Phone: reading is made for your thumb now — tap the outer edges to turn pages (left goes forward in Japanese books and manga, right in English ones), tap the middle for the controls, or just swipe
