@@ -62,7 +62,7 @@ export function NavPill({
                   : "text-default hover:bg-muted-surface hover:text-strong"
               }`}
             >
-              <Icon className="size-4" />
+              <Icon className="size-4" filled={active} />
               <span className="text-xs leading-none">{label}</span>
             </button>
           );

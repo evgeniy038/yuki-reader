@@ -55,7 +55,7 @@ export function SeriesTile({
               data-book-favorite=""
               className="absolute right-2.5 top-0 block h-[41px] w-7 bg-primary-gradient bookmark-ribbon"
             >
-              <Bookmark className="relative top-[9px] mx-auto size-4 text-white" />
+              <Bookmark filled className="relative top-[9px] mx-auto size-4 text-white" />
             </span>
           ) : null}
         </CoverFrame>

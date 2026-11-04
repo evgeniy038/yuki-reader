@@ -1,7 +1,9 @@
 // Node unit test for yuki's icon set (src/components/ui/icons.tsx): every
-// glyph sits on the 16-unit grid in one color, and the knockout masks stay
-// unique when many icons share a page — a shared mask id would punch one
-// icon's details into every other icon. Run: pnpm tsx tests/icons-unit.ts
+// glyph sits on the 16-unit grid in one color in both weights — an outline
+// at rest, the solid body with `filled` (active states) — and the knockout
+// masks stay unique when many icons share a page: a shared mask id would
+// punch one icon's details into every other icon.
+// Run: pnpm tsx tests/icons-unit.ts
 
 import { strict as assert } from "node:assert";
 import { createElement } from "react";
@@ -15,7 +17,7 @@ assert.ok(names.length >= 29, `expected the full set, got ${names.length}`);
 {
   let cuts = 0;
   for (const name of names) {
-    const html = renderToStaticMarkup(createElement(icons[name]));
+    const html = renderToStaticMarkup(createElement(icons[name], { filled: true }));
     assert.match(html, /^<svg[^>]* viewBox="0 0 16 16"/, `${name}: 16-unit grid`);
     assert.match(html, /aria-hidden="true"/, `${name}: decorative`);
     assert.ok(html.includes("<path"), `${name}: draws something`);
@@ -35,14 +37,42 @@ assert.ok(names.length >= 29, `expected the full set, got ${names.length}`);
   console.log(`  ✓ ${names.length} glyphs: 16 grid, currentColor, masks wired`);
 }
 
+// --- outline at rest: strokes, no masks, one color; differs from filled -----
+{
+  let outlined = 0;
+  for (const name of names) {
+    const rest = renderToStaticMarkup(createElement(icons[name]));
+    const active = renderToStaticMarkup(createElement(icons[name], { filled: true }));
+    assert.match(rest, /^<svg[^>]* viewBox="0 0 16 16"/, `${name}: outline on the 16 grid`);
+    assert.ok(!rest.includes("<mask"), `${name}: outline needs no knockout`);
+    assert.ok(rest.includes('stroke="currentColor"') || rest.includes("<path"), `${name}: outline draws`);
+    const colors = new Set(
+      [...rest.matchAll(/(?:fill|stroke)="([^"]+)"/g)].map((m) => m[1]).filter((c) => c !== "none"),
+    );
+    assert.deepEqual([...colors], ["currentColor"], `${name}: outline is currentColor only`);
+    if (rest !== active) outlined++;
+  }
+  // Every glyph changes weight; dots stay dots, but their lines thin out.
+  assert.equal(outlined, names.length, `all ${names.length} glyphs have two weights (${outlined})`);
+  // A body glyph really is hollow at rest and solid when active.
+  const star = renderToStaticMarkup(createElement(icons.Star));
+  assert.match(star, /fill="none"[^>]*stroke="currentColor"/, "Star at rest is a stroke");
+  assert.doesNotMatch(
+    renderToStaticMarkup(createElement(icons.Star, { filled: true })),
+    /stroke=/,
+    "Star filled is a solid body",
+  );
+  console.log(`  ✓ ${outlined} glyphs: outline at rest, solid when filled`);
+}
+
 // --- many icons in one tree: mask ids never collide -------------------------
 {
   const tree = createElement(
     "div",
     null,
     names.flatMap((name) => [
-      createElement(icons[name], { key: `${name}-a` }),
-      createElement(icons[name], { key: `${name}-b` }),
+      createElement(icons[name], { key: `${name}-a`, filled: true }),
+      createElement(icons[name], { key: `${name}-b`, filled: true }),
     ]),
   );
   const html = renderToStaticMarkup(tree);

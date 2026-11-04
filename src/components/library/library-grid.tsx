@@ -61,7 +61,7 @@ export function LibraryGrid({
             onToggleFavorite={() => onToggleFavorite(item.book.id)}
             menuExtra={
               <ContextMenuItem onClick={() => onToggleFavorite(item.book.id)}>
-                <Star />
+                <Star filled={item.book.favorite} />
                 {t(item.book.favorite ? "library.menu.unpin" : "library.menu.pin")}
               </ContextMenuItem>
             }

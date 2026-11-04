@@ -106,7 +106,7 @@ export function BackupSection() {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
       toast.success(t("settings.backup.exported"), {
-        icon: <CheckCircle className="size-4 text-primary" />,
+        icon: <CheckCircle filled className="size-4 text-primary" />,
       });
       setOpen(null);
     } catch (cause) {
@@ -134,7 +134,7 @@ export function BackupSection() {
       toast.success(
         t("settings.backup.imported", { progress: summary.progress }),
         {
-          icon: <CheckCircle className="size-4 text-primary" />,
+          icon: <CheckCircle filled className="size-4 text-primary" />,
         },
       );
       setOpen(null);

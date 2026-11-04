@@ -117,10 +117,13 @@ with a 150ms transform animation. A discrete numeric value uses a
 gray track, primary-gradient fill, white thumb), a binary one a **switch**
 (`ui/switch.tsx`, macOS-style toggle). Interface font — Inter (Variable, 400
 for body, 500 for headings; book text in the reader uses separate book
-typefaces). Icons — yuki's own soft-solid set (`ui/icons.tsx`) on a 16-unit
-grid, interface size 16 (`icon-nav`): filled bodies with radius 1–1.75,
-line glyphs as 2px round strokes, details knocked out with a 1.5px cut,
-one color (`currentColor`) — states come from the parent's text color.
+typefaces). Icons — yuki's own set (`ui/icons.tsx`) on a 16-unit grid,
+interface size 16 (`icon-nav`), in two weights of one family: at rest an
+**outline** (1.5px round strokes), and the **filled** weight (solid bodies
+with radius 1–1.75, details knocked out with a 1.5px cut) only for what is
+active — the current section in the dock, an open reader panel or the
+settings popover, a pinned book, a finished task. One color
+(`currentColor`) — hover and disabled come from the parent's text color.
 Floating surfaces (menus, popups, popovers) appear the same way: a short
 fade + a light zoom from their origin; under reduced-motion all moving
 animation is muted globally.

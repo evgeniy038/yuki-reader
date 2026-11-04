@@ -200,7 +200,7 @@ export function ReaderChrome({
             aria-label={t("reader.toc")}
             aria-pressed={panel === "toc"}
           >
-            <List />
+            <List filled={panel === "toc"} />
           </Button>
         ) : null}
         {showSearch ? (
@@ -214,7 +214,7 @@ export function ReaderChrome({
             aria-label={t("reader.search")}
             aria-pressed={panel === "search"}
           >
-            <MagnifyingGlass />
+            <MagnifyingGlass filled={panel === "search"} />
           </Button>
         ) : null}
         <Button
@@ -227,7 +227,7 @@ export function ReaderChrome({
           aria-label={t("reader.settings")}
           aria-pressed={settingsOpen}
         >
-          <Gear />
+          <Gear filled={settingsOpen} />
         </Button>
         {canFullscreen ? (
           <Button

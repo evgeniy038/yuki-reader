@@ -135,7 +135,7 @@ export function DictionaryLibrarySection() {
     );
     if (installed) {
       toast.success(t("settings.dictionaries.ready", { title: item.title }), {
-        icon: <CheckCircle className="size-4 text-primary" />,
+        icon: <CheckCircle filled className="size-4 text-primary" />,
       });
     }
   };

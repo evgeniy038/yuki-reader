@@ -123,6 +123,7 @@ export function BookTile({
           }`}
         >
           <Bookmark
+            filled
             className={`relative mx-auto top-[22px] block size-4 text-white transition-[opacity,transform] duration-200 ${
               book.favorite
                 ? "translate-y-0 opacity-100 delay-100"

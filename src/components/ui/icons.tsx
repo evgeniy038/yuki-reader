@@ -1,41 +1,101 @@
 import { useId, type SVGProps } from "react";
 
-// yuki's own icon set — one soft-solid family, drawn for a 16-unit grid and
-// rendered at 16px (`icon-nav`), so every edge lands on the pixel grid.
-// The rules every glyph follows:
+// yuki's own icon set — one family in two weights, drawn for a 16-unit grid
+// and rendered at 16px (`icon-nav`), so every edge lands on the pixel grid.
+// At rest an icon is an OUTLINE; `filled` switches it to the solid body —
+// only for what is active right now (the current tab, an open panel, a
+// pinned book, a finished task). The rules every glyph follows:
 // - live area 1…15 (1px padding), optical weight balanced by eye;
-// - objects are filled bodies, corner radius 1–1.75;
-// - line glyphs (plus, carets, arrows) are 2px strokes with round caps and
-//   joins — the same weight as a filled body's edge;
-// - details are knocked out of the body with a 1.5px cut (a mask), never
-//   drawn in a second color;
-// - one color: currentColor. States (hover, active, disabled) come from
-//   the text color of the parent, never from a second asset.
+// - outline: 1.5px round strokes; the body is drawn on a slightly smaller
+//   grid (×0.9 about the center) so the stroke's outer edge sits on the
+//   same 1px padding the solid body fills;
+// - solid: filled bodies, corner radius 1–1.75; details knocked out with a
+//   1.5px cut (a mask), never drawn in a second color;
+// - line glyphs (plus, carets, arrows) are round strokes in both weights —
+//   1.5px at rest, 2px when filled;
+// - one color: currentColor. Hover and disabled come from the text color of
+//   the parent, never from a second asset.
 // Export names mirror the Phosphor names they replaced.
 
 type Glyph = {
   // filled body, evenodd
   fill?: string;
-  // 2px round stroke
+  // round stroke
   line?: string;
-  // 1.5px knockout through fill and line
+  // 1.5px knockout through fill and line (solid weight)
   cut?: string;
+  // Outline weight, when it can't be derived (the default strokes `fill`
+  // and `cut` and keeps `line`): `solid` stays filled (dots), `stroke` is
+  // the outlined body and its details.
+  outline?: { solid?: string; stroke?: string; line?: string };
 };
 
-type IconProps = Omit<SVGProps<SVGSVGElement>, "children">;
+type IconProps = Omit<SVGProps<SVGSVGElement>, "children"> & {
+  /** The solid weight — for an active state only. */
+  filled?: boolean;
+};
 
-function Icon({ glyph, ...props }: { glyph: Glyph } & IconProps) {
+// Outline bodies shrink 0.9 about the center; the stroke compensates so it
+// still renders 1.5 units wide.
+const OUTLINE_SCALE = 0.9;
+const OUTLINE_STROKE = 1.5;
+
+function Icon({ glyph, filled = false, ...props }: { glyph: Glyph } & IconProps) {
   const maskId = useId();
+  const svgProps = {
+    viewBox: "0 0 16 16",
+    width: "1em",
+    height: "1em",
+    fill: "currentColor",
+    "aria-hidden": true,
+    focusable: "false" as const,
+    ...props,
+  };
+  if (!filled) {
+    const o = glyph.outline ?? {
+      stroke: [glyph.fill, glyph.cut].filter(Boolean).join(""),
+      line: glyph.line,
+    };
+    const body = o.solid || o.stroke;
+    const scaled = body ? (
+      <g transform={`translate(8 8) scale(${OUTLINE_SCALE}) translate(-8 -8)`}>
+        {o.solid ? <path d={o.solid} fillRule="evenodd" /> : null}
+        {o.stroke ? (
+          <path
+            d={o.stroke}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={OUTLINE_STROKE / OUTLINE_SCALE}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : null}
+        {o.line ? (
+          <path
+            d={o.line}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={OUTLINE_STROKE / OUTLINE_SCALE}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : null}
+      </g>
+    ) : o.line ? (
+      // Line glyphs keep their full size.
+      <path
+        d={o.line}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={OUTLINE_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ) : null;
+    return <svg {...svgProps}>{scaled}</svg>;
+  }
   return (
-    <svg
-      viewBox="0 0 16 16"
-      width="1em"
-      height="1em"
-      fill="currentColor"
-      aria-hidden
-      focusable="false"
-      {...props}
-    >
+    <svg {...svgProps}>
       {glyph.cut ? (
         <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
           <rect width="16" height="16" fill="white" />
@@ -83,11 +143,23 @@ export const Books = glyph("Books", {
     "M6.25 1.5H7.5A1 1 0 0 1 8.5 2.5V13.5A1 1 0 0 1 7.5 14.5H6.25A1 1 0 0 1 5.25 13.5V2.5A1 1 0 0 1 6.25 1.5Z" +
     "M9.791 3.582A1 1 0 0 1 10.582 2.409L11.661 2.199A1 1 0 0 1 12.834 2.99L14.742 12.806A1 1 0 0 1 13.951 13.979L12.871 14.189A1 1 0 0 1 11.699 13.398Z",
   cut: "M0 11.5H9M10.336 11.625L15.342 10.652",
+  outline: {
+    stroke:
+      "M2 3.5H3.25A1 1 0 0 1 4.25 4.5V13.5A1 1 0 0 1 3.25 14.5H2A1 1 0 0 1 1 13.5V4.5A1 1 0 0 1 2 3.5Z" +
+      "M6.25 1.5H7.5A1 1 0 0 1 8.5 2.5V13.5A1 1 0 0 1 7.5 14.5H6.25A1 1 0 0 1 5.25 13.5V2.5A1 1 0 0 1 6.25 1.5Z" +
+      "M9.791 3.582A1 1 0 0 1 10.582 2.409L11.661 2.199A1 1 0 0 1 12.834 2.99L14.742 12.806A1 1 0 0 1 13.951 13.979L12.871 14.189A1 1 0 0 1 11.699 13.398Z",
+    line: "M1 11.5H4.25M5.25 11.5H8.5M11.25 11.5L14.3 10.9",
+  },
 });
 
 export const Book = glyph("Book", {
   fill: "M4.25 1H11.75A1.75 1.75 0 0 1 13.5 2.75V13.25A1.75 1.75 0 0 1 11.75 15H4.25A1.75 1.75 0 0 1 2.5 13.25V2.75A1.75 1.75 0 0 1 4.25 1Z",
   cut: "M5.25 0V16",
+  outline: {
+    stroke:
+      "M4.25 1H11.75A1.75 1.75 0 0 1 13.5 2.75V13.25A1.75 1.75 0 0 1 11.75 15H4.25A1.75 1.75 0 0 1 2.5 13.25V2.75A1.75 1.75 0 0 1 4.25 1Z" +
+      "M5.25 1V15",
+  },
 });
 
 export const BookOpen = glyph("BookOpen", {
@@ -114,6 +186,10 @@ export const ChartLine = glyph("ChartLine", {
 export const List = glyph("List", {
   fill: ring(2.75, 4, 1.25) + ring(2.75, 8, 1.25) + ring(2.75, 12, 1.25),
   line: "M6.5 4H13.5M6.5 8H13.5M6.5 12H13.5",
+  outline: {
+    solid: ring(2.75, 4, 1.25) + ring(2.75, 8, 1.25) + ring(2.75, 12, 1.25),
+    line: "M6.5 4H13.5M6.5 8H13.5M6.5 12H13.5",
+  },
 });
 
 export const MagnifyingGlass = glyph("MagnifyingGlass", {
@@ -137,6 +213,12 @@ export const Trash = glyph("Trash", {
     "M6 3V2.25A1 1 0 0 1 7 1.25H9A1 1 0 0 1 10 2.25V3Z" +
     "M3.298 6.544A0.5 0.5 0 0 1 3.796 6H12.204A0.5 0.5 0 0 1 12.702 6.544L12.121 13.132A1.5 1.5 0 0 1 10.627 14.5H5.373A1.5 1.5 0 0 1 3.879 13.132Z",
   cut: "M6.5 8.25V12M9.5 8.25V12",
+  outline: {
+    stroke:
+      "M3.298 6.544A0.5 0.5 0 0 1 3.796 6H12.204A0.5 0.5 0 0 1 12.702 6.544L12.121 13.132A1.5 1.5 0 0 1 10.627 14.5H5.373A1.5 1.5 0 0 1 3.879 13.132Z" +
+      "M6.5 8.25V12M9.5 8.25V12",
+    line: "M2.5 3.875H13.5M6 3.875V2.25A1 1 0 0 1 7 1.25H9A1 1 0 0 1 10 2.25V3.875",
+  },
 });
 
 export const PencilSimple = glyph("PencilSimple", {
@@ -148,6 +230,12 @@ export const PencilSimple = glyph("PencilSimple", {
 export const Image = glyph("Image", {
   fill: "M2.75 2.5H13.25A1.75 1.75 0 0 1 15 4.25V11.75A1.75 1.75 0 0 1 13.25 13.5H2.75A1.75 1.75 0 0 1 1 11.75V4.25A1.75 1.75 0 0 1 2.75 2.5Z",
   cut: "M1 12.5L5 8.5L8.5 12L10.5 10L14.5 14M10.5 5.75A0.5 0.5 0 1 0 11.5 5.75A0.5 0.5 0 1 0 10.5 5.75Z",
+  outline: {
+    stroke:
+      "M2.75 2.5H13.25A1.75 1.75 0 0 1 15 4.25V11.75A1.75 1.75 0 0 1 13.25 13.5H2.75A1.75 1.75 0 0 1 1 11.75V4.25A1.75 1.75 0 0 1 2.75 2.5Z" +
+      ring(11, 5.75, 1),
+    line: "M1 12L5 8.25L8.25 11.5L10.25 9.5L13.75 13",
+  },
 });
 
 export const FileArrowUp = glyph("FileArrowUp", {
@@ -170,6 +258,7 @@ export const UploadSimple = glyph("UploadSimple", {
 
 export const DotsThree = glyph("DotsThree", {
   fill: ring(3, 8, 1.5) + ring(8, 8, 1.5) + ring(13, 8, 1.5),
+  outline: { solid: ring(3, 8, 1.5) + ring(8, 8, 1.5) + ring(13, 8, 1.5) },
 });
 
 export const DotsSixVertical = glyph("DotsSixVertical", {
@@ -177,6 +266,12 @@ export const DotsSixVertical = glyph("DotsSixVertical", {
     ring(5.75, 3.5, 1.25) + ring(10.25, 3.5, 1.25) +
     ring(5.75, 8, 1.25) + ring(10.25, 8, 1.25) +
     ring(5.75, 12.5, 1.25) + ring(10.25, 12.5, 1.25),
+  outline: {
+    solid:
+      ring(5.75, 3.5, 1.25) + ring(10.25, 3.5, 1.25) +
+      ring(5.75, 8, 1.25) + ring(10.25, 8, 1.25) +
+      ring(5.75, 12.5, 1.25) + ring(10.25, 12.5, 1.25),
+  },
 });
 
 // ── Status
@@ -212,6 +307,7 @@ export const CloudSlash = glyph("CloudSlash", {
   fill: cloud,
   line: "M2.25 2.25L13.75 13.75",
   cut: "M3.5 1L15 12.5",
+  outline: { stroke: cloud, line: "M2.25 2.25L13.75 13.75" },
 });
 
 export const ArrowsClockwise = glyph("ArrowsClockwise", {
