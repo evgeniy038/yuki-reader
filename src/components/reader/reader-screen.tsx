@@ -139,6 +139,7 @@ export function ReaderScreen({
   const controlsProps = {
     controlsVisible: controls,
     onControlsChange: setControls,
+    turnAnimation: settings.pageTurnAnimation,
   };
 
   return (

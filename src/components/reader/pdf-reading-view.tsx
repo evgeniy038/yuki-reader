@@ -55,6 +55,7 @@ export function PdfReadingView({
   onOutlineChange,
   onProgress,
   controlsVisible = false,
+  turnAnimation = true,
   onControlsChange,
 }: {
   pdfBytes: Uint8Array;
@@ -70,6 +71,8 @@ export function PdfReadingView({
   onProgress?: (progress: number, absolute: number, pageCount: number) => void;
   /** Touch controls are up (the scrubber bar replaces the page chip). */
   controlsVisible?: boolean;
+  /** Touch turns slide (the page-turn animation setting). */
+  turnAnimation?: boolean;
   onControlsChange?: (visible: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -78,6 +81,7 @@ export function PdfReadingView({
   const renderTokenRef = useRef(0);
   const onProgressRef = useLatest(onProgress);
   const onOutlineChangeRef = useLatest(onOutlineChange);
+  const turnAnimationRef = useLatest(turnAnimation);
 
   const { doc, numPages, restoredPage, failed, outline } = usePdfDocument(
     pdfBytes,
@@ -187,7 +191,7 @@ export function PdfReadingView({
         });
         pageHostRef.current.replaceChildren(...wrappers);
         if (pendingEnterRef.current !== null) {
-          playPageEnter(pageHostRef.current, pendingEnterRef.current, false);
+          playPageEnter(pageHostRef.current, pendingEnterRef.current, false, turnAnimationRef.current);
           pendingEnterRef.current = null;
         }
         // Test seam: the first page number the on-screen canvas actually shows.
@@ -231,6 +235,7 @@ export function PdfReadingView({
     enabled: doc !== null,
     rtl: false,
     enterOnStep: false,
+    animate: turnAnimation,
     onStep: (dir) => {
       const before = pageRef.current;
       goTo(before + stepFor(dir));

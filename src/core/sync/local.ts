@@ -35,18 +35,20 @@ export const SYNCED_SETTINGS = [
   "reading.furigana",
   "reading.theme",
   "reading.mangaFirstPageAsCover",
+  "reading.pageTurnAnimation",
   "goal",
   "shelf.sort",
   "shelf.groupOrder",
 ] as const;
 
-type ReadingField = "fontFamily" | "fontWeight" | "furigana" | "theme" | "mangaFirstPageAsCover";
+type ReadingField = "fontFamily" | "fontWeight" | "furigana" | "theme" | "mangaFirstPageAsCover" | "pageTurnAnimation";
 const READING_FIELDS: readonly ReadingField[] = [
   "fontFamily",
   "fontWeight",
   "furigana",
   "theme",
   "mangaFirstPageAsCover",
+  "pageTurnAnimation",
 ];
 
 function storedLang(): "en" | "ru" | undefined {
@@ -119,6 +121,8 @@ function withReadingField(
       return typeof value === "boolean" ? { ...reading, furigana: value } : null;
     case "mangaFirstPageAsCover":
       return typeof value === "boolean" ? { ...reading, mangaFirstPageAsCover: value } : null;
+    case "pageTurnAnimation":
+      return typeof value === "boolean" ? { ...reading, pageTurnAnimation: value } : null;
   }
 }
 

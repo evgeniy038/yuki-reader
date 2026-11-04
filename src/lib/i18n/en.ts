@@ -196,6 +196,7 @@ export const en = {
     furigana: "Furigana",
     furiganaAria: "furigana",
     firstPageAsCover: "First page as cover",
+    pageTurnAnimation: "Page-turn animation",
     previewLangAria: "preview language",
     dictionaries: {
       title: "Dictionaries",

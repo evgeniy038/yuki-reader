@@ -1,3 +1,4 @@
+import { projectMomentum } from "@/lib/spring";
 // Touch reading geometry, shared by every reader and pinned by a unit test.
 // A phone screen splits into three vertical bands, like Apple Books and
 // Kindle: the outer bands turn the page, the middle one shows the controls.
@@ -61,3 +62,36 @@ export function releaseVelocity(
 /** Elements a touch on the reading surface must leave alone. */
 export const TOUCH_IGNORE_SELECTOR =
   "[data-page-indicator], [data-reader-panel], [data-dictionary-popup], [data-ocr-block], a, button, input, textarea, select, summary, [role='button'], [role='slider'], [contenteditable='true']";
+
+export interface Sample {
+  x: number;
+  y: number;
+  t: number;
+}
+
+/** Release velocity on both axes, px/s (springs and projection speak px/s). */
+export const velocityOf = (samples: readonly Sample[]) => ({
+  vx: releaseVelocity(samples) * 1000,
+  vy: releaseVelocity(samples.map(({ y, t }) => ({ x: y, t }))) * 1000,
+});
+
+/** Commit a released pager drag past this share of the stage width… */
+const TURN_SHARE = 0.28;
+/** …or when its momentum would carry it past half the stage. */
+const TURN_PROJECTION_SHARE = 0.5;
+/** Pager flicks decelerate faster than scrolling (Apple's 0.99 "fast"). */
+const PAGER_DECELERATION = 0.99;
+
+/** The manga pager's verdict on a released drag: the track stands at `x`
+    (px, positive = toward the right), moving at `vx` px/s. Its projected
+    landing decides — positive travel is forward in a right-to-left book.
+    0 = stay. */
+export function pagerTurn(x: number, vx: number, width: number): 1 | -1 | 0 {
+  const projected = x + projectMomentum(vx, PAGER_DECELERATION);
+  const sign = Math.sign(x);
+  const decided =
+    sign !== 0 &&
+    Math.sign(projected) === sign &&
+    (Math.abs(x) > width * TURN_SHARE || Math.abs(projected) > width * TURN_PROJECTION_SHARE);
+  return decided ? (sign > 0 ? 1 : -1) : 0;
+}

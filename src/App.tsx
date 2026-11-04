@@ -94,6 +94,7 @@ export default function App() {
           pageMargin: PAGE_MARGIN_DEFAULT,
           theme: "light",
           mangaFirstPageAsCover: true,
+          pageTurnAnimation: true,
         },
   );
   useEffect(() => {

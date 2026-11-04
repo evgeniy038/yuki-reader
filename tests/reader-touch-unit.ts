@@ -7,8 +7,10 @@ import { strict as assert } from "node:assert";
 import {
   SWIPE_COMMIT_PX,
   releaseVelocity,
+  pagerTurn,
   swipeStep,
   tapZone,
+  velocityOf,
 } from "../src/components/reader/touch-zones.ts";
 import {
   neighborFirst,
@@ -58,6 +60,29 @@ import {
   // Far, but flicked back at release: a hesitation cancels.
   assert.equal(swipeStep(150, -0.9, true), 0);
   console.log("  ✓ swipeStep: direction per reading order, distance/velocity, hesitation");
+}
+
+// --- the manga pager's verdict on a released drag -------------------------------
+{
+  const w = 400;
+  // Past 28% of the stage: turns, whichever way the finger was going slowly.
+  assert.equal(pagerTurn(w * 0.3, 0, w), 1, "right-to-left: travel to the right is forward");
+  assert.equal(pagerTurn(-w * 0.3, 0, w), -1);
+  // Short, but flung past half the stage by its momentum: turns.
+  assert.equal(pagerTurn(40, 2000, w), 1); // lands at 40 + 198 px, past 200
+  // Short and slow: stays.
+  assert.equal(pagerTurn(40, 0, w), 0);
+  // Far, but thrown back the other way at release: stays.
+  assert.equal(pagerTurn(w * 0.4, -3000, w), 0);
+  // Not moved at all: stays (a tap is not a drag).
+  assert.equal(pagerTurn(0, 2000, w), 0);
+  const { vx, vy } = velocityOf([
+    { x: 0, y: 0, t: 0 },
+    { x: 10, y: 5, t: 10 },
+    { x: 20, y: 10, t: 20 },
+  ]);
+  assert.ok(vx > 900 && vx < 1100 && vy > 400 && vy < 600, `release velocity in px/s on both axes (${vx}, ${vy})`);
+  console.log("  ✓ pagerTurn: share, momentum, hesitation; velocityOf in px/s");
 }
 
 // --- release velocity -----------------------------------------------------------

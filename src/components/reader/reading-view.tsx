@@ -49,6 +49,7 @@ export function ReadingView({
   onPanelChange,
   onProgress,
   controlsVisible = false,
+  turnAnimation = true,
   onControlsChange,
 }: {
   chapters: Chapter[];
@@ -70,6 +71,8 @@ export function ReadingView({
   onProgress?: (progress: number, absolute: number, pageChars: number) => void;
   /** Touch controls are up (the scrubber bar replaces the page chip). */
   controlsVisible?: boolean;
+  /** Touch turns slide (the page-turn animation setting). */
+  turnAnimation?: boolean;
   onControlsChange?: (visible: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -256,6 +259,7 @@ export function ReadingView({
     dragRef: scrollRef,
     enabled: chapters.length > 0,
     rtl: vertical,
+    animate: turnAnimation,
     onStep: (dir) => {
       const moved = goTo(pageRef.current + dir);
       if (moved) onControlsChange?.(false);

@@ -11,8 +11,9 @@ import {
 
 // The reader's quick settings popover: reading theme always (it recolors PDF
 // pages too), font controls only for the text reader — PDF pages are images
-// of print, font settings don't apply there. An invisible backdrop swallows
-// outside clicks; Escape closes.
+// of print, font settings don't apply there. The page-turn animation switch
+// shows on touch screens only (mouse and keys turn without one). An
+// invisible backdrop swallows outside clicks; Escape closes.
 export function ReaderSettingsPopover({
   settings,
   onSettingsChange,
@@ -101,6 +102,18 @@ export function ReaderSettingsPopover({
             />
           </div>
         ) : null}
+        <div className="hidden items-center justify-between gap-4 pointer-coarse:flex">
+          <span className="text-xs text-muted-content">
+            {t("settings.pageTurnAnimation")}
+          </span>
+          <Switch
+            checked={settings.pageTurnAnimation}
+            onCheckedChange={(pageTurnAnimation) =>
+              onSettingsChange({ ...settings, pageTurnAnimation })
+            }
+            ariaLabel={t("settings.pageTurnAnimation")}
+          />
+        </div>
       </div>
     </>
   );

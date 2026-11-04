@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import {
   LINE_HEIGHT_MAX,
   LINE_HEIGHT_MIN,
@@ -162,6 +163,15 @@ export function SettingsPage({
                 {settings.pageMargin}
               </span>
             </div>
+          </SettingsRow>
+          <SettingsRow label={t("settings.pageTurnAnimation")}>
+            <Switch
+              checked={settings.pageTurnAnimation}
+              onCheckedChange={(pageTurnAnimation) =>
+                onSettingsChange({ ...settings, pageTurnAnimation })
+              }
+              ariaLabel={t("settings.pageTurnAnimation")}
+            />
           </SettingsRow>
         </SettingsGroup>
         <DictionaryLibrarySection />

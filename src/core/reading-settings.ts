@@ -15,6 +15,8 @@ export interface ReadingSettings {
   theme: ReadingThemeId;
   /** Treat the first manga page as a cover (single page, not a spread). */
   mangaFirstPageAsCover: boolean;
+  /** Touch page turns slide (and follow the finger); off = they just flip. */
+  pageTurnAnimation: boolean;
 }
 
 // Reading surface themes: page background + text color for the text reader,
@@ -156,6 +158,7 @@ export function loadReadingSettings(): ReadingSettings {
         pageMargin?: unknown;
         theme?: unknown;
         mangaFirstPageAsCover?: unknown;
+        pageTurnAnimation?: unknown;
       };
       const fontFamily: FontFamilyId =
         parsed.fontFamily === "noto-serif-jp" ||
@@ -197,6 +200,10 @@ export function loadReadingSettings(): ReadingSettings {
           typeof parsed.mangaFirstPageAsCover === "boolean"
             ? parsed.mangaFirstPageAsCover
             : true,
+        pageTurnAnimation:
+          typeof parsed.pageTurnAnimation === "boolean"
+            ? parsed.pageTurnAnimation
+            : true,
       };
     }
   } catch {
@@ -211,6 +218,7 @@ export function loadReadingSettings(): ReadingSettings {
     pageMargin: PAGE_MARGIN_DEFAULT,
     theme: "light",
     mangaFirstPageAsCover: true,
+    pageTurnAnimation: true,
   };
 }
 

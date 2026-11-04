@@ -387,6 +387,10 @@ controls up; a page turn puts them away. Text books follow the finger with
 resistance and slide the new page in; manga is a live **pager** — the
 neighbouring spreads wait preloaded on either side of the track, the drag is
 1:1, release velocity decides turn or stay and carries into the spring.
+The **page-turn animation** can be switched off (Settings → Reading, and the
+reader's quick settings on a touch screen; it syncs like the theme): then
+nothing slides or follows the finger — a tap or a swipe just flips the page,
+in every reader. Pinch, pan and the double-tap zoom keep their motion.
 Pinch zooms manga around the fingers, a zoomed page pans inside its bounds,
 a double tap on the middle band zooms to that spot and back. A tap opens an
 OCR box; a tap elsewhere closes it. Phones get the whole screen: manga drops

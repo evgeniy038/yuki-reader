@@ -21,6 +21,8 @@ import {
 //   lands with a short slide in the same direction; a swipe that falls
 //   short springs back.
 //   Long press: left to the browser — text selection.
+//   With the page-turn animation off (a reading setting) nothing slides or
+//   follows the finger: a tap or a swipe just flips the page.
 
 /** How far a committed page slides in from, as a share of the width. */
 const ENTER_SHARE = 0.14;
@@ -35,9 +37,11 @@ export function playPageEnter(
   el: HTMLElement | null,
   dir: 1 | -1,
   rtl: boolean,
+  animate = true,
 ): void {
   if (!el) return;
   el.style.transform = "";
+  if (!animate) return;
   if (reduceMotion()) {
     el.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 160 });
     return;
@@ -61,6 +65,7 @@ export function useTouchPaging({
   enabled,
   rtl,
   enterOnStep = true,
+  animate = true,
   onStep,
   onMenu,
 }: {
@@ -74,6 +79,8 @@ export function useTouchPaging({
   /** Slide the page box in right after the turn. Off where the new page
       renders asynchronously (PDF) — that view plays it on arrival. */
   enterOnStep?: boolean;
+  /** The page-turn animation setting: false = turns just flip. */
+  animate?: boolean;
   /** Turn by one page; false = nothing to turn to (the book's edge). */
   onStep: (dir: 1 | -1) => boolean;
   /** Middle-band tap: show or hide the reader controls. */
@@ -81,6 +88,7 @@ export function useTouchPaging({
 }) {
   const rtlRef = useLatest(rtl);
   const enterOnStepRef = useLatest(enterOnStep);
+  const animateRef = useLatest(animate);
   const onStepRef = useLatest(onStep);
   const onMenuRef = useLatest(onMenu);
   const springRef = useRef<SpringHandle | null>(null);
@@ -138,7 +146,7 @@ export function useTouchPaging({
       active.samples.push({ x: event.clientX, t: event.timeStamp });
       if (active.samples.length > 12) active.samples.shift();
       const width = target.clientWidth || 1;
-      setShift(rubberband(dx, width / 2));
+      if (animateRef.current) setShift(rubberband(dx, width / 2));
     };
 
     const onUp = (event: PointerEvent) => {
@@ -154,9 +162,10 @@ export function useTouchPaging({
         if (dir !== 0 && onStepRef.current(dir)) {
           setShift(0);
           if (enterOnStepRef.current)
-            playPageEnter(dragRef.current, dir, rtlRef.current);
+            playPageEnter(dragRef.current, dir, rtlRef.current, animateRef.current);
           return;
         }
+        if (shift === 0) return;
         springRef.current = animateSpring(shift, 0, setShift, {
           damping: 1,
           response: 0.28,
@@ -180,7 +189,7 @@ export function useTouchPaging({
       }
       const dir = zone === "forward" ? 1 : -1;
       if (onStepRef.current(dir) && enterOnStepRef.current)
-        playPageEnter(dragRef.current, dir, rtlRef.current);
+        playPageEnter(dragRef.current, dir, rtlRef.current, animateRef.current);
     };
 
     const onCancel = (event: PointerEvent) => {
@@ -200,5 +209,5 @@ export function useTouchPaging({
       target.removeEventListener("pointerup", onUp);
       target.removeEventListener("pointercancel", onCancel);
     };
-  }, [targetRef, dragRef, enabled, rtlRef, enterOnStepRef, onStepRef, onMenuRef]);
+  }, [targetRef, dragRef, enabled, rtlRef, enterOnStepRef, animateRef, onStepRef, onMenuRef]);
 }

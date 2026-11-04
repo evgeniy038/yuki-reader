@@ -41,6 +41,7 @@ export function MangaReadingView({
   mangaFirstPageAsCover = true,
   onProgress,
   controlsVisible = false,
+  turnAnimation = true,
   onControlsChange,
 }: {
   bookId: string;
@@ -52,6 +53,8 @@ export function MangaReadingView({
   onProgress?: (progress: number, absolute: number, pageCount: number) => void;
   /** Touch controls are up (the scrubber bar replaces the page chip). */
   controlsVisible?: boolean;
+  /** Touch turns slide (the page-turn animation setting). */
+  turnAnimation?: boolean;
   onControlsChange?: (visible: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -188,6 +191,7 @@ export function MangaReadingView({
     trackRef,
     layerRef: pageSetRef,
     enabled: record !== null,
+    animate: turnAnimation,
     zoom,
     canTurn: (dir) => (dir > 0 ? nextFirst : prevFirst) !== null,
     neighborReady: (dir) => (dir > 0 ? nextPages : prevPages) !== undefined,

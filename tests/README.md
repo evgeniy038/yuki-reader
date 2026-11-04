@@ -94,9 +94,12 @@ YUKI_TEST_BASE=http://localhost:1481 YUKI_TEST_EXPECT_CSP=1 pnpm test:book-sanit
 `pnpm test:mobile` drives the demo book in a phone-sized Chrome with real
 CDP touch events and the iPhone Pro Max safe-area insets: controls on open
 and clear of the status bar, middle-band toggle with the scrubber bar,
-band taps and swipes in both reading directions, the 16px field guard.
-The pure touch geometry (bands, swipes, spring, manga neighbour sets, pan
-bounds) is unit-tested in `pnpm test:reader-touch` (part of `pnpm test`).
+band taps and swipes in both reading directions, the page-turn animation
+switch in the text reader and on the manga pager (a volume drawn on the fly:
+on, turns slide and the page follows the finger; off, they just flip), the
+16px field guard. The pure touch geometry (bands, swipes, the pager's
+turn-or-stay verdict, spring, manga neighbour sets, pan bounds) is
+unit-tested in `pnpm test:reader-touch` (part of `pnpm test`).
 
 ## Reader chrome and panels (no fixtures, built-in demo book)
 

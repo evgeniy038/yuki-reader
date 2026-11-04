@@ -4,10 +4,17 @@
 // controls up on open and clear of the status bar, a middle tap hides and
 // shows them (with the scrubber bar), outer bands and swipes turn the page
 // in the book's reading direction (vertical Japanese: left = forward;
-// horizontal: right = forward), a turn puts the controls away.
-// No fixtures. Run: pnpm tsx tests/mobile-touch-smoke.ts
+// horizontal: right = forward), a turn puts the controls away; and the
+// page-turn animation switch — on, a turn slides and the page follows the
+// finger; off, it just flips — in the text reader and on the manga pager.
+// No fixtures (the manga volume is drawn on the fly).
+// Run: pnpm tsx tests/mobile-touch-smoke.ts
 
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, type CDPSession, type Page } from "playwright-core";
+import sharp from "sharp";
 import { ensureServer } from "./browser-harness.ts";
 
 const BASE = "http://localhost:1420";
@@ -135,6 +142,49 @@ try {
   await settle(page);
   check(!(await controlsUp(page)), "a page turn puts the controls away");
 
+  // --- the page-turn animation: on by default, a switch in Settings -----------
+  // Slides are Web Animations on the page box; a drag moves it by transform.
+  const slides = () =>
+    page.evaluate(() =>
+      document.getAnimations().filter((a) =>
+        a.effect instanceof KeyframeEffect &&
+        a.effect.getKeyframes().some((k) => String(k.transform ?? "").includes("translateX")),
+      ).length,
+    );
+  const followsFinger = async () => {
+    await touch(cdp, "touchStart", [{ x: 200, y: 500 }]);
+    for (let i = 1; i <= 4; i++) {
+      await touch(cdp, "touchMove", [{ x: 200 + i * 10, y: 500 }]);
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    const moved = await page.evaluate(() => document.querySelector('[style*="translateX"]') !== null);
+    await touch(cdp, "touchEnd", []);
+    await settle(page);
+    return moved;
+  };
+  const before = await pageNumber(page);
+  await tap(cdp, WIDTH * 0.12, HEIGHT / 2);
+  check((await slides()) > 0, "with the animation on, a turn slides in");
+  await settle(page);
+  check(await followsFinger(), "…and the page follows the finger");
+  await page.goto(`${BASE}/#/settings`);
+  await page.getByRole("switch", { name: "Page-turn animation" }).click();
+  await page.goto(`${BASE}/?demo`);
+  await page.waitForSelector("[data-page-indicator]", { timeout: 20_000 });
+  await settle(page);
+  await tap(cdp, WIDTH / 2, HEIGHT / 2); // controls away
+  await settle(page);
+  const still = await pageNumber(page);
+  await tap(cdp, WIDTH * 0.12, HEIGHT / 2);
+  check((await slides()) === 0, "with the animation off, a turn just flips — no slide");
+  await settle(page);
+  check((await pageNumber(page)) === still + 1, `…and still turns (${still} → ${still + 1})`);
+  check(!(await followsFinger()), "…and the page stays put under the finger");
+  await swipe(cdp, 80, 340, HEIGHT / 2);
+  await settle(page);
+  check((await pageNumber(page)) === still + 2, "…while a swipe still turns it");
+  void before;
+
   // --- horizontal (left-to-right) ------------------------------------------------
   console.log("horizontal demo");
   await page.goto(`${BASE}/?demo=h`);
@@ -152,6 +202,69 @@ try {
   await tap(cdp, WIDTH * 0.12, HEIGHT / 2);
   await settle(page);
   check((await pageNumber(page)) === h1, "left band turns back");
+
+  // --- manga: the same switch on the pager track (off now, then on) -----------
+  console.log("manga");
+  const scans = mkdtempSync(join(tmpdir(), "yuki-touch-"));
+  const pages: string[] = [];
+  for (let i = 1; i <= 6; i++) {
+    const path = join(scans, `p${i}.png`);
+    await sharp({ create: { width: 600, height: 860, channels: 3, background: `#${(i * 40).toString(16)}5599` } }).png().toFile(path);
+    pages.push(path);
+  }
+  const sidecar = join(scans, "めくり 第01巻.mokuro");
+  writeFileSync(sidecar, JSON.stringify({
+    version: "0.2.1", title: "めくり", volume: "めくり 第01巻",
+    pages: pages.map((_, i) => ({ img_path: `p${i + 1}.png`, img_width: 600, img_height: 860, blocks: [{ box: [20, 20, 120, 160], vertical: true, font_size: 24, lines: ["め"] }] })),
+  }));
+  await page.goto(`${BASE}/#/`);
+  await page.setInputFiles('input[accept*=".mokuro"]', [...pages, sidecar]);
+  await page.locator("[data-book-id]").filter({ hasText: "めくり" }).first().waitFor({ timeout: 60_000 });
+  rmSync(scans, { recursive: true, force: true });
+  const mangaPage = () => page.evaluate(() => document.querySelector("[data-manga-page]")?.getAttribute("data-manga-page"));
+  // The track is the slots' parent (neighbour slots sit at ±100% on their own).
+  const trackAway = () =>
+    page.evaluate(() => {
+      const track = document.querySelector("[data-manga-current]")?.parentElement?.parentElement;
+      return !!track && track.style.transform !== "" && track.style.transform !== "translateX(0px)";
+    });
+  for (const animated of [false, true]) {
+    const mode = animated ? "on" : "off";
+    if (animated) {
+      await page.goto(`${BASE}/#/settings`);
+      await page.getByRole("switch", { name: "Page-turn animation" }).click();
+    }
+    await page.goto(`${BASE}/#/`);
+    await page.locator("[data-book-id]").filter({ hasText: "めくり" }).first().click();
+    await page.waitForURL(/#\/manga\//, { timeout: 15_000 });
+    await page.waitForTimeout(800);
+    await page.locator("[data-book-id]").first().click();
+    await page.waitForSelector("[data-manga-current] img", { timeout: 30_000 });
+    await page.waitForTimeout(1_200);
+    await tap(cdp, WIDTH / 2, HEIGHT / 2); // controls away
+    await settle(page);
+    const m0 = await mangaPage();
+    await touch(cdp, "touchStart", [{ x: 150, y: 500 }]);
+    for (let i = 1; i <= 5; i++) {
+      await touch(cdp, "touchMove", [{ x: 150 + i * 12, y: 500 }]);
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    const followed = await trackAway();
+    await touch(cdp, "touchEnd", []);
+    await settle(page);
+    check(followed === animated, `manga, animation ${mode}: the page ${animated ? "follows" : "stays put under"} the finger`);
+    check((await mangaPage()) === m0, `manga, animation ${mode}: a short drag doesn't turn`);
+    await tap(cdp, WIDTH * 0.1, HEIGHT / 2);
+    await new Promise((r) => setTimeout(r, 30));
+    const sliding = await trackAway();
+    await settle(page);
+    const m1 = await mangaPage();
+    check(m1 !== m0, `manga, animation ${mode}: a tap turns (${m0} → ${m1})`);
+    check(sliding === animated, `manga, animation ${mode}: the turn ${animated ? "slides" : "just flips"}`);
+    await swipe(cdp, 80, 360, HEIGHT / 2);
+    await settle(page);
+    check((await mangaPage()) !== m1 && !(await trackAway()), `manga, animation ${mode}: a swipe turns and the track comes home`);
+  }
 
   // --- the field focus zoom guard ---------------------------------------------
   const fontSize = await page.evaluate(() => {

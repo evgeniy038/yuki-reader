@@ -11,8 +11,10 @@ import {
   TAP_MAX_MS,
   TAP_SLOP_PX,
   TOUCH_IGNORE_SELECTOR,
-  releaseVelocity,
+  pagerTurn,
   tapZone,
+  velocityOf,
+  type Sample,
 } from "./touch-zones";
 import { clampPan, IDENTITY, type ZoomPan, type useZoomPan } from "./use-zoom-pan";
 
@@ -34,16 +36,12 @@ import { clampPan, IDENTITY, type ZoomPan, type useZoomPan } from "./use-zoom-pa
 //     fire at once. A tap first closes an open OCR box; a tap ON a box is
 //     the box's own (it opens).
 // Every animation starts from the live value and can be grabbed mid-flight.
+// With the page-turn animation off (a reading setting) the pager doesn't
+// slide or follow the finger — a tap or a swipe just flips the set.
 
 const DOUBLE_TAP_MS = 260;
 const DOUBLE_TAP_SLOP_PX = 30;
 const DOUBLE_TAP_ZOOM = 2.5;
-/** Commit a released drag past this share of the stage width… */
-const TURN_SHARE = 0.28;
-/** …or when its momentum would carry it past half the stage. */
-const TURN_PROJECTION_SHARE = 0.5;
-/** Pager flicks decelerate faster than scrolling (Apple's 0.99 "fast"). */
-const PAGER_DECELERATION = 0.99;
 const PAN_DECELERATION = 0.995;
 
 type ZoomApi = Pick<
@@ -51,23 +49,12 @@ type ZoomApi = Pick<
   "transformRef" | "setTransform" | "settle" | "animateTo" | "stop" | "reset"
 >;
 
-interface Sample {
-  x: number;
-  y: number;
-  t: number;
-}
-
-/** Release velocity on both axes, px/s (springs and projection speak px/s). */
-const velocityOf = (samples: readonly Sample[]) => ({
-  vx: releaseVelocity(samples) * 1000,
-  vy: releaseVelocity(samples.map(({ y, t }) => ({ x: y, t }))) * 1000,
-});
-
 export function useMangaTouch({
   stageRef,
   trackRef,
   layerRef,
   enabled,
+  animate = true,
   zoom,
   canTurn,
   neighborReady,
@@ -81,6 +68,8 @@ export function useMangaTouch({
   /** The current set's zoom layer. */
   layerRef: RefObject<HTMLDivElement | null>;
   enabled: boolean;
+  /** The page-turn animation setting: false = turns just flip. */
+  animate?: boolean;
   zoom: ZoomApi;
   /** A neighbouring set exists in that direction. */
   canTurn: (dir: 1 | -1) => boolean;
@@ -93,6 +82,7 @@ export function useMangaTouch({
   onDismissOcr: () => boolean;
 }) {
   const zoomRef = useLatest(zoom);
+  const animateRef = useLatest(animate);
   const canTurnRef = useLatest(canTurn);
   const neighborReadyRef = useLatest(neighborReady);
   const onTurnRef = useLatest(onTurn);
@@ -130,7 +120,7 @@ export function useMangaTouch({
     // Forward (right-to-left) pulls the next page in from the left: the
     // new current page starts one stage to the left and slides home.
     pendingRef.current =
-      velocity !== null && width > 0 && neighborReadyRef.current(dir)
+      animateRef.current && velocity !== null && width > 0 && neighborReadyRef.current(dir)
         ? { shift: dir > 0 ? -width : width, velocity }
         : null;
     zoomRef.current.reset();
@@ -209,7 +199,10 @@ export function useMangaTouch({
       zoomRef.current.stop();
       if (pointers.size === 2) {
         // A page drag in progress gives way to the pinch.
-        if (mode === "page") springTrack(0);
+        if (mode === "page") {
+        if (animateRef.current) springTrack(0);
+        else paintTrack(0);
+      }
         beginPinch();
         return;
       }
@@ -258,7 +251,8 @@ export function useMangaTouch({
         // No neighbour that way: resist instead of revealing a void.
         if ((x > 0 && !canTurnRef.current(1)) || (x < 0 && !canTurnRef.current(-1)))
           x = rubberband(x, width);
-        paintTrack(x);
+        if (animateRef.current) paintTrack(x);
+        else trackXRef.current = x; // judged on release, never shown
         return;
       }
       if (mode === "pan") {
@@ -347,18 +341,10 @@ export function useMangaTouch({
       if (gesture === "page") {
         samples.push({ x: event.clientX, y: event.clientY, t: performance.now() });
         const { vx } = velocityOf(samples);
-        const width = stage.clientWidth || 1;
-        const x = trackXRef.current;
-        const projected = x + projectMomentum(vx, PAGER_DECELERATION);
-        const sign = Math.sign(x);
-        const decided =
-          sign !== 0 &&
-          Math.sign(projected) === sign &&
-          (Math.abs(x) > width * TURN_SHARE ||
-            Math.abs(projected) > width * TURN_PROJECTION_SHARE);
-        // Positive travel (to the right) is forward in a right-to-left book.
-        if (decided && turn(sign > 0 ? 1 : -1, vx)) return;
-        springTrack(vx);
+        const dir = pagerTurn(trackXRef.current, vx, stage.clientWidth || 1);
+        if (dir !== 0 && turn(dir, vx)) return;
+        if (animateRef.current) springTrack(vx);
+        else paintTrack(0);
         return;
       }
       if (gesture === "pan") {

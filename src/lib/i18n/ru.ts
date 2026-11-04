@@ -193,6 +193,7 @@ export const ru: Messages = {
     furigana: "Фуригана",
     furiganaAria: "фуригана",
     firstPageAsCover: "Первая страница как обложка",
+    pageTurnAnimation: "Анимация перелистывания",
     previewLangAria: "язык примера",
     dictionaries: {
       title: "Словари",

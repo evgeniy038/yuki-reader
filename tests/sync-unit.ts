@@ -251,4 +251,27 @@ function published(id: string, self: Pick<Shadow, "books" | "settings">, seq = 1
   );
 }
 
+// --- a reading switch travels: the page-turn animation ------------------------
+{
+  const store = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    },
+  });
+  const { readSyncedSettings, writeSyncedSettings } = await import("../src/core/sync/local.ts");
+  const { loadReadingSettings } = await import("../src/core/reading-settings.ts");
+  assert.equal(loadReadingSettings().pageTurnAnimation, true, "on until someone turns it off");
+  assert.equal(readSyncedSettings(() => undefined)["reading.pageTurnAnimation"], "true", "…and offered to the others");
+  const applied = writeSyncedSettings({ "reading.pageTurnAnimation": "false" }, () => undefined);
+  assert.ok(applied.reading, "another device's choice lands in the reading settings");
+  assert.equal(loadReadingSettings().pageTurnAnimation, false, "…and this device turns pages without sliding");
+  writeSyncedSettings({ "reading.pageTurnAnimation": '"nope"' }, () => undefined);
+  assert.equal(loadReadingSettings().pageTurnAnimation, false, "a malformed value changes nothing");
+  console.log("  ✓ settings: the page-turn animation switch travels");
+}
+
 console.log("sync unit: all good");
