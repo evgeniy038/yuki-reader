@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.9] - 2026-11-04
+
+- Icons are light outlines now and fill in only for what's active — the section you're in, the panel you opened, the book you pinned — so the interface reads calmer and the current place stands out at a glance
+
 ## [1.3.8] - 2026-11-04
 
 - The app starts faster and needs far less memory with a big library: a book's text and pictures load only when you open it — a shelf of 27 novels now starts with about a fifth of the memory, a shelf with PDFs with a fifteenth
