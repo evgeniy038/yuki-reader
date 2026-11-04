@@ -1,7 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router";
-import { IconContext } from "@phosphor-icons/react";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/noto-serif-jp";
 import "@/lib/i18n";
@@ -15,12 +14,10 @@ import "./index.css";
 // without any server rewrite rules.
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <IconContext.Provider value={{ weight: "bold" }}>
-      <HashRouter>
-        <App />
-      </HashRouter>
-      <UpdateToast />
-      <Toaster />
-    </IconContext.Provider>
+    <HashRouter>
+      <App />
+    </HashRouter>
+    <UpdateToast />
+    <Toaster />
   </StrictMode>,
 );

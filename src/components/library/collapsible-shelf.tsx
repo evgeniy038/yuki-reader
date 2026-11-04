@@ -1,4 +1,4 @@
-import { CaretDown, DotsSixVertical } from "@phosphor-icons/react";
+import { CaretDown, DotsSixVertical } from "@/components/ui/icons";
 import {
   useLayoutEffect,
   useRef,
@@ -105,7 +105,6 @@ function ShelfSectionHeader({
       className="group relative flex cursor-pointer items-center"
     >
       <CaretDown
-        weight="bold"
         className={cn(
           "absolute left-0 top-1/2 size-3 -translate-y-1/2 text-muted-content opacity-0 -translate-x-1 transition-all duration-150 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100",
           collapsed && "-rotate-90",

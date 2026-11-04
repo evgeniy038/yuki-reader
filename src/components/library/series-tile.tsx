@@ -1,6 +1,6 @@
 import type { ShelfItem } from "@/core/library";
 import { coverBookOf, stateLabelOf } from "@/core/library";
-import { BookOpen, Bookmark, PencilSimple, Trash } from "@phosphor-icons/react";
+import { BookOpen, Bookmark, PencilSimple, Trash } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import {
   ContextMenu,
@@ -55,7 +55,7 @@ export function SeriesTile({
               data-book-favorite=""
               className="absolute right-2.5 top-0 block h-[41px] w-7 bg-primary-gradient bookmark-ribbon"
             >
-              <Bookmark weight="fill" className="relative top-[9px] mx-auto size-4 text-white" />
+              <Bookmark className="relative top-[9px] mx-auto size-4 text-white" />
             </span>
           ) : null}
         </CoverFrame>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { X } from "@phosphor-icons/react";
+import { X } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import {
   dictionaryGlossaryHtml,

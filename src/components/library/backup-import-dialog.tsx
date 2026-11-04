@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FileArrowUp } from "@phosphor-icons/react";
+import { FileArrowUp } from "@/components/ui/icons";
 import type { BackupOperationProgress } from "@/core/backup";
 import { Button } from "@/components/ui/button";
 import {

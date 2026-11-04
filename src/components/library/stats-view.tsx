@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChartLine } from "@phosphor-icons/react";
+import { ChartLine } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import {
   Empty,

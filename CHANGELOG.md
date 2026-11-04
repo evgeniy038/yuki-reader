@@ -14,6 +14,7 @@ versioning — [SemVer](https://semver.org/).
 - Manga text recognition reads crowded speech bubbles, long captions and small print far more accurately — blocks too dense to read in one go are now read column by column
 - Finds more of the small text — asides, sound effects, page numbers — and colored pages read as cleanly as black-and-white ones
 - Manga you already imported is quietly read again with the improved recognition in the background
+- New icons drawn just for yuki: every button, menu and tab now shares one calm, solid look that stays crisp even at the smallest sizes
 
 ## [1.3.7] - 2026-11-03
 

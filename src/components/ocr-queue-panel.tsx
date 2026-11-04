@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CaretDown, Check } from "@phosphor-icons/react";
+import { CaretDown, Check } from "@/components/ui/icons";
 import { onOcrStatus, type OcrBookProgress, type OcrStatus } from "@/core/ocr/ocr";
 import type { Book } from "@/core/library";
 import { useOcrBooks } from "@/components/use-ocr-books";
@@ -249,7 +249,7 @@ export function OcrQueuePanel({
               title={t("ocr.collapse")}
               className="grid size-6 cursor-pointer place-items-center rounded-full text-muted-content transition-colors hover:bg-muted-surface hover:text-strong"
             >
-              <CaretDown weight="bold" className="size-3.5" />
+              <CaretDown className="size-3.5" />
             </button>
           </div>
           <div className="max-h-96 overflow-y-auto px-4 pb-3.5">
@@ -321,7 +321,7 @@ export function OcrQueuePanel({
                   <p className="min-w-0 flex-1 truncate text-xs text-muted-content">
                     {book.title}
                   </p>
-                  <Check weight="bold" className="size-3.5 shrink-0 text-green-600" />
+                  <Check className="size-3.5 shrink-0 text-green-600" />
                 </div>
               );
             })}

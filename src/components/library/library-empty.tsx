@@ -1,4 +1,4 @@
-import { Books, Plus } from "@phosphor-icons/react";
+import { Books, Plus } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {

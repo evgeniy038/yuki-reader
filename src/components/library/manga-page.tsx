@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
-import { CaretLeft, DotsThree, FolderPlus, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import { CaretLeft, DotsThree, FolderPlus, PencilSimple, Plus, Trash } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { normalizeSeriesKey } from "@/core/mokuro";
@@ -184,7 +184,7 @@ export function MangaPage({
                 />
               }
             >
-              <DotsThree weight="bold" />
+              <DotsThree />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => setRenamingSeries(true)}>

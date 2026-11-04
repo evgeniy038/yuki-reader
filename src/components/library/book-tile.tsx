@@ -7,7 +7,7 @@ import {
   Info,
   PencilSimple,
   Trash,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icons";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -123,7 +123,6 @@ export function BookTile({
           }`}
         >
           <Bookmark
-            weight="fill"
             className={`relative mx-auto top-[22px] block size-4 text-white transition-[opacity,transform] duration-200 ${
               book.favorite
                 ? "translate-y-0 opacity-100 delay-100"
