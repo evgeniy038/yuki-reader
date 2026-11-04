@@ -20,7 +20,9 @@ import {
   type DeviceState,
   type MonthStats,
 } from "./model";
+import { CATALOG, catalogPath, parseCatalog } from "./catalog";
 import { syncFiles, type FileBridge } from "./files";
+import type { PackDesc } from "./pack-shape";
 import { syncOcr, type OcrBridge } from "./ocr-sync";
 import type { RemoteEntry, RemoteFolder } from "./remote";
 import type { PreSyncSnapshot, SyncStore, VaultBinding } from "./store";
@@ -47,6 +49,8 @@ export interface LocalBridge extends OcrBridge, FileBridge {
   localStats(): Promise<DailyStats[]>;
   /** Local id → content key, for the stats this device publishes. */
   keyOf(localId: string): BookKey | undefined;
+  /** The books this device holds, as tiles for the others (catalog.ts). */
+  catalog(): Promise<Record<BookKey, PackDesc>>;
 }
 
 export interface EngineContext {
@@ -138,7 +142,19 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   const entries: RemoteEntry[] = await remote.list("devices");
   const remotes = new Map((await store.remotes()).map((r) => [r.state.device.id, r]));
   const remoteStats = await store.remoteStats();
+  const remoteCatalogs = await store.remoteCatalogs();
   for (const entry of entries) {
+    const listed = CATALOG.exec(entry.path);
+    if (listed) {
+      const id = listed[1]!;
+      if (id === device.id || remoteCatalogs.get(id)?.rev === entry.rev) continue;
+      const sealed = await remote.read(entry.path);
+      if (!sealed) continue;
+      bytes += sealed.length;
+      const catalog = await unsealJson(vault.keys, vault.id, entry.path, sealed).then(parseCatalog, () => undefined);
+      if (catalog) remoteCatalogs.set(id, { rev: entry.rev, catalog });
+      continue;
+    }
     const state = STATE.exec(entry.path);
     if (state) {
       const id = state[1]!;
@@ -212,6 +228,17 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
     publishedStats[month] = monthHash;
   }
 
+  // This device's catalog, when its shelf changed.
+  const catalog = { v: 1, books: await bridge.catalog() };
+  const catalogHash = await sha256Hex(canonical(catalog));
+  if (catalogHash !== (await store.publishedCatalog())) {
+    const path = catalogPath(device.id);
+    const sealed = await sealJson(vault.keys, vault.id, path, catalog);
+    await remote.write(path, sealed);
+    bytes += sealed.length;
+    await store.setPublishedCatalog(catalogHash);
+  }
+
   // 4. Book files, then their registers.
   const files = await syncFiles(
     remote, vault, device, bridge, merged, local, hlc, ctx.filesDeadline ?? Date.now() + 30_000,
@@ -222,6 +249,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   await store.setShadow({ books: merged.books, settings: merged.settings, held });
   await store.setRemotes([...remotes.values()]);
   await store.setRemoteStats(remoteStats);
+  await store.setRemoteCatalogs(remoteCatalogs);
   await store.setPublishedStats(publishedStats);
   await store.setOcrApplied(ocrApplied);
   await store.setHlc(hlc.value);

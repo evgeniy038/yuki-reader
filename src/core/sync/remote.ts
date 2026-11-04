@@ -22,6 +22,9 @@ export interface RemoteFolder {
   /** Create or overwrite. */
   write(path: string, bytes: Uint8Array): Promise<void>;
   remove(path: string): Promise<void>;
+  /** Resolve when something under `dir` may have changed — a long-poll
+      where the provider has one. Absent: callers poll on a timer. */
+  watch?(dir: string, signal: AbortSignal): Promise<void>;
 }
 
 /** The provider refused our credentials for good (revoked, expired refresh

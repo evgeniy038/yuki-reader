@@ -33,15 +33,18 @@ export interface SyncView {
   snapshotAt?: number;
   /** Last sign-in attempt failed. */
   signInFailed?: boolean;
-  /** Books in the cloud that this device doesn't hold (sync-cloud.ts). */
-  cloud: { key: BookKey; desc: PackDesc }[];
+  /** Books another device holds that this one doesn't (sync-cloud.ts):
+      in the cloud, or — with `from` — only on that device. */
+  cloud: { key: BookKey; desc: PackDesc; from?: DeviceInfo }[];
   /** Downloads in flight: content key → 0..1. */
   downloads: Record<BookKey, number>;
+  /** Direct transfers still waiting for the other device to answer. */
+  waiting: Record<BookKey, true>;
   /** Local ids whose files are in the cloud — "remove from this device". */
   inCloud: string[];
 }
 
-let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, inCloud: [] };
+let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, waiting: {}, inCloud: [] };
 const roundListeners = new Set<() => Promise<void>>();
 const listeners = new Set<() => void>();
 let host: SyncHost | null = null;
@@ -296,7 +299,7 @@ async function round(): Promise<void> {
 
 /** Book uploads per round stop between parts after this long, so a 300 MB
     volume never holds the reading state back; the next round resumes. */
-const FILES_BUDGET_MS = 25_000;
+const FILES_BUDGET_MS = 45_000;
 
 /** One round now (queued behind a running one). */
 export async function syncNow(): Promise<void> {
@@ -341,7 +344,7 @@ export async function disconnect(): Promise<void> {
   await syncStore.clear();
   setSyncEnabled(false);
   remotesCache = [];
-  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, inCloud: [] });
+  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, waiting: {}, inCloud: [] });
 }
 
 /** Lost recovery key: wipe the unreadable cloud copy and make a new vault

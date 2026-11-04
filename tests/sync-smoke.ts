@@ -6,8 +6,10 @@
 // recovery key shown once); the phone connects and opens the library with
 // that key; a reading position, a pin and a setting travel Mac → phone;
 // reading on the phone travels back; the phone's reading time reaches the
-// Mac's statistics without double counting; an offline phone catches up;
-// and nothing in the cloud is readable.
+// Mac's statistics without double counting; manga kept in the cloud comes
+// down as a tile; manga that never went up comes straight from the open Mac
+// over WebRTC; an offline phone catches up; and nothing in the cloud is
+// readable.
 // Needs a dev server started with a provider id, e.g.:
 //   VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480
 //   YUKI_TEST_BASE=http://localhost:1480 pnpm tsx tests/sync-smoke.ts
@@ -37,6 +39,30 @@ function epub(title: string, sentence: string): Uint8Array {
     "content.opf": strToU8(`<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0"><metadata><dc:title>${title}</dc:title><dc:language>ja</dc:language></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>`),
     "c1.xhtml": strToU8(`<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${title}</title></head><body>${body}</body></html>`),
   });
+}
+
+// A mokuro volume: page images plus a sidecar with a box on every page, so
+// the in-app OCR has nothing to do. Returns the files to import.
+async function mangaVolume(root: string, title: string, colors: string[], width: number, height: number): Promise<string[]> {
+  const folder = join(root, title);
+  mkdirSync(folder);
+  const pages: string[] = [];
+  for (const [i, color] of colors.entries()) {
+    const path = join(folder, `p${i + 1}.png`);
+    await sharp({ create: { width, height, channels: 3, background: color } }).png().toFile(path);
+    pages.push(path);
+  }
+  const sidecar = join(folder, `${title} 第01巻.mokuro`);
+  writeFileSync(sidecar, JSON.stringify({
+    version: "0.2.1",
+    title,
+    volume: `${title} 第01巻`,
+    pages: pages.map((_, i) => ({
+      img_path: `p${i + 1}.png`, img_width: width, img_height: height,
+      blocks: [{ box: [20, 20, 120, 160], vertical: true, font_size: 24, lines: ["テスト"] }],
+    })),
+  }));
+  return [...pages, sidecar];
 }
 
 // --- The fake Yandex (one folder for every device) ----------------------------
@@ -159,7 +185,13 @@ async function main(): Promise<void> {
   const other = join(dir, "other.epub");
   writeFileSync(kitchen, epub("台所の本", "わたしがこの世でいちばん好きな場所は台所だと思う"));
   writeFileSync(other, epub("変な家の本", "その家には奇妙な間取りがあった"));
-  const browser = await chromium.launch({ channel: "chromium", headless: true });
+  // Plain host candidates: both "devices" are one machine, and headless
+  // Chrome can't resolve the mDNS names it would hide them behind.
+  const browser = await chromium.launch({
+    channel: "chromium",
+    headless: true,
+    args: ["--disable-features=WebRtcHideLocalIpsWithMdns"],
+  });
   try {
     // --- Mac: a library, a reading position, a pin, then connect. ---------
     const mac = await device(browser);
@@ -215,7 +247,7 @@ async function main(): Promise<void> {
 
     // --- A book only the phone had arrives on the Mac by itself. -----------
     check(
-      [...files.keys()].filter((f) => /^devices\/[^/]+\/books\/[0-9a-f]{32}\/manifest\.bin$/.test(f)).length === 2,
+      [...files.keys()].filter((f) => /^books\/[^/]+\/[0-9a-f]{32}\/manifest\.bin$/.test(f)).length === 2,
       "each book's files went up once, by whoever had it first",
     );
     const arrived = await mac.page.evaluate(async () => {
@@ -228,31 +260,12 @@ async function main(): Promise<void> {
     check(!sealedText.includes(Buffer.from("奇妙な間取り").toString("latin1")), "the book's text is unreadable in the cloud");
 
     // --- Manga stays home unless kept in the cloud; then it's a tile there. --
-    const scans = join(dir, "manga");
-    mkdirSync(scans);
-    const pagePaths: string[] = [];
-    for (const [i, color] of [[1, "#c33"], [2, "#36c"]] as const) {
-      const path = join(scans, `p${i}.png`);
-      await sharp({ create: { width: 300, height: 420, channels: 3, background: color } }).png().toFile(path);
-      pagePaths.push(path);
-    }
-    // A sidecar with a box on every page: nothing for the in-app OCR to do.
-    const sidecar = join(scans, "テスト漫画 第01巻.mokuro");
-    writeFileSync(sidecar, JSON.stringify({
-      version: "0.2.1",
-      title: "テスト漫画",
-      volume: "テスト漫画 第01巻",
-      pages: [1, 2].map((i) => ({
-        img_path: `p${i}.png`, img_width: 300, img_height: 420,
-        blocks: [{ box: [20, 20, 120, 160], vertical: true, font_size: 24, lines: ["テスト"] }],
-      })),
-    }));
     await mac.page.goto(`${BASE}/#/`);
-    await mac.page.setInputFiles('input[accept*=".mokuro"]', [...pagePaths, sidecar]);
+    await mac.page.setInputFiles('input[accept*=".mokuro"]', await mangaVolume(dir, "テスト漫画", ["#c33", "#36c"], 300, 420));
     const series = mac.page.locator("[data-book-id]").filter({ hasText: "テスト漫画" }).first();
     await series.waitFor({ timeout: 30_000 });
     await syncNow(mac.page);
-    const manifests = () => [...files.keys()].filter((f) => /\/books\/[0-9a-f]{32}\/manifest\.bin$/.test(f)).length;
+    const manifests = () => [...files.keys()].filter((f) => /^books\/[^/]+\/[0-9a-f]{32}\/manifest\.bin$/.test(f)).length;
     check(manifests() === 2, "a manga volume doesn't go up on its own");
     await mac.page.goto(`${BASE}/#/`);
     await mac.page.locator("[data-book-id]").filter({ hasText: "テスト漫画" }).first().click();
@@ -270,6 +283,41 @@ async function main(): Promise<void> {
     check((await phone.page.locator("[data-manga-current] img").count()) >= 1, "a tap downloads the volume and opens it");
     await phone.page.goto(`${BASE}/#/`);
     check((await phone.page.locator("[data-cloud-book]").count()) === 0, "…and it's a book on the shelf now, not a tile");
+
+    // --- Never in the cloud: straight from the open Mac, over WebRTC. -------
+    await mac.page.goto(`${BASE}/#/`);
+    await mac.page.setInputFiles('input[accept*=".mokuro"]', await mangaVolume(dir, "ちょくせつ", ["#2a7", "#a72", "#72a"], 320, 450));
+    await mac.page.locator("[data-book-id]").filter({ hasText: "ちょくせつ" }).first().waitFor({ timeout: 30_000 });
+    const packsBefore = manifests();
+    await syncNow(mac.page); // the Mac stays open on this page and answers
+    check(manifests() === packsBefore, "a volume not kept in the cloud stays off it");
+    await syncNow(phone.page);
+    await phone.page.goto(`${BASE}/#/`);
+    const fromMac = phone.page.locator('[data-cloud-from="device"]');
+    await fromMac.first().waitFor({ timeout: 15_000 }).catch(() => {});
+    check((await fromMac.count()) === 1, "the phone offers the Mac's volume as a tile from that device");
+    await fromMac.first().click();
+    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 60_000 }).catch(() => {});
+    const shown = await phone.page
+      .locator("[data-manga-current] img")
+      .first()
+      .evaluate((img: HTMLImageElement) => img.decode().then(() => img.naturalWidth, () => 0))
+      .catch(() => 0);
+    check(shown === 320, "a tap brings the volume straight from the Mac and opens it");
+    const arrivedPages = await phone.page.evaluate(async () => {
+      const storage = await import("/src/core/storage.ts");
+      const book = (await storage.loadAllBooks()).find((b) => b.title.includes("ちょくせつ"));
+      return book ? ((await storage.loadManga(book.id))?.pages.length ?? 0) : -1;
+    });
+    check(arrivedPages === 3, `every page came over (${arrivedPages}/3)`);
+    check(manifests() === packsBefore, "…and not a byte of it went through the cloud");
+    await phone.page.waitForTimeout(1_000);
+    const signals = [...files].filter(([path]) => path.startsWith("signal/"));
+    check(!signals.some(([path]) => path.endsWith(".offer.bin")), "the doorbell is taken down afterwards");
+    check(
+      signals.every(([, bytes]) => !Buffer.from(bytes).toString("latin1").includes("a=fingerprint")),
+      "the doorbell (addresses, keys) is unreadable in the cloud",
+    );
 
     // --- Reading on the phone travels back; its time counts on the Mac. ----
     await phone.page.goto(`${BASE}/#/`);
@@ -315,7 +363,19 @@ async function main(): Promise<void> {
     await syncNow(mac.page);
     check(Math.abs((await progressOf(mac.page, "台所の本")) - offlineProgress) < 1e-9, "the offline reading reached the Mac once back online");
 
+    // --- The Mac closed: the tile says where to open yuki. -----------------
+    await mac.page.goto(`${BASE}/#/`);
+    await mac.page.setInputFiles('input[accept*=".mokuro"]', await mangaVolume(dir, "とじた", ["#555", "#999"], 300, 420));
+    await mac.page.locator("[data-book-id]").filter({ hasText: "とじた" }).first().waitFor({ timeout: 30_000 });
+    await syncNow(mac.page);
     await mac.context.close();
+    await syncNow(phone.page);
+    await phone.page.goto(`${BASE}/#/`);
+    await phone.page.locator('[data-cloud-from="device"]').first().click();
+    const waiting = phone.page.locator("[data-cloud-waiting]");
+    await waiting.waitFor({ timeout: 15_000 }).catch(() => {});
+    check(((await waiting.textContent().catch(() => "")) ?? "").includes("Open yuki on"), "with the Mac closed, the tile asks to open yuki there");
+
     await phone.context.close();
   } finally {
     await browser.close();

@@ -4,16 +4,18 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import type { Book } from "@/core/library";
 import type { CloudShelf } from "@/components/sync/use-sync";
-import { CloudArrowDown } from "@/components/ui/icons";
+import { CloudArrowDown, DownloadSimple } from "@/components/ui/icons";
 import { formatBytes } from "@/lib/format";
 import { BookCover, CoverFrame } from "./book-cover";
 import { GRID_CLASSES } from "./library-grid";
 
-// "In the cloud": books another device uploaded that aren't on this one yet
-// (manga volumes and big files — small novels arrive on their own). A tap
+// "On your other devices": books this device doesn't hold — in the cloud
+// (manga kept there, big files; small novels arrive on their own) or only
+// on another device, which sends them straight over the Wi-Fi. A tap
 // downloads the book and opens it; while it comes in, the cover frosts and
-// counts up. Same grid and tile rhythm as the shelf, so the section reads
-// as more of the library, not a separate place.
+// counts up, and a direct transfer asks for yuki to be opened on the other
+// device until it answers. Same grid and tile rhythm as the shelf, so the
+// section reads as more of the library, not a separate place.
 
 export function CloudSection({ cloud }: { cloud: CloudShelf }) {
   const { t } = useTranslation();
@@ -40,7 +42,7 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
         {t("library.cloud.title")} · {cloud.books.length}
       </h2>
       <div className={GRID_CLASSES}>
-        {cloud.books.map(({ key, desc }) => {
+        {cloud.books.map(({ key, desc, from }) => {
           // The cover pieces speak Book: a cloud book pretends to be one.
           const pseudo: Book = {
             id: key,
@@ -53,15 +55,21 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
           };
           const progress = cloud.downloads[key];
           const busy = progress !== undefined;
+          const waiting = cloud.waiting[key] === true && from !== undefined;
           const subtitle =
             desc.format === "manga" && desc.volumeIndex !== undefined
               ? `${desc.series ?? ""} · ${t("manga.volume", { index: desc.volumeIndex })}`
               : (desc.author ?? " ");
+          // Just "Mac" / "iPhone": the browser's name would push the size off
+          // a phone-width tile.
+          const device = from ? t(`sync.platform.${from.platform}`) : "";
+          const source = from ? t("library.cloud.from", { device }) : t("library.cloud.inCloud");
           return (
             <button
               key={key}
               type="button"
               data-cloud-book={key}
+              data-cloud-from={from ? "device" : "cloud"}
               aria-label={t("library.cloud.download", { title: desc.title })}
               aria-busy={busy || undefined}
               disabled={busy}
@@ -77,19 +85,29 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
                     failed === key ? "ring-2 ring-destructive" : ""
                   }`}
                 >
-                  {busy ? (
+                  {busy && !waiting ? (
                     <span className="text-xs tabular-nums">{Math.round(progress * 100)}%</span>
+                  ) : from ? (
+                    <DownloadSimple className="size-4" />
                   ) : (
                     <CloudArrowDown className="size-4" />
                   )}
                 </span>
+                {waiting ? (
+                  <span
+                    data-cloud-waiting=""
+                    className="absolute inset-x-1.5 top-1.5 rounded-pane bg-scrim px-2 py-1.5 text-center text-xs text-white"
+                  >
+                    {t("library.cloud.waiting", { device })}
+                  </span>
+                ) : null}
               </CoverFrame>
               <p className="mt-3 truncate text-sm text-strong" title={desc.title}>
                 {desc.title}
               </p>
               <p className="mt-0.5 truncate text-xs text-muted-content">{subtitle}</p>
               <p className="mt-0.5 truncate text-xs text-muted-content tabular-nums">
-                {formatBytes(desc.size)}
+                {source} · {formatBytes(desc.size)}
               </p>
             </button>
           );

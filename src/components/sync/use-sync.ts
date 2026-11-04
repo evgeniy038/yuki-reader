@@ -6,6 +6,7 @@ import i18n from "@/lib/i18n";
 import { useLatest } from "@/lib/use-latest";
 import type { Book } from "@/core/library";
 import type { PackDesc } from "@/core/sync/book-pack";
+import type { DeviceInfo } from "@/core/sync/model";
 import { loadReadingSettings, type ReadingSettings } from "@/core/reading-settings";
 import type { OpenedData } from "@/components/library/use-shelf";
 import type { SyncHost } from "./sync-bridge";
@@ -18,9 +19,12 @@ type Cloud = typeof import("./sync-cloud");
 
 /** The shelf's view of the cloud (empty while sync is off). */
 export interface CloudShelf {
-  books: { key: string; desc: PackDesc }[];
+  /** `from`: not in the cloud — comes straight from that device. */
+  books: { key: string; desc: PackDesc; from?: DeviceInfo }[];
   /** content key → 0..1 */
   downloads: Record<string, number>;
+  /** Direct transfers waiting for the other device to open yuki. */
+  waiting: Record<string, true>;
   /** Local ids that can leave this device and stay in the cloud. */
   inCloud: ReadonlySet<string>;
   /** Resolves to the downloaded book's id (null: already on its way). */
@@ -55,9 +59,10 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
   const actions = useRef<Actions | null>(null);
   const cloudModule = useRef<Cloud | null>(null);
   const [readerKey, setReaderKey] = useState(0);
-  const [cloudView, setCloudView] = useState<Pick<CloudShelf, "books" | "downloads" | "inCloud">>({
+  const [cloudView, setCloudView] = useState<Pick<CloudShelf, "books" | "downloads" | "waiting" | "inCloud">>({
     books: [],
     downloads: {},
+    waiting: {},
     inCloud: NO_CLOUD,
   });
 
@@ -111,9 +116,16 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
       let last: ReturnType<typeof sync.getView> | null = null;
       const mirror = () => {
         const view = sync.getView();
-        if (last && last.cloud === view.cloud && last.downloads === view.downloads && last.inCloud === view.inCloud) return;
+        if (
+          last &&
+          last.cloud === view.cloud &&
+          last.downloads === view.downloads &&
+          last.waiting === view.waiting &&
+          last.inCloud === view.inCloud
+        )
+          return;
         last = view;
-        setCloudView({ books: view.cloud, downloads: view.downloads, inCloud: new Set(view.inCloud) });
+        setCloudView({ books: view.cloud, downloads: view.downloads, waiting: view.waiting, inCloud: new Set(view.inCloud) });
       };
       unsubscribe = sync.subscribe(mirror);
       mirror();

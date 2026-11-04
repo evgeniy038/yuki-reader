@@ -41,7 +41,10 @@ export const en = {
       removeDownload: "Remove from this device",
     },
     cloud: {
-      title: "In the cloud",
+      title: "On your other devices",
+      inCloud: "In the cloud",
+      from: "On {{device}}",
+      waiting: "Open yuki on {{device}}",
       download: "Download “{{title}}”",
       failed: "Couldn't download “{{title}}” — try again",
     },

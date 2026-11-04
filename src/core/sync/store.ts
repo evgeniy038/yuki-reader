@@ -1,6 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { VaultKeys } from "./crypto";
 import { parsePackManifest, type PackManifest } from "./book-pack";
+import { parseCatalog, type Catalog } from "./catalog";
 import type { JoinMode, Shadow } from "./merge";
 import {
   parseDeviceInfo,
@@ -273,6 +274,26 @@ export function createSyncStore(dbName = "yuki-sync") {
     },
     setRecoveryToShow: (key: string | null) => put("recoveryToShow", key),
 
+    /** Other devices' catalogs (what each one holds), by device id. */
+    async remoteCatalogs(): Promise<Map<string, { rev: string; catalog: Catalog }>> {
+      const v = await get("remoteCatalogs");
+      const out = new Map<string, { rev: string; catalog: Catalog }>();
+      if (!isObject(v)) return out;
+      for (const [id, entry] of Object.entries(v)) {
+        if (!isObject(entry) || !isStr(entry.rev)) continue;
+        const catalog = parseCatalog(entry.catalog);
+        if (catalog) out.set(id, { rev: entry.rev, catalog });
+      }
+      return out;
+    },
+    setRemoteCatalogs: (value: Map<string, { rev: string; catalog: Catalog }>) =>
+      put("remoteCatalogs", Object.fromEntries(value)),
+    async publishedCatalog(): Promise<string> {
+      const v = await get("publishedCatalog");
+      return isStr(v) ? v : "";
+    },
+    setPublishedCatalog: (hash: string) => put("publishedCatalog", hash),
+
     /** Cloud books' manifests (covers, sizes) by content key, with the
         `file` register stamp they belong to — fetched once per pack. */
     async packManifests(): Promise<Map<BookKey, { t: number; manifest: PackManifest }>> {
@@ -293,7 +314,7 @@ export function createSyncStore(dbName = "yuki-sync") {
         provider session) — before starting over with a new vault. */
     async resetVaultData(): Promise<void> {
       const database = await db();
-      for (const key of ["vault", "shadow", "published", "remotes", "remoteStats", "publishedStats", "snapshot", "status", "recoveryToShow", "hlc", "ocrApplied", "packManifests"]) {
+      for (const key of ["vault", "shadow", "published", "remotes", "remoteStats", "publishedStats", "snapshot", "status", "recoveryToShow", "hlc", "ocrApplied", "packManifests", "remoteCatalogs", "publishedCatalog"]) {
         await database.delete(KV, key);
       }
     },

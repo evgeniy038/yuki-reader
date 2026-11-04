@@ -12,6 +12,7 @@ import {
   updateBookMeta,
   type MangaOcrRecord,
 } from "@/core/storage";
+import type { PackSource } from "@/core/sync/book-pack";
 import type { LocalBridge } from "@/core/sync/engine";
 import {
   computeBookKeys,
@@ -22,6 +23,7 @@ import {
 import type { BookPatch, LocalBook } from "@/core/sync/merge";
 import type { BookKey } from "@/core/sync/model";
 import { syncStore } from "@/core/sync/store";
+import { catalogOf } from "./sync-catalog";
 
 // The engine's view of the shelf: lean books (from the shelf state the app
 // already holds in memory — no IndexedDB scan per round), and the writes a
@@ -120,6 +122,18 @@ async function applyOcr(id: string, pages: Map<number, MokuroBlock[]>): Promise<
   unfinishedAt.delete(id);
 }
 
+/** A stored book as a pack source (cloud upload or a direct transfer). */
+export async function packSourceOf(host: SyncHost, id: string): Promise<PackSource | null> {
+  const book = host.books().find((b) => b.id === id);
+  if (!book) return null;
+  const content = await loadBookContent(id);
+  if (!content) return null;
+  const record = { ...book, ...content };
+  if (book.format !== "manga") return { record };
+  const manga = await loadManga(id);
+  return manga ? { record, manga: { record: manga, page: (index) => loadMangaPageBlob(id, index) } } : null;
+}
+
 export async function createBridge(host: SyncHost): Promise<LocalBridge> {
   const keys = await computeBookKeys(
     host.books().map((book) => book.id),
@@ -161,15 +175,7 @@ export async function createBridge(host: SyncHost): Promise<LocalBridge> {
     ocrEngine: OCR_ENGINE,
     finishedOcr,
     applyOcr,
-    packSource: async (id) => {
-      const book = host.books().find((b) => b.id === id);
-      if (!book) return null;
-      const content = await loadBookContent(id);
-      if (!content) return null;
-      const record = { ...book, ...content };
-      if (book.format !== "manga") return { record };
-      const manga = await loadManga(id);
-      return manga ? { record, manga: { record: manga, page: (index) => loadMangaPageBlob(id, index) } } : null;
-    },
+    catalog: () => catalogOf(host.books(), (id) => keys.get(id)),
+    packSource: (id) => packSourceOf(host, id),
   };
 }

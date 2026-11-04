@@ -43,13 +43,23 @@ grant, full disk, no client secret anywhere (`sync-providers-unit`); and the
 book files — a pack round-trips byte for byte, a broken upload resumes with
 the manifest last, a tampered part never becomes a half-stored book, novels
 go up alone, manga only when kept in the cloud, uploads run on a budget and a
-deleted book's pack comes down (`sync-files-unit`).
+deleted book's pack comes down (`sync-files-unit`); and the direct
+device-to-device leg minus WebRTC — the pack stream in 64 KB frames received
+in pieces of any size, exact pages, nothing half-stored on a short or long
+stream, sealed doorbell signals that go stale, and device catalogs published
+sealed and rewritten only on change (`sync-p2p-unit`). How fast a volume moves is
+measured, not guessed: `pnpm tsx tests/sync-files-bench.ts` sends a 200-page
+volume through a cloud with a fixed per-request latency and a shared link
+(`LATENCY_MS`, `LINK_MBIT`, `PAGES`, `PAGE_KB`) and prints time and request
+count each way.
 
 `pnpm test:sync-smoke` drives two Chrome profiles as two devices through the
 real UI, with Yandex Disk (OAuth, REST, upload/download hosts) emulated by
 request interception — including a novel that arrives on the other device by
-itself and a manga volume kept in the cloud that waits there as a tile, opened
-with a tap. Start a dev server with a provider id first:
+itself, a manga volume kept in the cloud that waits there as a tile, opened
+with a tap, and one that never went up, which the phone fetches straight from
+the open Mac over a real WebRTC connection (and, with the Mac closed, asks to
+open yuki there). Start a dev server with a provider id first:
 
 ```
 VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480

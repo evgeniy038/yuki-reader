@@ -102,13 +102,16 @@ export async function seal(
   vaultId: string,
   path: string,
   payload: Uint8Array,
+  /** false for bytes that are already compressed (scans, PDFs): deflate
+      then only stores (level 0) — same format, none of the CPU. */
+  compress = true,
 ): Promise<Uint8Array> {
   const nonce = randomBytes(NONCE_BYTES);
   const cipher = new Uint8Array(
     await crypto.subtle.encrypt(
       { name: "AES-GCM", iv: buf(nonce), additionalData: buf(aadFor(vaultId, path)) },
       keys.enc,
-      buf(deflateSync(payload)),
+      buf(deflateSync(payload, { level: compress ? 6 : 0 })),
     ),
   );
   const out = new Uint8Array(MAGIC.length + 1 + NONCE_BYTES + cipher.length);

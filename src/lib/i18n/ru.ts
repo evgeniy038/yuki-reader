@@ -38,7 +38,10 @@ export const ru: Messages = {
       removeDownload: "Убрать с устройства",
     },
     cloud: {
-      title: "В облаке",
+      title: "На других устройствах",
+      inCloud: "В облаке",
+      from: "На {{device}}",
+      waiting: "Откройте yuki на {{device}}",
       download: "Скачать «{{title}}»",
       failed: "Не удалось скачать «{{title}}» — попробуйте ещё раз",
     },

@@ -97,6 +97,29 @@ class DropboxFolder implements RemoteFolder {
     }
   }
 
+  async watch(dir: string, signal: AbortSignal): Promise<void> {
+    const cursorFor = () => this.rpc("files/list_folder/get_latest_cursor", { path: `/${dir}`, recursive: true });
+    let response = await cursorFor();
+    if (await notFound(response)) {
+      await this.rpc("files/create_folder_v2", { path: `/${dir}`, autorename: false });
+      response = await cursorFor();
+    }
+    if (!response.ok) await this.fail(response, "watch");
+    const body: unknown = await response.json();
+    if (!isObject(body) || typeof body.cursor !== "string") throw new Error("Dropbox sent no cursor");
+    // The long-poll takes no token; a plain-text body keeps it a simple
+    // request (Dropbox's documented browser path, no preflight).
+    const poll = await this.fetchImpl("https://notify.dropboxapi.com/2/files/list_folder/longpoll", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain; charset=dropbox-cors-hack" },
+      body: JSON.stringify({ cursor: body.cursor, timeout: 90 }),
+      signal,
+    });
+    const result: unknown = await poll.json().catch(() => null);
+    const backoff = isObject(result) && typeof result.backoff === "number" ? result.backoff : 0;
+    if (backoff > 0) await new Promise((resolve) => setTimeout(resolve, backoff * 1000));
+  }
+
   async read(path: string): Promise<Uint8Array | null> {
     const response = await withToken(this.keeper, (token) =>
       this.fetchImpl(`${CONTENT}/files/download`, {

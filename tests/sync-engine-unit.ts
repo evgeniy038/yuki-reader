@@ -96,6 +96,7 @@ function device(id: string, books: LocalBook[], days: DailyStats[], settings: Re
       },
       // Book files are covered by sync-files-unit.ts; here no book has any.
       packSource: async () => null,
+      catalog: async () => ({}),
     },
   };
   return dev;

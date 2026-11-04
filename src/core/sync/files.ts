@@ -2,7 +2,7 @@ import { folderName } from "./crypto";
 import type { Hlc } from "./hlc";
 import type { LocalState, Shadow } from "./merge";
 import type { BookKey, DeviceInfo } from "./model";
-import { PACK_VERSION, packDir, planPack, uploadPack, type PackSource } from "./book-pack";
+import { legacyPacksDir, PACK_VERSION, packDir, planPack, uploadPack, type PackSource } from "./book-pack";
 import { QuotaError, type RemoteFolder } from "./remote";
 import type { VaultBinding } from "./store";
 
@@ -16,6 +16,8 @@ import type { VaultBinding } from "./store";
 // so a long upload never holds the reading state back: the next round
 // carries on from the part it stopped at. A book deleted everywhere, or a
 // volume taken out of the cloud, has its pack removed by its uploader.
+// Packs of an older format (1.4.0's v1, kept inside devices/) are deleted
+// and their books uploaded again in the current one.
 
 /** The app side of file sync. */
 export interface FileBridge {
@@ -49,8 +51,11 @@ export async function syncFiles(
   deadline: number,
 ): Promise<FilesReport> {
   const report: FilesReport = { bytes: 0, pending: false, full: false };
+  // v1 leftovers in the state folder: useless now, and every round's
+  // listing of devices/ would keep wading through them.
+  for (const entry of await remote.list(legacyPacksDir(device.id))) await remote.remove(entry.path);
   const mine = new Map<string, Set<string>>();
-  for (const entry of await remote.list(`devices/${device.id}/books`)) {
+  for (const entry of await remote.list(`books/${device.id}`)) {
     const dir = entry.path.slice(0, entry.path.lastIndexOf("/"));
     const set = mine.get(dir) ?? new Set<string>();
     set.add(entry.path);
@@ -67,7 +72,7 @@ export async function syncFiles(
 
   // Packs this device uploaded that nobody should keep any more.
   for (const [key, regs] of Object.entries(merged.books)) {
-    if (!regs.file || regs.file.v === 0 || regs.file.d !== device.id) continue;
+    if (!regs.file || regs.file.v !== PACK_VERSION || regs.file.d !== device.id) continue;
     const gone = regs.deleted?.v === true;
     if (!gone && wantsCloud(regs.format, regs.keep?.v)) continue;
     await removePack(packDir(device.id, await folderName(vault.keys, key)));
@@ -78,7 +83,9 @@ export async function syncFiles(
     const regs = merged.books[book.key];
     if (!regs || regs.deleted?.v === true) continue;
     if (!wantsCloud(book.format, regs.keep?.v ?? book.keep)) continue;
-    if (regs.file && regs.file.v > 0) continue;
+    // A current pack exists (anyone's): nothing to do. An older format or
+    // none: this device has the book, so it uploads one.
+    if (regs.file?.v === PACK_VERSION) continue;
     if (Date.now() > deadline) {
       report.pending = true;
       break;

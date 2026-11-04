@@ -4,7 +4,8 @@ import {
   installPack,
   manifestPath,
   packDir,
-  PART_BYTES,
+  CHUNK_BYTES,
+  chunkPath,
   planPack,
   readManifest,
   uploadPack,
@@ -76,7 +77,7 @@ const novel: BookRecord = {
   bookCss: "p { margin: 0 }",
   // One illustration over a part: the resource is cut into two.
   resources: [
-    { path: "img/a.jpg", mime: "image/jpeg", bytes: bytes(PART_BYTES + 1234, 7) },
+    { path: "img/a.jpg", mime: "image/jpeg", bytes: bytes(CHUNK_BYTES + 1234, 7) },
     { path: "css/b.css", mime: "text/css", bytes: bytes(300, 3) },
   ],
 };
@@ -88,8 +89,9 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
 {
   const plan = await planPack({ record: novel });
   assert.ok(plan, "a stored novel plans into a pack");
-  const totalParts = plan.manifest.files.reduce((sum, file) => sum + file.parts, 0);
-  assert.equal(totalParts, 4, "record + a two-part illustration + a stylesheet");
+  const totalParts = plan.manifest.chunks;
+  assert.equal(totalParts, 2, "record, illustration and stylesheet back to back: two chunks");
+  assert.equal(plan.manifest.files[1]!.offset, plan.manifest.files[0]!.size, "files sit right after each other");
   assert.equal(plan.manifest.desc.title, "キッチン");
   assert.equal(
     plan.manifest.desc.size,
@@ -99,9 +101,9 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
   const dir = packDir("devA", await folderName(vault.keys, "e1:kitchen"));
 
   cloud.writes = 0;
-  cloud.breakAfter = 2;
+  cloud.breakAfter = 1;
   await assert.rejects(uploadPack(cloud, vault, dir, plan, new Set(), Date.now() + 60_000));
-  assert.equal(cloud.writes, 2, "two parts made it before the break");
+  assert.equal(cloud.writes, 1, "one chunk made it before the break (the other retried, then gave up)");
   assert.ok(!cloud.files.has(manifestPath(dir)), "no manifest until every part is up");
 
   cloud.breakAfter = Infinity;
@@ -109,7 +111,7 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
   const before = cloud.writes;
   const resumed = await uploadPack(cloud, vault, dir, plan, existing, Date.now() + 60_000);
   assert.ok(resumed.done, "the second try finishes");
-  assert.equal(cloud.writes - before, totalParts - 2 + 1, "only the missing parts, then the manifest");
+  assert.equal(cloud.writes - before, totalParts - 1 + 1, "only the missing chunk, then the manifest");
   const sealedTitle = [...cloud.files.values()].some((file) =>
     new TextDecoder().decode(file).includes("台所"),
   );
@@ -137,7 +139,8 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
 
 // --- manga pages land page by page; a tampered part leaves nothing ----------
 {
-  const pages = [bytes(900, 1), bytes(1200, 2), bytes(700, 3)];
+  // Big enough pages for two chunks (a swap needs two).
+  const pages = [bytes(5_000_000, 1), bytes(5_000_000, 2), bytes(700, 3)];
   const source: PackSource = {
     record: { id: "m-1", title: "推しの子 第02巻", format: "manga", progress: 0, addedAt: 1, chapters: [], pageCount: 3, series: "推しの子", volumeIndex: 2 },
     manga: {
@@ -158,8 +161,8 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
   assert.equal(second?.type, "image/jpeg");
 
   // Swap two parts: each one is bound to its own path, so neither opens.
-  const a = `${dir}/2.0.bin`;
-  const b = `${dir}/3.0.bin`;
+  const a = chunkPath(dir, 0);
+  const b = chunkPath(dir, 1);
   const swap = cloud.files.get(a)!;
   cloud.files.set(a, cloud.files.get(b)!);
   cloud.files.set(b, swap);
@@ -196,6 +199,7 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
     ocrEngine: 5,
     finishedOcr: async () => null,
     applyOcr: async () => {},
+    catalog: async () => ({}),
     packSource: async (id) => {
       const record = records.get(id);
       if (!record) return null;
@@ -220,8 +224,14 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
   assert.ok(remote.files.has("devices/devA/state.bin"), "…while the reading state still goes out");
   assert.ok(!remote.files.has(manifestPath(novelDir)));
 
+  // A 1.4.0 (v1) pack left inside the state folder.
+  remote.files.set("devices/devA/books/0123456789abcdef0123456789abcdef/1.0.bin", new Uint8Array(8));
   const first = await round();
   assert.ok(!first.filesPending);
+  assert.ok(
+    !(await remote.list("devices")).some((entry) => entry.path.includes("/books/")),
+    "book chunks never sit in the state folder (v1 leftovers are removed)",
+  );
   assert.ok(remote.files.has(manifestPath(novelDir)), "a novel goes up on its own");
   assert.ok(!remote.files.has(manifestPath(mangaDir)), "a manga volume doesn't — it's hundreds of MB");
   let shadow = await store.shadow();

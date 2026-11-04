@@ -437,15 +437,34 @@ pages done.
 EPUB and PDF go to the cloud on their own; a manga volume only when its
 series is set to **Keep in the cloud** (series menu) — a volume weighs
 hundreds of MB and free clouds hold 2–5 GB. A book is uploaded once, by the
-device that had it first, in encrypted parts that resume where a broken
-upload stopped; uploads run a little each round, so reading state never
-waits for them. On another device a novel or a PDF up to 25 MB just
-arrives; manga and bigger files wait in the shelf's **In the cloud**
-section as tiles — a tap downloads the book and opens it. A downloaded
-volume can be **removed from this device**: it stays in the cloud and on
-every other device. A book deleted everywhere, or a series no longer kept in
+device that had it first, as one encrypted stream cut into 8 MB chunks —
+a few dozen requests per volume instead of one per page (each request to a
+cloud through a VPN costs ~0.5–0.9 s before a byte moves) — three in
+flight each way, retried on a hiccup, resumed where a broken upload
+stopped. Book chunks live apart from the reading state, so a round stays
+quick however big the library grows; uploads run on a budget each round
+and the next round picks up at once, so reading state never waits. On another device a novel or a PDF up to 25 MB just
+arrives; manga and bigger files wait in the shelf's **On your other
+devices** section as tiles — a tap downloads the book and opens it. A
+downloaded volume can be **removed from this device**: it stays in the cloud
+or on the device it came from. A book deleted everywhere, or a series no longer kept in
 the cloud, has its files taken out of the cloud by the device that uploaded
 them. A full cloud stops uploads (Settings says so), never reading sync.
+
+**Straight from another device**: a book that never went to the cloud —
+manga above all — still shows on the other devices, as a tile **On Mac**.
+Each device publishes a sealed **catalog** of what it holds (titles, sizes,
+small covers); a tap rings that device through the cloud (a sealed WebRTC
+offer and answer, good for two minutes) and the book comes over a direct
+encrypted connection as the same stream a cloud pack is cut from — at the
+speed of the home network, no size limit, nothing stored in the cloud. Both
+devices need yuki open meanwhile: every syncing device answers while it is
+open (Dropbox wakes it at once through its long-poll, Yandex is asked every
+few seconds). With the other device closed the tile says **Open yuki on
+Mac**, and the transfer starts once it is opened (within a minute and a
+half). A tap prefers the cloud when the pack is there. There is no relay:
+two devices that can't reach each other directly (strict NAT on different
+networks) can't swap books this way — the cloud path remains.
 
 There is no yuki server. The person connects THEIR cloud — **Yandex Disk** or
 **Dropbox**, the only two that let a static site sign in once with no secret
