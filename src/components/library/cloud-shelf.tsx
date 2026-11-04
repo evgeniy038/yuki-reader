@@ -113,7 +113,7 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
               </p>
               <p className="mt-0.5 truncate text-xs text-muted-content">{subtitle}</p>
               <p className="mt-0.5 truncate text-xs text-muted-content tabular-nums">
-                {source} · {formatBytes(desc.size)}
+                {desc.size > 0 ? `${source} · ${formatBytes(desc.size)}` : source}
               </p>
             </button>
           );

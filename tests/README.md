@@ -43,16 +43,23 @@ grant, full disk, no client secret anywhere, Dropbox's watch armed before
 the look and guarded against a silent line (`sync-providers-unit`); and the
 book files — a pack round-trips byte for byte, a broken upload resumes with
 the manifest last, a tampered part never becomes a half-stored book, novels
-go up alone, manga only when kept in the cloud, uploads run on a budget and a
-deleted book's pack comes down (`sync-files-unit`); and the direct
+go up alone, manga only when kept in the cloud, uploads run on a budget, a
+deleted book's pack comes down, and an older-format pack is sent again by
+its uploader only (`sync-files-unit`); and the direct
 device-to-device leg minus WebRTC — the pack stream in 64 KB frames received
 in pieces of any size, exact pages, nothing half-stored on a short or long
 stream, sealed doorbell signals that go stale, and device catalogs published
-sealed and rewritten only on change, every holder rung (`sync-p2p-unit`). How fast a volume moves is
+sealed and rewritten only on change, every holder rung, and the wire's brake
+— a sender never more than the window ahead of what the receiver STORED,
+an older receiver still served (`sync-p2p-unit`). How fast a volume moves is
 measured, not guessed: `pnpm tsx tests/sync-files-bench.ts` sends a 200-page
 volume through a cloud with a fixed per-request latency and a shared link
 (`LATENCY_MS`, `LINK_MBIT`, `PAGES`, `PAGE_KB`) and prints time and request
-count each way.
+count each way. How much memory sync takes is measured too:
+`pnpm tsx tests/sync-memory-bench.ts` (sync dev server, see below) imports a
+heavy library (`NOVELS`, `NOVEL_MB`, `PAGES`) and prints the page's renderer
+RSS from the OS for each phase — a synced app start must sit at the level of
+one with sync off (iOS kills a page that grows too big).
 
 `pnpm test:sync-smoke` drives two Chrome profiles as two devices through the
 real UI, with Yandex Disk (OAuth, REST, upload/download hosts) emulated by

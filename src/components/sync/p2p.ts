@@ -1,11 +1,13 @@
 import type { BookRecord } from "@/core/storage";
-import { planPack, type PackSource } from "@/core/sync/book-pack";
-import { parsePackManifest, type PackManifest } from "@/core/sync/pack-shape";
-import { createInstaller, streamPack, type PersonalState } from "@/core/sync/pack-stream";
+import type { PackSource } from "@/core/sync/book-pack";
+import type { PersonalState } from "@/core/sync/pack-stream";
 import type { BookKey } from "@/core/sync/model";
 import type { RemoteFolder } from "@/core/sync/remote";
 import { answerPath, OFFER, offerPath, readSignal, writeSignal } from "@/core/sync/signal";
 import type { VaultBinding } from "@/core/sync/store";
+import { parseMessage, PeerUnavailableError, PeerUnreachableError, receiveBook, sendBook } from "./p2p-wire";
+
+export { PeerUnavailableError, PeerUnreachableError } from "./p2p-wire";
 
 // Books straight from one device to another — no cloud storage, no size
 // limit, at the speed of the home Wi-Fi. The cloud only rings the doorbell
@@ -16,10 +18,6 @@ import type { VaultBinding } from "@/core/sync/store";
 // open while it moves.
 
 const ICE: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-/** Data-channel message size — safe in every browser's SCTP stack. */
-const FRAME = 64 * 1024;
-/** Stop queueing while this much is still unsent (memory + fairness). */
-const HIGH_WATER = 4 * 1024 * 1024;
 const ANSWER_WAIT_MS = 90_000;
 /** No answer this long: the other device is most likely closed — say so.
     Not sooner: over a VPN every cloud request costs ~0.5–0.9 s, and a ring
@@ -29,47 +27,6 @@ const OPEN_WAIT_MS = 20_000;
 
 /** Where a direct transfer stands before the first byte. */
 export type DirectStage = "ringing" | "closed" | "connecting";
-
-/** No device answered the doorbell (yuki isn't open on any of them). */
-export class PeerUnavailableError extends Error {
-  constructor() {
-    super("The other device didn't answer");
-    this.name = "PeerUnavailableError";
-  }
-}
-
-/** A device answered, but no direct connection came up (different networks
-    behind strict routers, or a VPN in the way). */
-export class PeerUnreachableError extends Error {
-  constructor() {
-    super("The other device answered but couldn't be reached directly");
-    this.name = "PeerUnreachableError";
-  }
-}
-
-type Message =
-  | { t: "get"; key: BookKey }
-  | { t: "manifest"; manifest: PackManifest }
-  | { t: "end" }
-  | { t: "error"; reason: string };
-
-function parseMessage(text: string): Message | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null || !("t" in value)) return null;
-  if (value.t === "get" && "key" in value && typeof value.key === "string") return { t: "get", key: value.key };
-  if (value.t === "manifest" && "manifest" in value) {
-    const manifest = parsePackManifest(value.manifest);
-    return manifest ? { t: "manifest", manifest } : null;
-  }
-  if (value.t === "end") return { t: "end" };
-  if (value.t === "error") return { t: "error", reason: "reason" in value && typeof value.reason === "string" ? value.reason : "" };
-  return null;
-}
 
 /** Wait for ICE gathering to finish (or a few seconds — a slow STUN server
     must not hold the doorbell: on one Wi-Fi the local candidates suffice). */
@@ -145,54 +102,6 @@ function opened({ pc, channel }: Call): Promise<void> {
   });
 }
 
-/** Ask for the book on an open channel and store it as `id`. */
-function receive(
-  channel: RTCDataChannel,
-  opts: { key: BookKey; id: string; personal: PersonalState; onProgress: (done: number, total: number) => void },
-): Promise<BookRecord> {
-  return new Promise<BookRecord>((resolve, reject) => {
-    let installer: ReturnType<typeof createInstaller> | null = null;
-    let total = 0;
-    // Messages are handled strictly in order: storage writes are async.
-    let queue = Promise.resolve();
-    const fail = (error: unknown) => {
-      reject(error);
-      channel.close();
-    };
-    channel.addEventListener("message", (event: MessageEvent) => {
-      const data: unknown = event.data;
-      queue = queue
-        .then(async () => {
-          if (typeof data === "string") {
-            const message = parseMessage(data);
-            if (!message) throw new Error("The other device sent something unexpected");
-            if (message.t === "manifest") {
-              total = message.manifest.size;
-              installer = createInstaller(message.manifest, opts.id, opts.personal);
-            } else if (message.t === "end") {
-              if (!installer) throw new Error("The book never started");
-              resolve(await installer.finish());
-            } else if (message.t === "error") {
-              throw new Error(message.reason || "The other device couldn't send the book");
-            }
-            return;
-          }
-          if (!(data instanceof ArrayBuffer) || !installer) throw new Error("The book arrived out of order");
-          await installer.push(new Uint8Array(data));
-          opts.onProgress(installer.received, total);
-        })
-        .catch(async (error: unknown) => {
-          await installer?.abort();
-          fail(error);
-        });
-    });
-    channel.addEventListener("close", () => {
-      void queue.then(() => fail(new PeerUnavailableError()));
-    });
-    channel.send(JSON.stringify({ t: "get", key: opts.key } satisfies Message));
-  });
-}
-
 /** Ask the devices in `peers` for book `key` — every one is rung at once,
     the first to answer sends it — and store it as `id`. Throws
     PeerUnavailableError when none picks up in time, PeerUnreachableError
@@ -234,34 +143,13 @@ export async function fetchFromPeer(opts: {
     for (const other of calls) if (other !== call) other.pc.close();
     opts.onStage("connecting");
     await opened(call);
-    return await receive(call.channel, opts);
+    return await receiveBook(call.channel, opts);
   } finally {
     for (const { peer, pc } of calls) {
       pc.close();
       void remote.remove(offerPath(me, peer)).catch(() => {});
     }
   }
-}
-
-/** Send one book down an open channel, respecting its buffer. */
-async function sendBook(channel: RTCDataChannel, source: PackSource | null): Promise<void> {
-  const plan = source ? await planPack(source) : null;
-  if (!plan) {
-    channel.send(JSON.stringify({ t: "error", reason: "That book isn't on this device any more" } satisfies Message));
-    return;
-  }
-  channel.bufferedAmountLowThreshold = HIGH_WATER / 4;
-  channel.send(JSON.stringify({ t: "manifest", manifest: plan.manifest } satisfies Message));
-  await streamPack(plan, FRAME, async (bytes) => {
-    if (channel.readyState !== "open") throw new Error("The other device left");
-    if (channel.bufferedAmount > HIGH_WATER) {
-      await new Promise<void>((resolve) =>
-        channel.addEventListener("bufferedamountlow", () => resolve(), { once: true }),
-      );
-    }
-    channel.send(bytes.slice()); // its own buffer: the view may share a page's
-  });
-  channel.send(JSON.stringify({ t: "end" } satisfies Message));
 }
 
 /** Answer other devices' doorbells and serve the books they ask for while
@@ -301,7 +189,7 @@ export function servePeers(opts: {
         if (request?.t !== "get") return;
         void opts
           .packSource(request.key)
-          .then((source) => sendBook(channel, source))
+          .then((source) => sendBook(channel, source, request.window))
           .catch(() => channel.close());
       });
       channel.addEventListener("close", drop);

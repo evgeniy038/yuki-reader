@@ -1,13 +1,16 @@
 import type { Book } from "@/core/library";
-import { loadBookContent, loadManga, loadMangaPageBlob } from "@/core/storage";
+import { loadManga, loadMangaPageBlob } from "@/core/storage";
 import type { PackDesc } from "@/core/sync/pack-shape";
 import type { BookKey } from "@/core/sync/model";
 
 // This device's catalog for the others (core/sync/catalog.ts): one tile's
-// worth per held book — a small cover and the size it would take to send.
-// Worked out once per book (the size of a volume means touching every page
-// blob) and kept for the session; the catalog itself is rebuilt each round
-// from the cache, which is cheap.
+// worth per held book — a small cover and, for a manga volume, the size it
+// would take to send. Worked out once per book and kept for the session;
+// the catalog itself is rebuilt each round from the cache, which is cheap.
+// Never by loading a book: a stored page blob knows its size without being
+// read, but a novel's or a PDF's size means its whole content in memory —
+// every book on every start, which is what got a phone's page killed. Those
+// go to the cloud anyway; their tile simply shows no size (0).
 
 const THUMB_PX = 200;
 const cache = new Map<string, PackDesc>();
@@ -36,19 +39,12 @@ async function thumbnail(cover: string | undefined): Promise<string | undefined>
 }
 
 async function sizeOf(book: Book): Promise<number> {
-  if (book.format === "manga") {
-    const manga = await loadManga(book.id);
-    let total = 0;
-    for (let index = 0; index < (manga?.pages.length ?? 0); index += 1) {
-      total += (await loadMangaPageBlob(book.id, index))?.size ?? 0;
-    }
-    return total;
+  if (book.format !== "manga") return 0;
+  const manga = await loadManga(book.id);
+  let total = 0;
+  for (let index = 0; index < (manga?.pages.length ?? 0); index += 1) {
+    total += (await loadMangaPageBlob(book.id, index))?.size ?? 0;
   }
-  const content = await loadBookContent(book.id);
-  if (!content) return 0;
-  let total = content.pdfBytes?.length ?? 0;
-  for (const chapter of content.chapters) total += chapter.html.length;
-  for (const resource of content.resources ?? []) total += resource.bytes.length;
   return total;
 }
 

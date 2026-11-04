@@ -46,7 +46,7 @@ export interface BookRegs {
       the device that published it (devices/<d>/ocr/<folder>.bin). */
   ocr?: Reg<number>;
   /** The book's own files in the cloud: v = pack format version (0 = taken
-      back), d = the device that uploaded them (devices/<d>/books/<folder>/). */
+      back), d = the device that uploaded them (books/<d>/<folder>/). */
   file?: Reg<number>;
   /** Manga only: "keep this volume in the cloud" — EPUB and PDF always go,
       manga volumes only on request (they are hundreds of MB each). */

@@ -17,7 +17,9 @@ import type { VaultBinding } from "./store";
 // carries on from the part it stopped at. A book deleted everywhere, or a
 // volume taken out of the cloud, has its pack removed by its uploader.
 // Packs of an older format (1.4.0's v1, kept inside devices/) are deleted
-// and their books uploaded again in the current one.
+// and their books uploaded again in the current one — by the device that
+// uploaded them, no other: a phone holding the same books must not redo the
+// Mac's uploads (memory, battery, a cloud that fills twice over).
 
 /** The app side of file sync. */
 export interface FileBridge {
@@ -83,9 +85,11 @@ export async function syncFiles(
     const regs = merged.books[book.key];
     if (!regs || regs.deleted?.v === true) continue;
     if (!wantsCloud(book.format, regs.keep?.v ?? book.keep)) continue;
-    // A current pack exists (anyone's): nothing to do. An older format or
-    // none: this device has the book, so it uploads one.
-    if (regs.file?.v === PACK_VERSION) continue;
+    // A current pack exists (anyone's): nothing to do. None: this device
+    // has the book, so it uploads one. An older format: its uploader does.
+    const file = regs.file;
+    if (file?.v === PACK_VERSION) continue;
+    if (file && file.v > 0 && file.d !== device.id) continue;
     if (Date.now() > deadline) {
       report.pending = true;
       break;

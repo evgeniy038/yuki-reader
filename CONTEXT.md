@@ -467,7 +467,15 @@ and only after 20 s without an answer **Open yuki on Mac** — over a VPN a
 ring that is answered takes 5–10 s, so anything sooner would cry wolf. The
 transfer starts once the device is opened (within a minute and a half); a
 failure says which way it failed — nobody answered, or no direct connection
-came up. A tap prefers the cloud when the pack is there. There is no relay:
+came up. A tap prefers the cloud when the pack is there. The sender stays
+within 16 MB of what the receiver has STORED (it acknowledges as it writes),
+so a 300 MB volume never piles up in a phone's memory.
+
+Sync stays light on memory — iOS kills a page that grows too big, and it
+comes back in a reload loop. A device's catalog never loads a book to
+describe it (a volume's size comes from its page records; a novel's or a
+PDF's isn't shown), and a pack of an older format is sent again only by the
+device that uploaded it, not by every device holding the book. There is no relay:
 two devices that can't reach each other directly (strict NAT on different
 networks) can't swap books this way — the cloud path remains.
 

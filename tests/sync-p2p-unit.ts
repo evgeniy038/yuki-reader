@@ -9,6 +9,7 @@ import { answerPath, offerPath, parseSignal, readSignal, SIGNAL_TTL_MS, writeSig
 import { createSyncStore } from "../src/core/sync/store.ts";
 import { createVault, unlockVault } from "../src/core/sync/vault.ts";
 import { loadBookContent, loadManga, loadMangaPageBlob, loadShelfBooks } from "../src/core/storage.ts";
+import { ACK_EVERY, parseMessage, receiveBook, sendBook, WINDOW } from "../src/components/sync/p2p-wire.ts";
 
 // The pieces of a direct device-to-device transfer that run without a
 // browser: the pack stream (sent in frames, received in pieces of any size,
@@ -202,6 +203,92 @@ const random = (max: number): number => {
   assert.deepEqual(holdersOf("k", devices, catalogs).map((d) => d.id), ["mac-safari", "mac-chrome"], "both Macs are rung, not just the first");
   assert.deepEqual(holdersOf("other", devices, catalogs), [], "nobody holds it: nobody is rung");
   console.log("  ✓ holders: every device that holds the book, in order");
+}
+
+// --- the wire's brake: never more than WINDOW ahead of what's STORED --------
+// A phone writes to storage slower than Wi-Fi delivers; without the brake a
+// 300 MB volume piles up in its page's memory and iOS kills the page.
+{
+  /** An in-memory data channel: what's sent lands on `peer`, a tick later. */
+  class FakeWire extends EventTarget {
+    readyState: RTCDataChannelState = "open";
+    bufferedAmount = 0;
+    bufferedAmountLowThreshold = 0;
+    peer: FakeWire | null = null;
+    readonly sent: (string | Uint8Array)[] = [];
+    send(data: string | ArrayBufferView | ArrayBuffer | Blob): void {
+      const item = typeof data === "string" ? data : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)) : data;
+      if (!(typeof item === "string" || item instanceof Uint8Array)) throw new Error("unexpected payload");
+      this.sent.push(item);
+      const payload = typeof item === "string" ? item : item.slice().buffer;
+      setTimeout(() => this.peer?.dispatchEvent(new MessageEvent("message", { data: payload })), 0);
+    }
+    close(): void {
+      this.readyState = "closed";
+      this.dispatchEvent(new Event("close"));
+    }
+  }
+  const bytesSent = (wire: FakeWire) => wire.sent.reduce((sum, item) => sum + (typeof item === "string" ? 0 : item.length), 0);
+  const settle = async (wire: FakeWire) => {
+    for (let last = -1; last !== bytesSent(wire); ) {
+      last = bytesSent(wire);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+  };
+  const pages = Array.from({ length: 40 }, (_, i) => bytes(1024 * 1024, i));
+  const volume: PackSource = {
+    record: { id: "big", title: "大きい巻", format: "manga", progress: 0, addedAt: 1, chapters: [] },
+    manga: {
+      record: { id: "big", pages: pages.map((_, i) => ({ path: `${i}.jpg` })) },
+      page: async (index) => new Blob([pages[index]! as BlobPart], { type: "image/jpeg" }),
+    },
+  };
+  const ack = (wire: FakeWire, stored: number) =>
+    wire.dispatchEvent(new MessageEvent("message", { data: JSON.stringify({ t: "ack", stored }) }));
+
+  // A receiver that stores nothing yet: the sender stops at the window.
+  const tx = new FakeWire();
+  const sending = sendBook(tx, volume, WINDOW);
+  await settle(tx);
+  assert.ok(bytesSent(tx) > 0 && bytesSent(tx) <= WINDOW, `a silent receiver gets at most the window (${bytesSent(tx)} B)`);
+  ack(tx, 8 * 1024 * 1024);
+  await settle(tx);
+  assert.ok(bytesSent(tx) <= 8 * 1024 * 1024 + WINDOW, "each acknowledgement lets exactly that much more through");
+  const size = (await planPack(volume))!.manifest.size;
+  for (let stored = 0; stored < size; stored += ACK_EVERY) ack(tx, stored + ACK_EVERY);
+  await sending;
+  assert.equal(bytesSent(tx), size, "acknowledged to the end, the whole volume goes");
+  assert.equal(parseMessage(String(tx.sent.at(-1)))?.t, "end");
+
+  // An older receiver (no window asked): no brake, nothing stalls.
+  const old = new FakeWire();
+  await sendBook(old, volume, undefined);
+  assert.equal(bytesSent(old), size, "an older receiver still gets the whole book");
+
+  // Both ends for real: the receiver acknowledges as it stores.
+  const [a, b] = [new FakeWire(), new FakeWire()];
+  a.peer = b;
+  b.peer = a;
+  let peakAhead = 0;
+  let stored = 0;
+  b.addEventListener("message", (event) => {
+    const message = typeof (event as MessageEvent).data === "string" ? parseMessage((event as MessageEvent).data) : null;
+    if (message?.t === "get") void sendBook(b, volume, message.window);
+  });
+  a.addEventListener("message", () => (peakAhead = Math.max(peakAhead, bytesSent(b) - stored)));
+  const record = await receiveBook(a, {
+    key: "m1:big",
+    id: "wired",
+    personal: { progress: 0, addedAt: 1 },
+    onProgress: (done) => (stored = done),
+  });
+  const acks = a.sent.flatMap((item) => (typeof item === "string" ? [parseMessage(item)] : [])).filter((m) => m?.t === "ack");
+  assert.equal(parseMessage(String(a.sent[0]))?.t, "get");
+  assert.ok(acks.length >= size / ACK_EVERY - 1, `the receiver acknowledges as it stores (${acks.length} acks)`);
+  assert.ok(peakAhead <= WINDOW + 64 * 1024, `never more than the window waiting to be stored (${(peakAhead / 1048576).toFixed(1)} MB)`);
+  assert.equal(record.id, "wired");
+  assert.ok(same(new Uint8Array(await (await loadMangaPageBlob("wired", 39))!.arrayBuffer()), pages[39]!), "…and the last page arrives exactly");
+  console.log("  ✓ wire: the sender stays within the window of what the receiver stored");
 }
 
 console.log("sync-p2p-unit: all checks passed");

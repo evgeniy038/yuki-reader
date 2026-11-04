@@ -13,6 +13,8 @@ import {
 } from "../src/core/sync/book-pack.ts";
 import { folderName } from "../src/core/sync/crypto.ts";
 import { syncRound, type LocalBridge } from "../src/core/sync/engine.ts";
+import { syncFiles } from "../src/core/sync/files.ts";
+import { Hlc } from "../src/core/sync/hlc.ts";
 import type { LocalBook, LocalState } from "../src/core/sync/merge.ts";
 import type { RemoteEntry, RemoteFolder } from "../src/core/sync/remote.ts";
 import { createSyncStore, type VaultBinding } from "../src/core/sync/store.ts";
@@ -269,6 +271,49 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
   assert.ok(![...remote.files.keys()].some((path) => path.startsWith(`${mangaDir}/`)), "stop keeping = pack removed");
   void recoveryKey;
   console.log("  ✓ engine: novels go up alone, manga on request, budgeted, cleaned after delete");
+}
+
+// --- an older pack goes up again — by its uploader only ---------------------
+// After 1.4.1 every 1.4.0 pack is out of date. The phone that downloaded the
+// Mac's books holds them too, but redoing the Mac's uploads is what got a
+// phone's page killed (memory) — it waits for the Mac's new pack instead.
+{
+  const remote = new MemoryFolder();
+  const { binding } = await createVault(remote);
+  const local: LocalState = {
+    books: [{ id: "p-n", key: "e1:kitchen", title: "キッチン", progress: 0, favorite: false, format: "epub" }],
+    settings: {},
+  };
+  let asked = 0;
+  const files = { packSource: async () => ((asked += 1), { record: { ...novel, id: "p-n" } }) };
+  const merged = (file?: { v: number; d: string }) => ({
+    books: { "e1:kitchen": { title: "キッチン", format: "epub" as const, ...(file ? { file: { ...file, t: 1 } } : {}) } },
+    settings: {},
+  });
+  const pass = (state: ReturnType<typeof merged>, device: string) =>
+    syncFiles(remote, binding, { id: device, platform: "iphone", app: "safari" }, files, state, local, new Hlc(), Date.now() + 60_000);
+  const phoneDir = packDir("phone", await folderName(binding.keys, "e1:kitchen"));
+
+  const theirs = merged({ v: 1, d: "mac" });
+  await pass(theirs, "phone");
+  assert.equal(asked, 0, "the phone doesn't even load a book whose old pack is the Mac's");
+  assert.ok(!remote.files.has(manifestPath(phoneDir)), "…and uploads nothing");
+  assert.equal(theirs.books["e1:kitchen"].file?.d, "mac");
+
+  const mine = merged({ v: 1, d: "phone" });
+  await pass(mine, "phone");
+  assert.ok(remote.files.has(manifestPath(phoneDir)), "its own old pack, the phone sends again");
+  assert.equal(mine.books["e1:kitchen"].file?.v, 2, "…stamped current");
+
+  remote.files.clear();
+  const none = merged();
+  await pass(none, "phone");
+  assert.ok(remote.files.has(manifestPath(phoneDir)), "a book with no pack at all: whoever holds it sends it");
+  const withdrawn = merged({ v: 0, d: "mac" });
+  remote.files.clear();
+  await pass(withdrawn, "phone");
+  assert.ok(remote.files.has(manifestPath(phoneDir)), "…a withdrawn one too");
+  console.log("  ✓ older packs: only their uploader sends them again");
 }
 
 console.log("sync-files-unit: all checks passed");
