@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { ArrowsClockwise, CloudCheck, CloudSlash, CloudArrowUp } from "@phosphor-icons/react";
+import { ArrowsClockwise, CloudCheck, CloudSlash, CloudArrowUp } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import * as sync from "@/components/sync/sync-controller";
 import { CLIENT_IDS, PROVIDER_ORDER } from "@/components/sync/sync-config";

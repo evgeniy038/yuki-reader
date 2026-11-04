@@ -193,6 +193,41 @@ export const CheckCircle = glyph("CheckCircle", {
 
 export const Check = glyph("Check", { line: "M3 8.5L6.25 11.75L13 5" });
 
+// ── Sync
+
+const cloud =
+  "M4.5 13.5A3.25 3.25 0 0 1 4.061 7.03A4.25 4.25 0 0 1 12.49 8.044A2.75 2.75 0 0 1 12 13.5Z";
+
+export const CloudArrowUp = glyph("CloudArrowUp", {
+  fill: cloud,
+  cut: "M8 12V8.25M6.25 10L8 8.25L9.75 10",
+});
+
+export const CloudCheck = glyph("CloudCheck", {
+  fill: cloud,
+  cut: "M5.75 10.5L7.25 12L10.25 9",
+});
+
+export const CloudSlash = glyph("CloudSlash", {
+  fill: cloud,
+  line: "M2.25 2.25L13.75 13.75",
+  cut: "M3.5 1L15 12.5",
+});
+
+export const ArrowsClockwise = glyph("ArrowsClockwise", {
+  line: "M13.5 8A5.5 5.5 0 1 1 11.89 4.11M9.25 4.25H12.25V1.25",
+});
+
+export const Copy = glyph("Copy", {
+  fill: "M6.75 5H13.25A1.75 1.75 0 0 1 15 6.75V13.25A1.75 1.75 0 0 1 13.25 15H6.75A1.75 1.75 0 0 1 5 13.25V6.75A1.75 1.75 0 0 1 6.75 5Z",
+  line: "M2 10V3.5A1.5 1.5 0 0 1 3.5 2H10",
+});
+
+export const Key = glyph("Key", {
+  fill: ring(5, 8, 4) + ring(5, 8, 1.5),
+  line: "M8.5 8H14M11.75 8V10.5M14 8V10",
+});
+
 // ── Line marks
 
 export const Plus = glyph("Plus", { line: "M8 2.75V13.25M2.75 8H13.25" });

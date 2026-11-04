@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Copy, DownloadSimple, Key } from "@phosphor-icons/react";
+import { Copy, DownloadSimple, Key } from "@/components/ui/icons";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { VaultErrorCode } from "@/core/sync/vault";
