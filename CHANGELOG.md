@@ -3,6 +3,18 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.3.8] - 2026-11-03
+
+- Sync: connect your Yandex Disk or Dropbox once, and your reading positions, pins, renames, manga series, reading theme and font, daily goal and shelf order follow you between your phone and your Mac
+- Sync: statistics add up across devices — a day you read on both the phone and the Mac counts all of it, and nothing twice
+- Sync: manga already recognized on one device arrives with its text on the others, so your phone doesn't redo the OCR
+- Sync: the same book imported on two devices is recognized as one, even when the files are named differently
+- Sync: open a book you read further on another device and yuki offers to take you there instead of losing your place
+- Sync: everything is encrypted on your device before it leaves — your cloud keeps only unreadable files, and yuki has no server that could ever see them
+- Sync: a recovery key opens your library on a new device — keep it in Passwords or anywhere safe, it's shown only once
+- Sync: no network, no problem — reading never waits, and your changes go out as soon as you're back online
+- Books: a book file can no longer run hidden scripts inside the app — chapters are cleaned before they're shown
+
 ## [1.3.7] - 2026-11-03
 
 - Phone: reading is made for your thumb now — tap the outer edges to turn pages (left goes forward in Japanese books and manga, right in English ones), tap the middle for the controls, or just swipe

@@ -25,7 +25,7 @@ export interface MokuroData {
   pages: MokuroPage[];
 }
 
-function toBlock(raw: unknown): MokuroBlock | null {
+export function toBlock(raw: unknown): MokuroBlock | null {
   if (raw == null || typeof raw !== "object") return null;
   const value = raw as Record<string, unknown>;
   const box = value.box;

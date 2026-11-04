@@ -39,9 +39,14 @@ jobs:
             echo "path=/$repo/" >> "$GITHUB_OUTPUT"
           fi
 
+      # Sync providers: PUBLIC OAuth client ids (PKCE — there is no secret),
+      # kept as repository variables (Settings → Secrets and variables →
+      # Actions → Variables). An unset one hides that provider.
       - run: pnpm build
         env:
           VITE_BASE: ${{ steps.base.outputs.path }}
+          VITE_YANDEX_CLIENT_ID: ${{ vars.YANDEX_CLIENT_ID }}
+          VITE_DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

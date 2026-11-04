@@ -35,6 +35,47 @@ const ortStatic: Plugin = {
   },
 };
 
+// Content-Security-Policy of the built site. GitHub Pages can't send headers,
+// so the policy ships as the first <meta> in <head>: no inline script
+// (untrusted book HTML can't run code even if the sanitizer ever misses
+// something) and a pinned list of network destinations — the app itself,
+// the two sync clouds, and the dictionary catalog. Dev runs without it:
+// Vite's HMR client and React refresh inject inline scripts there.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "worker-src 'self' blob:",
+  [
+    "connect-src 'self' blob: data:",
+    "https://oauth.yandex.ru https://cloud-api.yandex.net https://*.disk.yandex.net https://*.disk.yandex.ru",
+    "https://api.dropboxapi.com https://content.dropboxapi.com https://notify.dropboxapi.com",
+    "https://huggingface.co https://*.huggingface.co https://*.hf.co",
+  ].join(" "),
+  "img-src 'self' blob: data:",
+  "media-src 'self' blob: data:",
+  "font-src 'self' blob: data:",
+  "style-src 'self' 'unsafe-inline' blob:",
+  "object-src 'none'",
+  "frame-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "manifest-src 'self'",
+].join("; ");
+
+const cspMeta: Plugin = {
+  name: "csp-meta",
+  apply: "build",
+  transformIndexHtml() {
+    return [
+      {
+        tag: "meta",
+        attrs: { "http-equiv": "Content-Security-Policy", content: CSP },
+        injectTo: "head-prepend",
+      },
+    ];
+  },
+};
+
 // yuki is a static site: `base` comes from VITE_BASE at build time, so the
 // same code deploys to a domain root or a GitHub Pages project subpath.
 // __APP_VERSION__ surfaces the release version in Settings.
@@ -47,6 +88,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     ortStatic,
+    cspMeta,
     VitePWA({
       registerType: "prompt",
       manifest: {

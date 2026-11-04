@@ -26,6 +26,9 @@ export async function openPdf(bytes: Uint8Array): Promise<PdfDocument> {
     cMapUrl: `${PDFJS_ASSETS}/cmaps/`,
     cMapPacked: true,
     standardFontDataUrl: `${PDFJS_ASSETS}/standard_fonts/`,
+    // The site's CSP forbids eval; say so up front instead of letting pdf.js
+    // probe `new Function` and log a policy violation on every open.
+    isEvalSupported: false,
   }).promise;
   return { doc, numPages: doc.numPages };
 }

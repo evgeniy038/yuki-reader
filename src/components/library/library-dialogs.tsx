@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { Book } from "@/core/library";
 import { totalCharsOf } from "@/core/reading-stats";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { syncEnabled } from "@/components/sync/sync-signal";
 import { RenameDialog } from "./rename-dialog";
 import { BookDetailsDialog } from "./book-details-dialog";
 import type { OpenedData } from "./use-shelf";
@@ -95,9 +96,12 @@ export function useLibraryDialogs({
         <ConfirmDialog
           open
           title={t("library.delete.title")}
-          body={t("library.delete.body", {
-            title: books.find((book) => book.id === deletingId)?.title ?? "",
-          })}
+          body={[
+            t("library.delete.body", {
+              title: books.find((book) => book.id === deletingId)?.title ?? "",
+            }),
+            syncEnabled() ? t("library.delete.everywhere") : "",
+          ].join(" ").trim()}
           onConfirm={() => onDeleteBook(deletingId)}
           onClose={() => setDeletingId(null)}
         />
@@ -106,7 +110,10 @@ export function useLibraryDialogs({
         <ConfirmDialog
           open
           title={t("library.delete.title")}
-          body={t("manga.deleteSeries.body", { title: deletingSeries })}
+          body={[
+            t("manga.deleteSeries.body", { title: deletingSeries }),
+            syncEnabled() ? t("library.delete.everywhere") : "",
+          ].join(" ").trim()}
           onConfirm={() => onDeleteSeries(deletingSeries)}
           onClose={() => setDeletingSeries(null)}
         />

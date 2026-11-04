@@ -1,6 +1,7 @@
 import type { Chapter, EpubResource } from "@/core/reading";
 import { scopeBookCss } from "@/core/book-css";
 import { measureSection } from "@/core/reading-stats";
+import { sanitizeBookBody } from "./sanitize-book-html";
 
 const DUMMY_PREFIX = "data:image/gif;yuki:";
 const DUMMY_SUFFIX = ";base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
@@ -95,6 +96,7 @@ export function buildArticle(
         styleEl.remove();
       });
       body = doc.body;
+      sanitizeBookBody(body);
       chapterClass = [doc.documentElement.className, body.className]
         .filter(Boolean)
         .join(" ")

@@ -1,8 +1,8 @@
 # Tests
 
 Node-side units and parser smokes are self-contained (fixtures built on the
-fly). `pnpm test` runs all eight: epub, dictionaries, backup, shelf, stats,
-book-css, resources, reader-touch. Standalone extras:
+fly). `pnpm test` runs all nine: epub, dictionaries, backup, shelf, stats,
+book-css, resources, reader-touch, sync. Standalone extras:
 
 ```
 pnpm tsx tests/ocr-download.ts
@@ -27,6 +27,39 @@ loads.
 shelf-collapse-smoke folds a plain section, and — when `YUKI_TEST_MANGA_DIR`
 is set — also the mixed novel+manga group: the whole group folds into one
 stack, and the manga h3 subsection folds on its own.
+
+## Sync (no fixtures, no account)
+
+`pnpm test:sync` (part of `pnpm test`) covers the sync rules in Node: merge
+(blank records never win, latest dwell wins, the further position is offered,
+first join, deletion guards, skewed clocks), content keys, sealing and the
+recovery key (`sync-unit`); two devices on one in-memory cloud folder with the
+real engine and sync database — join, positions, stats sum, rollback and
+tamper ignored, deletes (`sync-engine-unit`); and both cloud adapters against
+fakes of the Yandex Disk and Dropbox HTTP APIs — token refresh on 401, dead
+grant, full disk, no client secret anywhere (`sync-providers-unit`).
+
+`pnpm test:sync-smoke` drives two Chrome profiles as two devices through the
+real UI, with Yandex Disk (OAuth, REST, upload/download hosts) emulated by
+request interception. Start a dev server with a provider id first:
+
+```
+VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480
+YUKI_TEST_BASE=http://localhost:1480 pnpm test:sync-smoke
+```
+
+## Hostile books (no fixtures)
+
+`pnpm test:book-sanitize` imports an EPUB armed with script vectors (img
+onerror, details ontoggle, SVG animate, javascript: links, iframe srcdoc, a
+remote tracking pixel) and checks that nothing runs and nothing dangerous
+reaches the page. Against a production build it also proves the CSP blocks an
+inline handler on its own:
+
+```
+pnpm build && pnpm preview --port 1481
+YUKI_TEST_BASE=http://localhost:1481 YUKI_TEST_EXPECT_CSP=1 pnpm test:book-sanitize
+```
 
 ## Phone reading (no fixtures, built-in demo book)
 

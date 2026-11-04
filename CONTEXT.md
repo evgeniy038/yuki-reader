@@ -374,6 +374,65 @@ the share. Search runs over the whole book text and shows up to 50 matches
 with context and the same position. Tapping a chapter or a match jumps
 exactly to it and closes the panel — keep reading.
 
+## Sync
+
+**Sync** keeps one library across a person's devices — positions, pins,
+renames and series, deletions, the daily statistics and the taste settings
+(interface language, reading theme, font, weight, furigana, the manga cover
+option, the daily goal, shelf sort and section order). Font size, line height,
+margins and folded sections stay per device: a phone and a Mac want different
+ones. Book files themselves don't travel (yet): each device imports its own,
+and the library recognizes them as the same book by content. Manga **OCR
+results** do travel: a volume recognized on one device arrives with its text
+on the others, and their OCR queue simply finds those pages done.
+
+There is no yuki server. The person connects THEIR cloud — **Yandex Disk** or
+**Dropbox**, the only two that let a static site sign in once with no secret
+and stay signed in — and yuki works inside the app folder it is given
+(`Приложения/<app>`, `/Apps/<app>`). Everything there is **end-to-end
+encrypted** on the device: the cloud sees opaque files, the developer sees
+nothing at all. The **library key** lives in the cloud only wrapped by the
+**recovery key** (`XXXX-XXXX-…`, shown once on the first device, saved to
+Passwords or written down); another device opens the library with it, and
+keeps working on its own after that. Losing every device AND the recovery key
+loses the cloud copy — by design, nobody can open it.
+
+A **device** is one browser storage: Safari and the home-screen app on the
+same iPhone are two devices (their storage is separate). Each device writes
+only its own files in the cloud and reads everyone else's; nothing is ever
+overwritten by another device, so there are no conflicts at the storage level.
+
+**Content key** — a book's identity across devices, from its content alone
+(EPUB: the text; PDF: the file bytes; manga: page sizes and the first bytes of
+each page), never the file name — the same volume named differently on two
+devices is still one book. The shelf's duplicate check keeps its own hash.
+
+How values meet:
+- a **position** is the place last lingered on (the 3-second dwell)
+  anywhere — opening a book or importing it claims nothing, and a device that
+  has never read a book never moves it. When another device read FURTHER, the
+  reader offers "On Mac you read up to 45% · Go there";
+- pins, renames, series and settings: the latest change wins (clocks that
+  never run backwards; a device whose clock runs far ahead is not believed);
+  on joining, a device takes the library's existing organization;
+- **statistics** add up: every device publishes only its own counters, so
+  nothing is counted twice and re-syncing changes nothing;
+- a **deletion** follows to the other devices — but never removes a book a
+  device has not synced yet, and more than a few deletions at once wait for
+  the person to confirm. An empty or unreadable cloud file means "unknown",
+  never "everything was deleted".
+
+Sync runs while the app is open (phones give web apps no background time): on
+start, on returning to the app, after edits (a few seconds later), when the
+network comes back and every minute. Offline nothing changes for reading —
+the edits wait and go out later. The first sync keeps a snapshot; for a week
+Settings offers to put positions, pins and settings back as they were.
+
+Because the sync token and the key live in the browser, book HTML is
+sanitized before it reaches the page (no handlers, scripts, frames, remote
+media) and the built site ships a Content-Security-Policy: a book can't run
+code in the app.
+
 ## Distribution
 
 Yuki is a static website, not an app. Reader data (shelf, progress, stats)
