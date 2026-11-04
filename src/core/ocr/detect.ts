@@ -2,6 +2,7 @@ import { ort, type Tensor } from "./ort-runtime";
 import type { MokuroBlock } from "../mokuro";
 import type { OcrModels } from "./models";
 import { fontSizeFor } from "./font-size";
+import { grayFromRgba, type Gray } from "./lines";
 
 // The detection half of the OCR pipeline: ogkalu comic-text-and-bubble-
 // detector at 640² finds text blocks (each crop is then read by the
@@ -10,7 +11,10 @@ import { fontSizeFor } from "./font-size";
 //   2. detections are counted by scores.length (the export has a batch dim).
 
 const DETECT_SIZE = 640;
-const CONF = 0.4;
+/** Box confidence floor, measured on antialiased 640² input: 0.35 misses
+    fewer real blocks than 0.4 did on the old aliased input and still finds
+    fewer false ones; below it screentone strips and duplicate boxes grow. */
+const CONF = 0.35;
 const PAD_RATIO = 0.08;
 /** Two detections overlapping this much are the same block — keep the surer. */
 const NMS_IOU = 0.5;
@@ -33,8 +37,9 @@ function iou(a: Det, b: Det): number {
   return union > 0 ? inter / union : 0;
 }
 
-/** Canvas pixels → CHW float32, rescaled to 0..1 (the detector takes no
-    mean/std normalization). */
+/** Canvas pixels → CHW float32: 0..1 for the detector (no mean/std), or
+    the recognizer's [-1, 1] — folded to grayscale first, the way manga-ocr
+    reads every crop (PIL "L", the only colour space it was trained on). */
 const scratchCanvases = new Map<
   number,
   { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D }
@@ -49,6 +54,11 @@ function scratchCtx(
     const canvas = new OffscreenCanvas(size, size);
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no 2d context");
+    // Chrome's default ("low") drawImage downscale skips antialiasing: a
+    // 3–4x shrink (a page to 640², a big bubble to 224²) aliases strokes
+    // into noise. "high" filters properly — measured on whole volumes:
+    // lower CER and a fifth fewer false text boxes at the same threshold.
+    ctx.imageSmoothingQuality = "high";
     entry = { canvas, ctx };
     scratchCanvases.set(size, entry);
   }
@@ -73,6 +83,18 @@ export function chwPixels(
   // is algebraically v*(2/255)-1 — one multiply, one subtract per channel.
   const k = normalize ? 2 / 255 : 1 / 255;
   const bias = normalize ? -1 : 0;
+  if (normalize) {
+    for (let p = 0; p < plane; p++) {
+      // PIL's fixed-point ITU-R 601-2 luma, identical on all three planes.
+      const luma =
+        (data[p * 4]! * 19595 + data[p * 4 + 1]! * 38470 + data[p * 4 + 2]! * 7471 + 0x8000) >> 16;
+      const v = luma * k + bias;
+      out[p] = v;
+      out[plane + p] = v;
+      out[2 * plane + p] = v;
+    }
+    return out;
+  }
   for (let p = 0; p < plane; p++) {
     out[p] = data[p * 4]! * k + bias;
     out[plane + p] = data[p * 4 + 1]! * k + bias;
@@ -182,13 +204,17 @@ export function cropRect(
   return sw < 4 || sh < 4 ? null : { sx, sy, sw, sh };
 }
 
-/** The final overlay block for a detection: box/vertical/font_size are final
-    from the detector alone; `text` (when read already) fills `lines` — a
-    lazy-OCR skeleton is the same block with empty lines. */
-export function detBlock(det: Det, text = ""): MokuroBlock {
+/** The final overlay block for a detection: the box is final from the
+    detector alone; `lines` (when read already) fill it, and the line
+    splitter's orientation overrides the aspect guess — a lazy-OCR skeleton
+    is the same block with empty lines. */
+export function detBlock(
+  det: Det,
+  lines: string[] = [],
+  vertical = det.y2 - det.y1 > (det.x2 - det.x1) * 1.2,
+): MokuroBlock {
   const width = det.x2 - det.x1;
   const height = det.y2 - det.y1;
-  const vertical = height > width * 1.2;
   return {
     box: [
       Math.round(det.x1),
@@ -197,9 +223,37 @@ export function detBlock(det: Det, text = ""): MokuroBlock {
       Math.round(det.y2),
     ],
     vertical,
-    font_size: fontSizeFor(width, height, text.length),
-    lines: text ? [text] : [],
+    font_size: fontSizeFor(width, height, lines.join("").length),
+    lines,
   };
+}
+
+/** Native-resolution luma of a detection's own box (no padding, no
+    resampling): the line splitter's input. One scratch canvas, grown on
+    demand and kept CPU-side — it is read back for every block. */
+let regionScratch: OffscreenCanvasRenderingContext2D | null = null;
+export function blockLuma(
+  source: ImageBitmap,
+  det: Det,
+): { gray: Gray; left: number; top: number } | null {
+  const left = Math.max(0, Math.floor(det.x1));
+  const top = Math.max(0, Math.floor(det.y1));
+  const width = Math.min(source.width, Math.ceil(det.x2)) - left;
+  const height = Math.min(source.height, Math.ceil(det.y2)) - top;
+  if (width < 8 || height < 8) return null;
+  let ctx = regionScratch;
+  if (!ctx || ctx.canvas.width < width || ctx.canvas.height < height) {
+    const canvas = new OffscreenCanvas(
+      Math.max(width, ctx?.canvas.width ?? 0),
+      Math.max(height, ctx?.canvas.height ?? 0),
+    );
+    ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("no 2d context");
+    regionScratch = ctx;
+  }
+  ctx.drawImage(source, left, top, width, height, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  return { gray: grayFromRgba(data, width, height), left, top };
 }
 
 /** Skeleton blocks (final boxes, empty lines) plus the exact float detector

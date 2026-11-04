@@ -34,8 +34,9 @@
     "test:resources": "tsx tests/resources-smoke.ts",
     "test:backup-smoke": "tsx tests/backup-smoke.ts",
     "test:reader-touch": "tsx tests/reader-touch-unit.ts",
+    "test:ocr-lines": "tsx tests/ocr-lines-unit.ts",
     "test:mobile": "tsx tests/mobile-touch-smoke.ts",
-    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup && pnpm test:shelf && pnpm test:stats && pnpm test:book-css && pnpm test:resources && pnpm test:reader-touch",
+    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup && pnpm test:shelf && pnpm test:stats && pnpm test:book-css && pnpm test:resources && pnpm test:reader-touch && pnpm test:ocr-lines",
     "preinstall": "npx only-allow pnpm"
   },
   "dependencies": {

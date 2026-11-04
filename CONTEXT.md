@@ -235,7 +235,29 @@ Scans WITHOUT a sidecar get OCR'd by the app itself (`src/core/ocr/`): the
 ogkalu comic-text-and-bubble-detector (always the FULL build — measured 2x
 better CER than the 11MB "-s" variant; the exact weights follow the
 execution provider, see below) and manga-ocr (224²
-crops, greedy char-WordPiece decode). The decoder is an in-house KV-cache
+crops, greedy char-WordPiece decode). Every model input is resampled with
+`imageSmoothingQuality: "high"` — Chrome's default drawImage downscale
+aliases (white-noise test: std 40.9 vs 14.1) — and recognition crops are
+folded to grayscale, the only colour space manga-ocr was trained on.
+Detector boxes are kept from confidence 0.35: on the antialiased input
+that misses fewer real blocks than 0.4 did on the aliased one and still
+finds fewer false ones (below 0.35 screentone strips and duplicate boxes
+take over). A
+**dense** block is read **line by line** (`lines.ts`): when the whole
+padded block squeezed to 224² would leave a glyph under 18px (long
+columns, paragraphs, a long caption line), its columns or rows are found
+from the ink profile (orientation by line spacing — wide bubbles of truly
+long columns are columns, a wide title with ruby above is not; rows only
+in blocks that are not tall; ruby is left out of its line's crop, since a
+lone column hands its furigana over as text; narrow edge bands that are
+light or short — ruby beside the first line, bubble-outline fragments —
+are set aside, while a short line of full-size glyphs (でも opening a
+bubble, ね closing it) is text and stays; ink the
+lines miss beyond that sends the block back to a whole read, so a short
+closing line never vanishes) and each line (cut into chunks at blank gaps
+past 16 widths) is read on its own;
+every other block keeps its whole crop, which manga-ocr reads better. The
+block's lines become the overlay's `lines`. The decoder is an in-house KV-cache
 merged export (BERT decoder + past key values, `use_cache_branch` — optimum's
 CLI refuses to build past for bert, so it is two manual `torch.onnx.export`
 graphs fused by `merge_decoders`, then int8: Constants and weight Transposes
@@ -315,16 +337,28 @@ weights loop on the same pages, so it is structural), and the loop is cut at
 15 same tokens or a 2..4-token cycle of 12+, keeping 3 tokens/one cycle.
 
 Accuracy is measured, not guessed: `tests/ocr-quality.ts` reruns the shipped
-pipeline in Node over whole volumes and scores it against `.mokuro`
-references and vision-verified golden files (`tests/golden/`), with a
-`--gate` mode (recall/CER/runaway thresholds, exit 1). Full-volume A/B on
-kaguya-01: fp32 recognition buys ~2.5pp CER for 4× the bytes (rejected);
-the full 43MB detector halves CER vs the shipped 11MB one (0.077 vs 0.157)
-at ~2× extra false-positive blocks — and feeding mokuro's boxes to our
-encoder fixes «英検»-class misreads, i.e. box quality, not the recognizer,
-is the bottleneck. Line-level (mokuro-style per-line) OCR is the known next
-lever for dense small text (profile pages, colophons).
-
+pipeline in Node over whole volumes — pixels resampled by a real headless
+Chrome canvas, as in the app's worker — and scores it against `.mokuro`
+references (closeness to another OCR run) and vision-verified golden files
+(`tests/golden/`: consensus blocks plus hard blocks read off the crop where
+two pipeline variants disagreed; pages found by image name), with a
+`--gate` mode (each golden file carries its own recall/CER/runaway
+thresholds, exit 1). A runaway there is also a 5–12-glyph phrase looping
+4+ times — the decoder's own guard cuts only 2..4-token cycles, so such a
+loop (論バランスは勿論論バランスは…, rare: a block per few volumes, old
+pipeline too) still runs to the token cap. Measured and settled (Nov 2026, かぐや様 + 推しの子
+full volumes): fp32 or fp16 recognizer weights buy nothing over int8 (the
+older "fp32 buys 2.5pp" predates the full detector); manga-ocr's own beam
+search (4 beams, no-repeat trigrams) reads WORSE than greedy here and costs
+1.7x; line-by-line reading only pays under ~18px glyphs (from 18px up it
+loses — stray marks at line ends); flipping a block's orientation against
+its line spacing interleaves columns. The price of the current pipeline
+over the pre-Nov one: +7.5% crops, recognition +9% on WebGPU (kaguya 208
+→ 227 ms/page on a quiet M3 Pro). The best recognizer on the hard
+blocks is Baberu OCR v1.2 (Apache-2.0, 122MB; half the failed blocks of
+manga-ocr) but it decodes ~5x slower per crop in the browser (batch-1
+graphs) — parked as a candidate quality path, not shipped. Research and
+numbers: `docs/Исследования/` (outside git).
 
 ## Touch reading
 

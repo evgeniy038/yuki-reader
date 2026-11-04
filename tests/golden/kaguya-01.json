@@ -2,6 +2,11 @@
   "series": "kaguya",
   "volume": "01",
   "source": "vision-verified + ours/mokuro consensus (report-kaguya-q8-s)",
+  "gate": {
+    "recall": 0.98,
+    "cer": 0.15,
+    "runaways": 0
+  },
   "imgWidth": 1688,
   "imgHeight": 2400,
   "pages": [
@@ -22,6 +27,22 @@
       ]
     },
     {
+      "page": 4,
+      "img": "page0005.webp",
+      "blocks": [
+        {
+          "box": [
+            134,
+            897,
+            559,
+            1040
+          ],
+          "text": "第1話映画に誘わせたい",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
       "page": 5,
       "img": "page0006.webp",
       "blocks": [
@@ -34,6 +55,16 @@
           ],
           "text": "★この作品はフィクションです。実在の人物・団体・事件などには、いっさい関係ありません。",
           "src": "vision"
+        },
+        {
+          "box": [
+            1027,
+            1583,
+            1116,
+            2057
+          ],
+          "text": "……27……49……68……89…109…129…149…169…190",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     },
@@ -108,7 +139,7 @@
             518,
             621
           ],
-          "text": "かつて貴族や土族を教育する機関として創立された",
+          "text": "かつて貴族や士族を教育する機関として創立された",
           "src": "consensus"
         },
         {
@@ -140,6 +171,22 @@
           ],
           "text": "由緒正しい名門校である!",
           "src": "consensus"
+        }
+      ]
+    },
+    {
+      "page": 7,
+      "img": "page0008.webp",
+      "blocks": [
+        {
+          "box": [
+            207,
+            1869,
+            339,
+            2154
+          ],
+          "text": "正真正銘の令嬢である",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     },
@@ -246,6 +293,16 @@
           ],
           "text": "秀知院学園生徒会長",
           "src": "consensus"
+        },
+        {
+          "box": [
+            712,
+            1777,
+            1060,
+            1883
+          ],
+          "text": "期末考査上位成績者",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     },
@@ -548,6 +605,166 @@
       ]
     },
     {
+      "page": 15,
+      "img": "page0016.webp",
+      "blocks": [
+        {
+          "box": [
+            415,
+            1093,
+            666,
+            1563
+          ],
+          "text": "――まるで告白のようではないか!!",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 17,
+      "img": "page0018.webp",
+      "blocks": [
+        {
+          "box": [
+            774,
+            530,
+            948,
+            1004
+          ],
+          "text": "白銀の征く道に逃げ道無し!!",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 19,
+      "img": "page0020.webp",
+      "blocks": [
+        {
+          "box": [
+            712,
+            267,
+            841,
+            581
+          ],
+          "text": "藤原書記のポストに投函…",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 21,
+      "img": "page0022.webp",
+      "blocks": [
+        {
+          "box": [
+            993,
+            99,
+            1189,
+            421
+          ],
+          "text": "告白は男の役目なのかな……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 26,
+      "img": "page0027.webp",
+      "blocks": [
+        {
+          "box": [
+            371,
+            1369,
+            1301,
+            1611
+          ],
+          "text": "古くは1700年代、多くの私塾が生まれはじめた頃、蘭学者の権力増大を恐れた江戸幕府により開かれた習学所が始まりとされている。その後、多くの私塾と合併をしつつ発展。嘉永2年、勅額下賜を受ける。貴族や士族は子をこれに入学させたがり、一種のステータスとしての役割を果たすこととなる。その際に賄賂や口利きによる裏口入学が横行。これは現代までの悪習となる。",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 33,
+      "img": "page0034.webp",
+      "blocks": [
+        {
+          "box": [
+            1108,
+            693,
+            1408,
+            1015
+          ],
+          "text": "『ペア』になるカードor『ババ』",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 39,
+      "img": "page0040.webp",
+      "blocks": [
+        {
+          "box": [
+            1406,
+            1770,
+            1543,
+            1963
+          ],
+          "text": "判った判った！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 40,
+      "img": "page0041.webp",
+      "blocks": [
+        {
+          "box": [
+            1036,
+            966,
+            1197,
+            1340
+          ],
+          "text": "相手が凡夫であれば十分通用したであろう",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 42,
+      "img": "page0043.webp",
+      "blocks": [
+        {
+          "box": [
+            107,
+            403,
+            555,
+            861
+          ],
+          "text": "だからさっさとペアを引いて上がりなさい！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 43,
+      "img": "page0044.webp",
+      "blocks": [
+        {
+          "box": [
+            454,
+            2009,
+            570,
+            2294
+          ],
+          "text": "例えば――",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
       "page": 44,
       "img": "page0045.webp",
       "blocks": [
@@ -720,6 +937,96 @@
       ]
     },
     {
+      "page": 51,
+      "img": "page0052.webp",
+      "blocks": [
+        {
+          "box": [
+            193,
+            1728,
+            842,
+            1903
+          ],
+          "text": "第3話かぐや様はよく知らない",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            968,
+            2019,
+            1031,
+            2196
+          ],
+          "text": "ドキ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 55,
+      "img": "page0056.webp",
+      "blocks": [
+        {
+          "box": [
+            1446,
+            1941,
+            1571,
+            2137
+          ],
+          "text": "それは鑑賞券だ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 57,
+      "img": "page0058.webp",
+      "blocks": [
+        {
+          "box": [
+            1235,
+            91,
+            1380,
+            306
+          ],
+          "text": "おい四宮…!?",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 59,
+      "img": "page0060.webp",
+      "blocks": [
+        {
+          "box": [
+            311,
+            633,
+            538,
+            1084
+          ],
+          "text": "四宮かぐやは国内屈指の最富裕層である！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 61,
+      "img": "page0062.webp",
+      "blocks": [
+        {
+          "box": [
+            170,
+            1007,
+            217,
+            1174
+          ],
+          "text": "サッカー部",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
       "page": 69,
       "img": "page0070.webp",
       "blocks": [
@@ -732,6 +1039,70 @@
           ],
           "text": "第4話白銀御行は答えたい",
           "src": "vision"
+        }
+      ]
+    },
+    {
+      "page": 73,
+      "img": "page0074.webp",
+      "blocks": [
+        {
+          "box": [
+            954,
+            1790,
+            1141,
+            2115
+          ],
+          "text": "E(東)は3時W(西)は9時S(南)は6時",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 77,
+      "img": "page0078.webp",
+      "blocks": [
+        {
+          "box": [
+            1228,
+            871,
+            1475,
+            1357
+          ],
+          "text": "やっぱり会長には敵いません……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 78,
+      "img": "page0079.webp",
+      "blocks": [
+        {
+          "box": [
+            1137,
+            633,
+            1388,
+            1043
+          ],
+          "text": "やっぱり幾らテストの点数が良くても所詮詰め込み型…",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 79,
+      "img": "page0080.webp",
+      "blocks": [
+        {
+          "box": [
+            501,
+            1411,
+            823,
+            2026
+          ],
+          "text": "よほどの阿呆でなければ解けるのですから",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     },
@@ -782,6 +1153,80 @@
       ]
     },
     {
+      "page": 87,
+      "img": "page0088.webp",
+      "blocks": [
+        {
+          "box": [
+            310,
+            632,
+            407,
+            890
+          ],
+          "text": "ふふ……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            1257,
+            104,
+            1525,
+            636
+          ],
+          "text": "ついにこの一問を解いたのである!!",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 88,
+      "img": "page0089.webp",
+      "blocks": [
+        {
+          "box": [
+            655,
+            1521,
+            1180,
+            1842
+          ],
+          "text": "5問目右には、左のものが一段階時間経過した単語が含まれています。白亜紀には「秋」、恐怖には「今日」アヒルには「昼」。昼の前は「朝」となります。",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 93,
+      "img": "page0094.webp",
+      "blocks": [
+        {
+          "box": [
+            317,
+            1868,
+            511,
+            2201
+          ],
+          "text": "まるで子供の宝物入れの様な自由さが！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 94,
+      "img": "page0095.webp",
+      "blocks": [
+        {
+          "box": [
+            1124,
+            683,
+            1184,
+            801
+          ],
+          "text": "人間であんな……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
       "page": 95,
       "img": "page0096.webp",
       "blocks": [
@@ -824,6 +1269,186 @@
           ],
           "text": "って感じがしてまた良いですね!",
           "src": "consensus"
+        }
+      ]
+    },
+    {
+      "page": 96,
+      "img": "page0097.webp",
+      "blocks": [
+        {
+          "box": [
+            312,
+            1722,
+            454,
+            2204
+          ],
+          "text": "コポポポポ",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 99,
+      "img": "page0100.webp",
+      "blocks": [
+        {
+          "box": [
+            528,
+            131,
+            680,
+            444
+          ],
+          "text": "なっ……さらに軽蔑度が上がっている",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 102,
+      "img": "page0103.webp",
+      "blocks": [
+        {
+          "box": [
+            244,
+            780,
+            432,
+            1058
+          ],
+          "text": "俺は断じて受け取らん！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            370,
+            1728,
+            455,
+            2000
+          ],
+          "text": "頭大丈夫!?",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 104,
+      "img": "page0105.webp",
+      "blocks": [
+        {
+          "box": [
+            179,
+            130,
+            335,
+            600
+          ],
+          "text": "なんておぞましい生き物…",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            1260,
+            1391,
+            1452,
+            1760
+          ],
+          "text": "ここはひとまず避難するのが得策か……!?",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 108,
+      "img": "page0109.webp",
+      "blocks": [
+        {
+          "box": [
+            116,
+            1806,
+            305,
+            2197
+          ],
+          "text": "牡蠣喰いたかったなああああああ!!",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 116,
+      "img": "page0117.webp",
+      "blocks": [
+        {
+          "box": [
+            488,
+            160,
+            687,
+            566
+          ],
+          "text": "彼女にその気なんてないと思います……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 117,
+      "img": "page0118.webp",
+      "blocks": [
+        {
+          "box": [
+            269,
+            2017,
+            485,
+            2298
+          ],
+          "text": "えええええ!!?",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 121,
+      "img": "page0122.webp",
+      "blocks": [
+        {
+          "box": [
+            939,
+            1533,
+            1158,
+            1812
+          ],
+          "text": "!?",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 122,
+      "img": "page0123.webp",
+      "blocks": [
+        {
+          "box": [
+            318,
+            398,
+            508,
+            770
+          ],
+          "text": "端から見てたらいいかんじに見えますけど……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 133,
+      "img": "page0134.webp",
+      "blocks": [
+        {
+          "box": [
+            970,
+            428,
+            1093,
+            730
+          ],
+          "text": "会長と公転させてください！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     },
@@ -960,6 +1585,398 @@
           ],
           "text": "山は天気が荒れやすいですよね",
           "src": "consensus"
+        }
+      ]
+    },
+    {
+      "page": 141,
+      "img": "page0142.webp",
+      "blocks": [
+        {
+          "box": [
+            737,
+            2025,
+            872,
+            2299
+          ],
+          "text": "山に行けば虫がいる……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 147,
+      "img": "page0148.webp",
+      "blocks": [
+        {
+          "box": [
+            1155,
+            1392,
+            1399,
+            1720
+          ],
+          "text": "せっかくだからイタコさんに死者の霊を口寄せしてもらいましょう！",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            190,
+            1832,
+            408,
+            2197
+          ],
+          "text": "本日の勝敗結果(藤原さんが何かちょっと怖かった為)『未決着』",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 148,
+      "img": "page0149.webp",
+      "blocks": [
+        {
+          "box": [
+            158,
+            1338,
+            799,
+            1514
+          ],
+          "text": "ただし、ゲーム機や俗な娯楽を禁じられていた為、抜け道を探した結果、やけにディープな趣味を持っている。",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 150,
+      "img": "page0151.webp",
+      "blocks": [
+        {
+          "box": [
+            31,
+            878,
+            584,
+            1030
+          ],
+          "text": "第8話かぐや様は当てられたい",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 151,
+      "img": "page0152.webp",
+      "blocks": [
+        {
+          "box": [
+            337,
+            776,
+            548,
+            1215
+          ],
+          "text": "私たちが出会ってもうすぐ1年ですね",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 152,
+      "img": "page0153.webp",
+      "blocks": [
+        {
+          "box": [
+            625,
+            163,
+            781,
+            521
+          ],
+          "text": "大変だったなあの生徒総会は",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 153,
+      "img": "page0154.webp",
+      "blocks": [
+        {
+          "box": [
+            189,
+            1092,
+            323,
+            1355
+          ],
+          "text": "ベタなこと言いやがって…",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 155,
+      "img": "page0156.webp",
+      "blocks": [
+        {
+          "box": [
+            1399,
+            1884,
+            1494,
+            2251
+          ],
+          "text": "手のひらサイズ？",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            846,
+            1608,
+            1061,
+            1963
+          ],
+          "text": "ただし質問はYESかNOで答えられるものに限定される――",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 158,
+      "img": "page0159.webp",
+      "blocks": [
+        {
+          "box": [
+            147,
+            102,
+            818,
+            183
+          ],
+          "text": "かぐや様は告らせたい～天才たちの恋愛頭脳戦～",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 162,
+      "img": "page0163.webp",
+      "blocks": [
+        {
+          "box": [
+            848,
+            1991,
+            1020,
+            2255
+          ],
+          "text": "⑦『四宮が好きな物』",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 163,
+      "img": "page0164.webp",
+      "blocks": [
+        {
+          "box": [
+            1332,
+            1000,
+            1509,
+            1398
+          ],
+          "text": "⑨『その好きってのはどういう意味の好きなんだ？",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 165,
+      "img": "page0166.webp",
+      "blocks": [
+        {
+          "box": [
+            317,
+            1190,
+            540,
+            1566
+          ],
+          "text": "その度に四宮という人間を俺は理解して……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 167,
+      "img": "page0168.webp",
+      "blocks": [
+        {
+          "box": [
+            214,
+            1983,
+            499,
+            2274
+          ],
+          "text": "『合格』白銀もなんやかんやで四宮の人間性を理解していた為",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 169,
+      "img": "page0170.webp",
+      "blocks": [
+        {
+          "box": [
+            883,
+            2153,
+            1384,
+            2246
+          ],
+          "text": "～天才たちの恋愛頭脳戦～",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 171,
+      "img": "page0172.webp",
+      "blocks": [
+        {
+          "box": [
+            1322,
+            999,
+            1493,
+            1358
+          ],
+          "text": "エンジンルームの奥に入り込んでしまいまして",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 180,
+      "img": "page0181.webp",
+      "blocks": [
+        {
+          "box": [
+            1345,
+            134,
+            1455,
+            679
+          ],
+          "text": "うわぁぁぁぁぁん!!",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 192,
+      "img": "page0193.webp",
+      "blocks": [
+        {
+          "box": [
+            443,
+            1309,
+            649,
+            1709
+          ],
+          "text": "会長は今もお仕事なさってるのでしょうか",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            408,
+            508,
+            528,
+            823
+          ],
+          "text": "夜道気をつけて帰るように――",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 201,
+      "img": "page0202.webp",
+      "blocks": [
+        {
+          "box": [
+            1033,
+            151,
+            1232,
+            521
+          ],
+          "text": "わすれものわすれもの～",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 202,
+      "img": "page0203.webp",
+      "blocks": [
+        {
+          "box": [
+            1286,
+            2098,
+            1637,
+            2224
+          ],
+          "text": "ユッ…♡",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 205,
+      "img": "page0206.webp",
+      "blocks": [
+        {
+          "box": [
+            792,
+            70,
+            1235,
+            300
+          ],
+          "text": "怒られないと解ってる理解と信頼",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 209,
+      "img": "page0210.webp",
+      "blocks": [
+        {
+          "box": [
+            1228,
+            90,
+            1330,
+            289
+          ],
+          "text": "私……",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        },
+        {
+          "box": [
+            371,
+            81,
+            474,
+            494
+          ],
+          "text": "会長の事――",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
+        }
+      ]
+    },
+    {
+      "page": 212,
+      "img": "page0213.webp",
+      "blocks": [
+        {
+          "box": [
+            374,
+            1497,
+            831,
+            1622
+          ],
+          "text": "初版発行2016年デジタル版発行2016年",
+          "src": "vision (A/B disagreement, adjudicated on the crop)"
         }
       ]
     }
