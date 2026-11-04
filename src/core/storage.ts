@@ -6,6 +6,7 @@
 export type { BookContent, BookRecord } from "./storage/books";
 export {
   deleteBook,
+  hasBookContent,
   loadAllBooks,
   loadBookContent,
   loadShelfBooks,
@@ -22,6 +23,7 @@ export {
   hasOcrModel,
   loadManga,
   loadMangaOcr,
+  loadMangaOcrDone,
   loadMangaOcrFlags,
   loadMangaOcrPage,
   loadMangaPageBlob,

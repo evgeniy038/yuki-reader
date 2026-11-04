@@ -5,15 +5,18 @@ import * as sync from "@/components/sync/sync-controller";
 import * as syncActions from "@/components/sync/sync-actions";
 import { CLIENT_IDS, PROVIDER_ORDER } from "@/components/sync/sync-config";
 import { deviceLabel } from "@/components/sync/sync-labels";
-import { formatBytes, formatNumber, formatTimeAgo } from "@/lib/format";
+import { formatTimeAgo } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SettingsBlock, SettingsGroup, SettingsRow } from "./settings-group";
+import { RoundBar, SyncTransfers, transfersOf } from "./sync-activity";
 import { AuthorizingView, ForeignCodeView, NewKeyView, UnlockView } from "./sync-key-views";
 
-// Settings → Sync: connect a cloud, keep the recovery key, see what synced
-// and when, list the devices. Honest numbers in the status line — a "synced"
-// badge with nothing behind it cost Koodo its users' trust.
+// Settings → Sync: connect a cloud, keep the recovery key, see when it last
+// synced and what is moving right now (sync-activity.tsx: the round's bar,
+// a row per book on its way), and the devices in their own group. Honest
+// state only — a "synced" badge with nothing behind it cost Koodo its
+// users' trust.
 
 const UNDO_WINDOW_MS = 7 * 86_400_000;
 
@@ -39,6 +42,7 @@ export function SyncSection() {
   // SettingsGroup draws hairlines between its direct children, so every
   // state is a keyed list of rows rather than one fragment.
   let rows: ReactNode[];
+  let devices: ReactNode[] = [];
   switch (phase.kind) {
     case "off":
       rows = [
@@ -114,43 +118,47 @@ export function SyncSection() {
           : status.ok
             ? t("settings.sync.synced", { when: formatTimeAgo(status.at) })
             : t(`settings.sync.error.${status.error ?? "unknown"}`, { provider: providerName(phase.provider) });
+      const transfers = transfersOf(
+        view,
+        (stage, device) => t(`library.cloud.${stage}`, { device }),
+        (item) => (item.from ? t(`sync.platform.${item.from.platform}`) : ""),
+      );
       rows = [
-          <SettingsRow key="status">
-            <div className="flex min-w-0 items-center gap-3" data-sync-status={status?.ok === false ? "error" : "ok"}>
-              {status?.ok === false ? (
-                <CloudSlash className="size-4 shrink-0 text-destructive" />
+          <div key="status" className="relative">
+            <SettingsRow>
+              <div className="flex min-w-0 items-center gap-3" data-sync-status={status?.ok === false ? "error" : "ok"}>
+                {status?.ok === false ? (
+                  <CloudSlash className="size-4 shrink-0 text-destructive" />
+                ) : (
+                  <CloudCheck className="size-4 shrink-0 text-primary" />
+                )}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm text-default">{statusLine}</span>
+                  {status?.full ? (
+                    <span className="block truncate text-xs text-destructive" data-sync-full="">
+                      {t("settings.sync.full", { provider: providerName(phase.provider) })}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              {status?.error === "auth" ? (
+                <Button variant="secondary" onClick={() => void sync.connect(phase.provider)}>
+                  {t("settings.sync.signInAgain")}
+                </Button>
               ) : (
-                <CloudCheck className="size-4 shrink-0 text-primary" />
+                <Button variant="secondary" loading={view.syncing} onClick={() => void sync.syncNow()} data-sync-now="">
+                  <ArrowsClockwise />
+                  {t("settings.sync.syncNow")}
+                </Button>
               )}
-              <span className="min-w-0">
-                <span className="block truncate text-sm text-default">{statusLine}</span>
-                {status?.ok ? (
-                  <span className="block truncate text-xs text-muted-content">
-                    {t("settings.sync.syncedDetail", {
-                      sent: formatNumber(status.sent),
-                      received: formatNumber(status.received),
-                      size: formatBytes(status.bytes),
-                    })}
-                  </span>
-                ) : null}
-                {status?.full ? (
-                  <span className="block truncate text-xs text-destructive" data-sync-full="">
-                    {t("settings.sync.full", { provider: providerName(phase.provider) })}
-                  </span>
-                ) : null}
-              </span>
-            </div>
-            {status?.error === "auth" ? (
-              <Button variant="secondary" onClick={() => void sync.connect(phase.provider)}>
-                {t("settings.sync.signInAgain")}
-              </Button>
-            ) : (
-              <Button variant="secondary" loading={view.syncing} onClick={() => void sync.syncNow()} data-sync-now="">
-                <ArrowsClockwise />
-                {t("settings.sync.syncNow")}
-              </Button>
-            )}
-          </SettingsRow>,
+            </SettingsRow>
+            <RoundBar round={view.round} />
+          </div>,
+          ...(transfers.length > 0 ? [
+            <SettingsBlock key="transfers">
+              <SyncTransfers transfers={transfers} />
+            </SettingsBlock>,
+          ] : []),
           ...(held.length > 0 ? [
             <SettingsBlock key="held">
               <p className="text-sm text-default">{t("settings.sync.held", { count: held.length })}</p>
@@ -164,29 +172,31 @@ export function SyncSection() {
               </div>
             </SettingsBlock>,
           ] : []),
-          <SettingsBlock key="devices">
-            <h3 className="text-xs text-muted-content">{t("settings.sync.devices")}</h3>
-            <ul className="mt-2 flex flex-col gap-1" data-sync-devices="">
-              {view.devices.map((device) => (
-                <li key={device.info.id} className="text-sm text-default">
-                  {deviceLabel(t, device.info)}
-                  {device.self ? <span className="text-muted-content"> · {t("settings.sync.thisDevice")}</span> : null}
-                </li>
-              ))}
-            </ul>
-          </SettingsBlock>,
           ...(view.snapshotAt !== undefined && Date.now() - view.snapshotAt < UNDO_WINDOW_MS ? [
-            <SettingsRow key="undo" label={t("settings.sync.undoHint")}>
+            <SettingsRow key="undo">
+              <span className="min-w-0">
+                <span className="block text-sm text-default">{t("settings.sync.undo")}</span>
+                <span className="block text-xs text-muted-content">{t("settings.sync.undoHint")}</span>
+              </span>
               <Button variant="secondary" onClick={() => void syncActions.undoFirstSync()}>
-                {t("settings.sync.undo")}
+                {t("settings.sync.undoAction")}
               </Button>
             </SettingsRow>,
           ] : []),
-          <SettingsRow key="disconnect">
-            <Button variant="ghost" onClick={() => setConfirm("disconnect")}>
-              {t("settings.sync.disconnect")}
-            </Button>
-          </SettingsRow>,
+      ];
+      devices = [
+        ...view.devices.map((device) => (
+          <SettingsRow key={device.info.id} label={deviceLabel(t, device.info)}>
+            <span data-sync-device={device.self ? "self" : "other"} className="text-xs text-muted-content">
+              {device.self ? t("settings.sync.thisDevice") : null}
+            </span>
+          </SettingsRow>
+        )),
+        <SettingsRow key="disconnect">
+          <Button variant="destructive" onClick={() => setConfirm("disconnect")} data-sync-disconnect="">
+            {t("settings.sync.disconnect")}
+          </Button>
+        </SettingsRow>,
       ];
       break;
     }
@@ -195,6 +205,7 @@ export function SyncSection() {
   return (
     <>
       <SettingsGroup title={t("settings.sync.title")}>{rows}</SettingsGroup>
+      {devices.length > 0 ? <SettingsGroup title={t("settings.sync.devices")}>{devices}</SettingsGroup> : null}
       <ConfirmDialog
         open={confirm === "startOver"}
         title={t("settings.sync.startOverTitle")}

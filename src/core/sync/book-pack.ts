@@ -1,3 +1,4 @@
+import type { MokuroBlock } from "../mokuro";
 import type { BookRecord, MangaRecord } from "../storage";
 import { seal, sealJson, unseal, unsealJson } from "./crypto";
 import { CHUNK_BYTES, chunkCount, parsePackManifest, type PackManifest } from "./pack-shape";
@@ -21,6 +22,11 @@ export { PackError, type PersonalState } from "./pack-stream";
 //   books/<device>/<folder>/manifest.bin   PackManifest (small: a tile's worth)
 //   books/<device>/<folder>/<n>.bin        chunk n
 // Scans and PDFs are sealed without compression (they don't shrink).
+// A manga volume's in-app OCR rides along as the stream's last file (the
+// same sealed-pack JSON as ocr-sync.ts), so the text lands with the pages.
+// Packs from before it (1.4.4 and older) have none: the receiver takes the
+// text from the volume's OCR pack instead (sync-cloud.ts) — nothing is
+// uploaded twice.
 
 /** Pack format v2 (v1, 1.4.0: one cloud file per book file, inside
     devices/ — superseded; files.ts removes those). */
@@ -37,7 +43,12 @@ export const chunkPath = (dir: string, chunk: number): string => `${dir}/${chunk
 /** What the device lends a pack: the stored book (and its manga pages). */
 export interface PackSource {
   record: BookRecord;
-  manga?: { record: MangaRecord; page: (index: number) => Promise<Blob | undefined> };
+  manga?: {
+    record: MangaRecord;
+    page: (index: number) => Promise<Blob | undefined>;
+    /** The finished in-app OCR (pages without a sidecar), when it has any. */
+    ocr?: { engine: number; pages: Map<number, MokuroBlock[]> };
+  };
 }
 
 export interface PlannedPack {
@@ -93,7 +104,14 @@ export async function planPack(source: PackSource): Promise<PlannedPack | null> 
       if (!blob) return null;
       pageFiles.push(add(blob.size, async () => new Uint8Array(await blob.arrayBuffer()), blob.type || undefined));
     }
-    manifest.manga = { pages: record.pages, files: pageFiles };
+    // A received volume's flag is this device's business, not the pack's.
+    const { received: _received, ...meta } = record;
+    manifest.manga = { pages: meta.pages, files: pageFiles };
+    const ocr = source.manga.ocr;
+    if (ocr && ocr.pages.size > 0) {
+      const json = encoder.encode(JSON.stringify({ v: 1, engine: ocr.engine, pages: Object.fromEntries(ocr.pages) }));
+      manifest.ocr = { file: add(json.length, async () => json), engine: ocr.engine };
+    }
   }
   const desc = manifest.desc;
   if (rest.author) desc.author = rest.author;
@@ -164,7 +182,9 @@ async function buildChunk(plan: PlannedPack, chunk: number): Promise<Uint8Array>
 }
 
 /** Upload the chunks that aren't in the cloud yet, then the manifest. Stops
-    taking new chunks once `deadline` passes; `done` = the manifest is up. */
+    taking new chunks once `deadline` passes; `done` = the manifest is up.
+    `progress` gets the book's bytes in the cloud / its size (chunks already
+    up from an earlier round count from the start). */
 export async function uploadPack(
   remote: RemoteFolder,
   vault: VaultBinding,
@@ -172,9 +192,15 @@ export async function uploadPack(
   plan: PlannedPack,
   existing: ReadonlySet<string>,
   deadline: number,
+  progress?: (sent: number, total: number) => void,
 ): Promise<{ done: boolean; bytes: number }> {
   let bytes = 0;
   if (existing.has(manifestPath(dir))) return { done: true, bytes };
+  const size = plan.manifest.size;
+  const chunkSize = (chunk: number) => Math.min(CHUNK_BYTES, size - chunk * CHUNK_BYTES);
+  let sent = 0;
+  for (let chunk = 0; chunk < plan.manifest.chunks; chunk += 1) if (existing.has(chunkPath(dir, chunk))) sent += chunkSize(chunk);
+  progress?.(sent, size);
   let stopped = false;
   await pool(plan.manifest.chunks, async (chunk) => {
     const path = chunkPath(dir, chunk);
@@ -186,6 +212,8 @@ export async function uploadPack(
     const sealed = await seal(vault.keys, vault.id, path, await buildChunk(plan, chunk), plan.compress);
     await withRetry(() => remote.write(path, sealed));
     bytes += sealed.length;
+    sent += chunkSize(chunk);
+    progress?.(sent, size);
   });
   if (stopped) return { done: false, bytes };
   const path = manifestPath(dir);

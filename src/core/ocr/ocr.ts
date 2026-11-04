@@ -220,7 +220,8 @@ export function enqueueDetect(bookId: string, pages: number[]): void {
     storage, queue detect for the unboxed, then the recognition march — every
     remaining page in order, at the back of the queue, so the volume finishes
     on its own without ever blocking the reader. Idempotent; fully recognized
-    (or fully sidecar'd) volumes never enter the queue. The cancellation
+    (or fully sidecar'd) volumes never enter the queue, and neither do
+    volumes received from another device. The cancellation
     guards bracket the storage reads: imports call this from a putMangaVolume
     `.then`, so a delete can land before or during the reads — neither may
     resurrect a tracked row or a queue for a dead UUID. */
@@ -233,7 +234,9 @@ export async function trackMangaOcr(bookId: string): Promise<void> {
   // Second guard, and nothing below awaits: a delete can no longer interleave
   // between this check and the tracked/queue mutations.
   if (cancelled.has(bookId)) return;
-  if (!manga) return;
+  // A volume that came from another device is recognized THERE: its text
+  // arrives with it, or later through sync — never a second pass here.
+  if (!manga || manga.received) return;
   const needing = manga.pages.flatMap((meta, index) =>
     meta.blocks && meta.blocks.length > 0 ? [] : [index],
   );

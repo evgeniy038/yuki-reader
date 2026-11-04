@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import type { Book } from "@/core/library";
 import type { CloudShelf } from "@/components/sync/use-sync";
 import { CloudArrowDown, DownloadSimple } from "@/components/ui/icons";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { ProgressRing } from "@/components/ui/progress-ring";
 import { formatBytes } from "@/lib/format";
 import { BookCover, CoverFrame } from "./book-cover";
 import { GRID_CLASSES } from "./library-grid";
@@ -15,8 +17,12 @@ import { GRID_CLASSES } from "./library-grid";
 // downloads the book and opens it; while it comes in, the cover frosts and
 // counts up, and a direct transfer says where it stands — calling the other
 // device, asking for yuki to be opened there when it doesn't answer,
-// connecting. Same grid and tile rhythm as the shelf, so the
-// section reads as more of the library, not a separate place.
+// connecting, with a bar along the cover as the bytes come. A volume still
+// being recognized on its device can't come yet: its cover dims under a
+// ring with that device's real progress — the same look as a volume
+// being processed on this shelf — and a tap does nothing until it's ready.
+// Same grid and tile rhythm as the shelf, so the section reads as more of
+// the library, not a separate place.
 
 export function CloudSection({ cloud }: { cloud: CloudShelf }) {
   const { t } = useTranslation();
@@ -47,7 +53,7 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
         {t("library.cloud.title")} · {cloud.books.length}
       </h2>
       <div className={GRID_CLASSES}>
-        {cloud.books.map(({ key, desc, from }) => {
+        {cloud.books.map(({ key, desc, from, preparing }) => {
           // The cover pieces speak Book: a cloud book pretends to be one.
           const pseudo: Book = {
             id: key,
@@ -60,6 +66,7 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
           };
           const progress = cloud.downloads[key];
           const busy = progress !== undefined;
+          const waiting = preparing !== undefined && !busy;
           const stage = from ? cloud.direct[key] : undefined;
           const subtitle =
             desc.format === "manga" && desc.volumeIndex !== undefined
@@ -75,29 +82,34 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
               type="button"
               data-cloud-book={key}
               data-cloud-from={from ? "device" : "cloud"}
-              aria-label={t("library.cloud.download", { title: desc.title })}
-              aria-busy={busy || undefined}
-              disabled={busy}
+              data-cloud-prep={waiting ? preparing : undefined}
+              aria-label={t(waiting ? "library.cloud.preparing" : "library.cloud.download", { title: desc.title })}
+              aria-busy={busy || waiting || undefined}
+              disabled={busy || waiting}
               onClick={() => open(key, desc.title, device)}
               className="group flex w-full cursor-pointer flex-col text-left disabled:cursor-default"
             >
               <CoverFrame book={pseudo}>
-                <div className={busy ? "opacity-60" : "opacity-80 transition-opacity group-hover:opacity-100"}>
+                <div className={busy || waiting ? "opacity-60" : "opacity-80 transition-opacity group-hover:opacity-100"}>
                   <BookCover book={pseudo} />
                 </div>
-                <span
-                  className={`absolute bottom-1.5 right-1.5 grid size-8 place-items-center rounded-full bg-scrim text-white ${
-                    failed === key ? "ring-2 ring-destructive" : ""
-                  }`}
-                >
-                  {busy && !stage ? (
-                    <span className="text-xs tabular-nums">{Math.round(progress * 100)}%</span>
-                  ) : from ? (
-                    <DownloadSimple className="size-4" />
-                  ) : (
-                    <CloudArrowDown className="size-4" />
-                  )}
-                </span>
+                {waiting ? (
+                  <div className="absolute inset-0 grid place-items-center rounded-media bg-black/45 backdrop-blur-[2px]">
+                    <ProgressRing value={preparing} className="size-8" />
+                  </div>
+                ) : busy ? (
+                  stage ? null : (
+                    <ProgressBar value={progress} tone="media" label={desc.title} className="absolute inset-x-2 bottom-2" />
+                  )
+                ) : (
+                  <span
+                    className={`absolute bottom-1.5 right-1.5 grid size-8 place-items-center rounded-full bg-scrim text-white ${
+                      failed === key ? "ring-2 ring-destructive" : ""
+                    }`}
+                  >
+                    {from ? <DownloadSimple className="size-4" /> : <CloudArrowDown className="size-4" />}
+                  </span>
+                )}
                 {stage ? (
                   <span
                     data-cloud-stage={stage}
@@ -113,7 +125,11 @@ export function CloudSection({ cloud }: { cloud: CloudShelf }) {
               </p>
               <p className="mt-0.5 truncate text-xs text-muted-content">{subtitle}</p>
               <p className="mt-0.5 truncate text-xs text-muted-content tabular-nums">
-                {desc.size > 0 ? `${source} · ${formatBytes(desc.size)}` : source}
+                {busy && !stage
+                  ? `${Math.round(progress * 100)}%${desc.size > 0 ? ` · ${formatBytes(desc.size)}` : ""}`
+                  : desc.size > 0
+                    ? `${source} · ${formatBytes(desc.size)}`
+                    : source}
               </p>
             </button>
           );

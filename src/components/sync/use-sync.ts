@@ -20,8 +20,9 @@ type Cloud = typeof import("./sync-cloud");
 
 /** The shelf's view of the cloud (empty while sync is off). */
 export interface CloudShelf {
-  /** `from`: not in the cloud — comes straight from that device. */
-  books: { key: string; desc: PackDesc; from?: DeviceInfo }[];
+  /** `from`: not in the cloud — comes straight from that device.
+      `preparing`: still being processed there, 0..1 — not downloadable yet. */
+  books: { key: string; desc: PackDesc; from?: DeviceInfo; preparing?: number }[];
   /** content key → 0..1 */
   downloads: Record<string, number>;
   /** Direct transfers before their first byte: ringing, closed, connecting. */

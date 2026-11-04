@@ -53,6 +53,14 @@ export interface LocalBridge extends OcrBridge, FileBridge {
   catalog(): Promise<Record<BookKey, PackDesc>>;
 }
 
+/** Where a round stands: reading the other devices' changed files,
+    publishing this device's, moving book files (bytes of the current one). */
+export interface RoundProgress {
+  phase: "pull" | "push" | "files";
+  done: number;
+  total: number;
+}
+
 export interface EngineContext {
   remote: RemoteFolder;
   store: SyncStore;
@@ -61,6 +69,9 @@ export interface EngineContext {
   bridge: LocalBridge;
   /** Book-file uploads stop between parts after this moment (ms epoch). */
   filesDeadline?: number;
+  onProgress?: (progress: RoundProgress) => void;
+  /** A book's upload: its bytes in the cloud / its size. */
+  onUpload?: (key: BookKey, title: string, sent: number, total: number) => void;
 }
 
 export interface RoundReport {
@@ -143,7 +154,22 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   const remotes = new Map((await store.remotes()).map((r) => [r.state.device.id, r]));
   const remoteStats = await store.remoteStats();
   const remoteCatalogs = await store.remoteCatalogs();
+  // Only files whose revision changed are read: that's the pull's length.
+  const stale = (entry: RemoteEntry): boolean => {
+    const catalog = CATALOG.exec(entry.path)?.[1];
+    if (catalog) return catalog !== device.id && remoteCatalogs.get(catalog)?.rev !== entry.rev;
+    const state = STATE.exec(entry.path)?.[1];
+    if (state) return state !== device.id && remotes.get(state)?.rev !== entry.rev;
+    const stats = STATS.exec(entry.path);
+    return !!stats && stats[1] !== device.id && remoteStats.get(`${stats[1]}/${stats[2]}`)?.rev !== entry.rev;
+  };
+  const pull = { phase: "pull" as const, done: 0, total: entries.filter(stale).length };
+  ctx.onProgress?.(pull);
   for (const entry of entries) {
+    if (stale(entry)) {
+      pull.done += 1;
+      ctx.onProgress?.({ ...pull });
+    }
     const listed = CATALOG.exec(entry.path);
     if (listed) {
       const id = listed[1]!;
@@ -202,7 +228,8 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   const ocrApplied = await store.ocrApplied();
   bytes += await syncOcr(remote, vault, device, bridge, merged, local, hlc, ocrApplied);
 
-  // 3. Push.
+  // 3. Push: the state, the stats months, the catalog.
+  ctx.onProgress?.({ phase: "push", done: 0, total: 3 });
   const publish = async (): Promise<void> => {
     const body = { books: merged.books, settings: merged.settings };
     const hash = await sha256Hex(canonical(body));
@@ -216,6 +243,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
     await store.setPublished({ seq: next.seq, hash });
   };
   await publish();
+  ctx.onProgress?.({ phase: "push", done: 1, total: 3 });
   const months = monthsOf(await bridge.localStats(), (id) => bridge.keyOf(id));
   const publishedStats = await store.publishedStats();
   for (const [month, days] of months) {
@@ -228,6 +256,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
     publishedStats[month] = monthHash;
   }
 
+  ctx.onProgress?.({ phase: "push", done: 2, total: 3 });
   // This device's catalog, when its shelf changed.
   const catalog = { v: 1, books: await bridge.catalog() };
   const catalogHash = await sha256Hex(canonical(catalog));
@@ -240,8 +269,13 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   }
 
   // 4. Book files, then their registers.
+  ctx.onProgress?.({ phase: "files", done: 0, total: 1 });
   const files = await syncFiles(
     remote, vault, device, bridge, merged, local, hlc, ctx.filesDeadline ?? Date.now() + 30_000,
+    (key, title, sent, total) => {
+      ctx.onUpload?.(key, title, sent, total);
+      ctx.onProgress?.({ phase: "files", done: sent, total });
+    },
   );
   bytes += files.bytes;
   await publish();

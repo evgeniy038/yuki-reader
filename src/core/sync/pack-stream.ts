@@ -1,5 +1,16 @@
 import type { EpubResource } from "../reading";
-import { deleteBook, putBook, putMangaPageBlob, putMangaRecord, type BookRecord } from "../storage";
+import type { MokuroBlock } from "../mokuro";
+import {
+  deleteBook,
+  OCR_ENGINE,
+  putBook,
+  putMangaOcrRecords,
+  putMangaPageBlob,
+  putMangaRecord,
+  type BookRecord,
+  type MangaOcrRecord,
+} from "../storage";
+import { parseOcrPack } from "./model";
 import type { PlannedPack } from "./book-pack";
 import { parsePackedRecord, type PackManifest, type PackedRecord } from "./pack-shape";
 
@@ -10,7 +21,9 @@ import { parsePackedRecord, type PackManifest, type PackedRecord } from "./pack-
 //   createInstaller — takes the stream in pieces of any size, stores every
 //     file the moment it is complete (manga pages straight into storage, so
 //     a 300 MB volume never sits in a phone's memory whole) and commits the
-//     book at the end; abort takes a half-written book back out.
+//     book at the end; abort takes a half-written book back out. A volume's
+//     OCR (when the pack carries it, from this build's engine) is stored
+//     with it, before the book exists — it is never on a shelf without text.
 
 /** A pack that can't be put back together — retrying won't help. */
 export class PackError extends Error {
@@ -53,7 +66,12 @@ export interface Installer {
 export function createInstaller(manifest: PackManifest, id: string, personal: PersonalState): Installer {
   const resourceOf = new Map(manifest.resources.map((ref) => [ref.file, ref]));
   const pageOf = new Map((manifest.manga?.files ?? []).map((file, index) => [file, index]));
-  const got: { record: PackedRecord | null; resources: EpubResource[]; pdf?: Uint8Array } = {
+  const got: {
+    record: PackedRecord | null;
+    resources: EpubResource[];
+    pdf?: Uint8Array;
+    ocr?: Map<number, MokuroBlock[]>;
+  } = {
     record: null,
     resources: [],
   };
@@ -71,6 +89,18 @@ export function createInstaller(manifest: PackManifest, id: string, personal: Pe
     const resource = resourceOf.get(index);
     if (resource) got.resources.push({ path: resource.path, mime: resource.mime, bytes });
     if (index === manifest.pdf) got.pdf = bytes;
+    if (index === manifest.ocr?.file) {
+      // Another engine's text counts as missing here: left out, not guessed.
+      let value: unknown;
+      try {
+        value = JSON.parse(decoder.decode(bytes)) as unknown;
+      } catch {
+        throw new PackError("The book's text is damaged");
+      }
+      const pack = parseOcrPack(value);
+      if (!pack) throw new PackError("The book's text is damaged");
+      if (pack.engine === OCR_ENGINE) got.ocr = pack.pages;
+    }
     const page = pageOf.get(index);
     if (page !== undefined) {
       const mime = manifest.files[index]?.mime ?? "application/octet-stream";
@@ -116,7 +146,14 @@ export function createInstaller(manifest: PackManifest, id: string, personal: Pe
       }
       const record: BookRecord = { ...got.record, ...personal, id, resources: got.resources };
       if (got.pdf) record.pdfBytes = got.pdf;
-      if (manifest.manga) await putMangaRecord({ id, pages: manifest.manga.pages });
+      if (manifest.manga) {
+        await putMangaRecord({ id, pages: manifest.manga.pages, received: true });
+        if (got.ocr) {
+          const records = new Map<number, MangaOcrRecord>();
+          for (const [index, blocks] of got.ocr) records.set(index, { blocks, engine: OCR_ENGINE });
+          await putMangaOcrRecords(id, records);
+        }
+      }
       await putBook(record);
       return record;
     },

@@ -8,6 +8,9 @@ import { MANGA, MANGA_OCR, MANGA_PAGES, OCR_MODELS, open } from "./db";
 export interface MangaRecord {
   id: string;
   pages: MangaStoredPage[];
+  /** Arrived from another device (sync): its OCR came along, and this
+      device never runs the background recognition on it. */
+  received?: true;
 }
 
 /** In-app OCR result for one manga page (the app-generated counterpart of a
@@ -234,6 +237,23 @@ export async function loadMangaOcr(
     if (Number.isFinite(index)) out.set(index, record);
   });
   return out;
+}
+
+/** Pages of a volume with a FINISHED record at the current engine. Walks
+    a cursor, one record at a time — a readiness check over a whole library
+    must not hold every volume's text in memory at once. */
+export async function loadMangaOcrDone(bookId: string): Promise<Set<number>> {
+  const db = await open();
+  const done = new Set<number>();
+  let cursor = await db.transaction(MANGA_OCR).store.openCursor(prefixRange(`${bookId}/`));
+  while (cursor) {
+    const record = cursor.value;
+    const key = String(cursor.key);
+    const index = Number(key.slice(key.lastIndexOf("/") + 1));
+    if (record.engine === OCR_ENGINE && !record.partial && Number.isFinite(index)) done.add(index);
+    cursor = await cursor.continue();
+  }
+  return done;
 }
 
 /** OCR progress flags for a volume: page index → fully recognized. This is

@@ -4,7 +4,7 @@ Node-side units and parser smokes are self-contained (fixtures built on the
 fly). `pnpm test` runs all twelve: epub, dictionaries, backup, shelf, stats,
 book-css, resources, reader-touch, storage (the v7 → v8 book split), zip
 (lazy archive reading vs unzipSync), ocr-lines (the OCR line splitter on
-synthetic glyph rasters), icons, sync. Standalone extras:
+synthetic glyph rasters), icons, sync (six files, below). Standalone extras:
 
 ```
 pnpm tsx tests/ocr-download.ts
@@ -51,7 +51,15 @@ in pieces of any size, exact pages, nothing half-stored on a short or long
 stream, sealed doorbell signals that go stale, and device catalogs published
 sealed and rewritten only on change, every holder rung, and the wire's brake
 — a sender never more than the window ahead of what the receiver STORED,
-an older receiver still served (`sync-p2p-unit`). How fast a volume moves is
+an older receiver still served (`sync-p2p-unit`); and the readiness gate
+— a novel offered once stored, a volume only once every page has text at
+the current engine (a skeleton or an older engine's page counts as
+missing), so it isn't uploaded, sent or listed as ready before that and
+the catalog shows it waiting with its progress; the text rides inside the
+cloud pack and the direct stream and lands with the pages (an older
+engine's is left out, a pack from before still installs); and a received
+volume is never queued for OCR, by the resume pass or otherwise, nor passed
+on before its text arrives (`sync-ready-unit`). How fast a volume moves is
 measured, not guessed: `pnpm tsx tests/sync-files-bench.ts` sends a 200-page
 volume through a cloud with a fixed per-request latency and a shared link
 (`LATENCY_MS`, `LINK_MBIT`, `PAGES`, `PAGE_KB`) and prints time and request
@@ -67,12 +75,17 @@ request interception — including a novel that arrives on the other device by
 itself, a manga volume kept in the cloud that waits there as a tile, opened
 with a tap, and one that never went up, which the phone fetches straight from
 the open Mac over a real WebRTC connection — through a cloud slowed to VPN
-latency, without ever asking to open yuki on the open Mac — and, with the
-Mac closed, asks to open yuki there. The fake Yandex lives in
+latency, without ever asking to open yuki on the open Mac — a volume with
+no sidecar that the Mac hasn't recognized yet, which waits on the phone as
+a disabled tile, is offered once its text is written in, and arrives with
+that text, while the phone never asks for the OCR model (not after a
+reload, not in the reader, even with the text gone) — and, with the Mac
+closed, asks to open yuki there. The OCR model is blocked in every
+profile: no recognition runs, text is written straight into storage. The fake Yandex lives in
 `sync-smoke-cloud.ts`. Start a dev server with a provider id first:
 
 ```
-VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480
+VITE_YANDEX_CLIENT_ID=smoke VITE_DROPBOX_APP_KEY=smoke pnpm dev --port 1480
 YUKI_TEST_BASE=http://localhost:1480 pnpm test:sync-smoke
 ```
 

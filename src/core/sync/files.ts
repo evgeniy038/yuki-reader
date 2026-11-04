@@ -51,6 +51,7 @@ export async function syncFiles(
   local: LocalState,
   hlc: Hlc,
   deadline: number,
+  onUpload?: (key: BookKey, title: string, sent: number, total: number) => void,
 ): Promise<FilesReport> {
   const report: FilesReport = { bytes: 0, pending: false, full: false };
   // v1 leftovers in the state folder: useless now, and every round's
@@ -99,7 +100,9 @@ export async function syncFiles(
     if (!plan) continue;
     const dir = packDir(device.id, await folderName(vault.keys, book.key));
     try {
-      const sent = await uploadPack(remote, vault, dir, plan, mine.get(dir) ?? new Set(), deadline);
+      const sent = await uploadPack(remote, vault, dir, plan, mine.get(dir) ?? new Set(), deadline, (done, total) =>
+        onUpload?.(book.key, book.title, done, total),
+      );
       report.bytes += sent.bytes;
       if (sent.done) stamp(book.key, PACK_VERSION);
       else {

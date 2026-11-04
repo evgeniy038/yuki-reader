@@ -23,7 +23,9 @@ import {
 import type { BookPatch, LocalBook } from "@/core/sync/merge";
 import type { BookKey } from "@/core/sync/model";
 import { syncStore } from "@/core/sync/store";
+import { finishedOcrPages, isReady, pagesNeedingOcr } from "@/core/sync/ready";
 import { catalogOf } from "./sync-catalog";
+import { forgetReadiness, readinessOf } from "./sync-ready";
 
 // The engine's view of the shelf: lean books (from the shelf state the app
 // already holds in memory — no IndexedDB scan per round), and the writes a
@@ -87,51 +89,42 @@ export async function writePatches(patches: BookPatch[], current: Map<string, Bo
   }
 }
 
-// "Is this volume's OCR finished?" reads every page record — answer "not
-// yet" from memory for a few minutes instead of re-reading each round.
-const OCR_RECHECK_MS = 5 * 60_000;
-const unfinishedAt = new Map<string, number>();
-
+/** This device's finished OCR of a volume — what its OCR pack publishes. */
 async function finishedOcr(id: string): Promise<Map<number, MokuroBlock[]> | null> {
-  const seen = unfinishedAt.get(id);
-  if (seen !== undefined && Date.now() - seen < OCR_RECHECK_MS) return null;
-  const manga = await loadManga(id);
-  const needing = (manga?.pages ?? []).flatMap((meta, index) =>
-    meta.blocks && meta.blocks.length > 0 ? [] : [index],
-  );
-  const records = needing.length > 0 ? await loadMangaOcr(id) : new Map<number, MangaOcrRecord>();
-  const pages = new Map<number, MokuroBlock[]>();
-  for (const index of needing) {
-    const record = records.get(index);
-    if (record && !record.partial) pages.set(index, record.blocks);
-  }
-  if (needing.length === 0 || pages.size < needing.length) {
-    unfinishedAt.set(id, Date.now());
-    return null;
-  }
-  unfinishedAt.delete(id);
-  return pages;
+  return isReady(await readinessOf(id, "manga")) ? finishedOcrPages(id) : null;
 }
 
-/** Another device's OCR lands in storage; this device's OCR queue then skips
-    those pages on its own (it re-checks storage before every page). */
+/** Another device's OCR lands in storage; the volume is then ready here too. */
 async function applyOcr(id: string, pages: Map<number, MokuroBlock[]>): Promise<void> {
   const records = new Map<number, MangaOcrRecord>();
   for (const [index, blocks] of pages) records.set(index, { blocks, engine: OCR_ENGINE });
   await putMangaOcrRecords(id, records);
-  unfinishedAt.delete(id);
+  forgetReadiness(id);
 }
 
-/** A stored book as a pack source (cloud upload or a direct transfer). */
+/** A stored book as a pack source (cloud upload or a direct transfer) —
+    only once it is fully processed here; a volume brings its OCR along. */
 export async function packSourceOf(host: SyncHost, id: string): Promise<PackSource | null> {
   const book = host.books().find((b) => b.id === id);
   if (!book) return null;
+  // Stored content = an import that finished (putBook is one transaction).
   const content = await loadBookContent(id);
   if (!content) return null;
   const record = { ...book, ...content };
   if (book.format !== "manga") return { record };
   const manga = await loadManga(id);
-  return manga ? { record, manga: { record: manga, page: (index) => loadMangaPageBlob(id, index) } } : null;
+  if (!manga) return null;
+  const needsOcr = pagesNeedingOcr(manga).length > 0;
+  const ocr = needsOcr ? await finishedOcrPages(id) : null;
+  if (needsOcr && !ocr) return null;
+  return {
+    record,
+    manga: {
+      record: manga,
+      page: (index) => loadMangaPageBlob(id, index),
+      ...(ocr ? { ocr: { engine: OCR_ENGINE, pages: ocr } } : {}),
+    },
+  };
 }
 
 export async function createBridge(host: SyncHost): Promise<LocalBridge> {

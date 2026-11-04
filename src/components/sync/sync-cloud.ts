@@ -1,14 +1,19 @@
 import type { Book } from "@/core/library";
-import { trackMangaOcr } from "@/core/ocr/ocr";
-import { OCR_ENGINE, type BookRecord } from "@/core/storage";
+import { onOcrBooks } from "@/core/ocr/progress";
+import { OCR_ENGINE, putMangaOcrRecords, type BookRecord, type MangaOcrRecord } from "@/core/storage";
 import { installPack, PACK_VERSION, packDir, readManifest, type PackManifest } from "@/core/sync/book-pack";
 import { holdersOf } from "@/core/sync/catalog";
 import { folderName } from "@/core/sync/crypto";
 import type { BookKey, BookRegs, DeviceInfo } from "@/core/sync/model";
+import { readOcrPack } from "@/core/sync/ocr-sync";
 import type { PersonalState } from "@/core/sync/pack-stream";
+import { isReady, processingOf } from "@/core/sync/ready";
+import type { RemoteFolder } from "@/core/sync/remote";
+import type { VaultBinding } from "@/core/sync/store";
 import { syncStore } from "@/core/sync/store";
 import { fetchFromPeer, servePeers, type DirectStage } from "./p2p";
 import { packSourceOf } from "./sync-bridge";
+import { forgetReadiness } from "./sync-ready";
 import { currentHost, device, folder, getView, onRoundDone, patchView, remotes, requestSync, type SyncView } from "./sync-controller";
 
 // The shelf's other half: books this device doesn't hold but another one
@@ -25,7 +30,13 @@ import { currentHost, device, folder, getView, onRoundDone, patchView, remotes, 
 // leaving the cloud or the other devices. Every syncing device answers the
 // others' requests while it is open — from the moment the app starts, not
 // after its first round (a round can take a while, or fail on its own).
-// A direct request rings every device that holds the book.
+// A direct request rings every device that holds the book ready.
+// A book is offered only once it is fully processed on its device: a
+// manga volume still being recognized there shows as a waiting tile with
+// that device's progress (`preparing`) and can't be tapped yet. A volume
+// arrives WITH its text — in the pack or the stream, or, for a pack from
+// before that, from the volume's OCR pack right after — and this device
+// never recognizes it again.
 
 const AUTO_BYTES = 25 * 1024 * 1024;
 const active = new Set<BookKey>();
@@ -48,9 +59,21 @@ async function manifestOf(
   return manifest;
 }
 
-/** Who to ask directly for `key`: every device whose catalog lists it. */
+/** Who to ask directly for `key`: every device whose catalog lists it
+    ready (not still processing it). */
 async function holders(key: BookKey): Promise<DeviceInfo[]> {
-  return holdersOf(key, remotes().map((state) => state.device), await syncStore.remoteCatalogs());
+  const catalogs = await syncStore.remoteCatalogs();
+  return holdersOf(key, remotes().map((state) => state.device), catalogs).filter(
+    (device) => catalogs.get(device.id)?.catalog.books[key]?.prep === undefined,
+  );
+}
+
+/** Does a cloud pack bring the volume's text — in itself, in its sidecars,
+    or in a current OCR pack next to it? */
+function packHasText(manifest: PackManifest, regs: BookRegs): boolean {
+  if (!manifest.manga) return true;
+  if (manifest.ocr?.engine === OCR_ENGINE || regs.ocr?.v === OCR_ENGINE) return true;
+  return manifest.manga.pages.every((page) => page.blocks !== undefined && page.blocks.length > 0);
 }
 
 /** Rebuild the list from the merged registers and the catalogs; fetch the
@@ -66,7 +89,8 @@ async function refresh(): Promise<void> {
   const cloud: SyncCloudItem[] = [];
   const titled = (key: BookKey, base: PackManifest["desc"]) => {
     const regs = shadow.books[key];
-    const desc = { ...base, title: regs?.name?.v ?? base.title };
+    const { prep: _prep, ...rest } = base;
+    const desc = { ...rest, title: regs?.name?.v ?? base.title };
     if (regs?.series?.v) desc.series = regs.series.v;
     if (typeof regs?.volumeIndex?.v === "number") desc.volumeIndex = regs.volumeIndex.v;
     return desc;
@@ -74,7 +98,12 @@ async function refresh(): Promise<void> {
   for (const [key, regs] of Object.entries(shadow.books)) {
     if (regs.deleted?.v === true || localKeys.has(key)) continue;
     const manifest = await manifestOf(key, regs, cache);
-    if (manifest) cloud.push({ key, desc: titled(key, manifest.desc) });
+    if (!manifest) continue;
+    // An older pack without the text, still being recognized on its device:
+    // wait with that device's progress. When no device reports any, it
+    // comes as it is and its text follows through sync.
+    const prep = packHasText(manifest, regs) ? undefined : preparingOf(key, catalogs);
+    cloud.push({ key, desc: titled(key, manifest.desc), ...(prep !== undefined ? { preparing: prep } : {}) });
   }
   for (const key of cache.keys()) if (!cloud.some((item) => item.key === key)) cache.delete(key);
   await syncStore.setPackManifests(cache);
@@ -83,9 +112,13 @@ async function refresh(): Promise<void> {
     for (const [key, desc] of Object.entries(catalog.books)) {
       if (localKeys.has(key) || shadow.books[key]?.deleted?.v === true) continue;
       if (cloud.some((item) => item.key === key)) continue;
-      // Named after the same device a tap rings first.
-      const from = holdersOf(key, devices, catalogs)[0];
-      if (from) cloud.push({ key, desc: titled(key, desc), from });
+      // Named after the same device a tap rings first; still processing
+      // everywhere it is held: waiting, with the furthest progress.
+      const listed = holdersOf(key, devices, catalogs);
+      const ready = listed.filter((device) => catalogs.get(device.id)?.catalog.books[key]?.prep === undefined);
+      const from = ready[0] ?? listed[0];
+      const prep = ready.length > 0 ? undefined : preparingOf(key, catalogs);
+      if (from) cloud.push({ key, desc: titled(key, desc), from, ...(prep !== undefined ? { preparing: prep } : {}) });
     }
   }
   // A volume another device (or the cloud) also holds can leave this one.
@@ -100,14 +133,38 @@ async function refresh(): Promise<void> {
     .map(([id]) => id);
   patchView({ cloud, inCloud });
   for (const item of cloud) {
-    if (!item.from && item.desc.format !== "manga" && item.desc.size <= AUTO_BYTES) await download(item.key).catch(() => null);
+    if (item.from || item.preparing !== undefined || item.desc.format === "manga" || item.desc.size > AUTO_BYTES) continue;
+    await download(item.key).catch(() => null);
   }
+}
+
+/** The furthest progress any device's catalog reports for a book it is
+    still processing; undefined when none does. */
+function preparingOf(key: BookKey, catalogs: Awaited<ReturnType<typeof syncStore.remoteCatalogs>>): number | undefined {
+  let best: number | undefined;
+  for (const { catalog } of catalogs.values()) {
+    const prep = catalog.books[key]?.prep;
+    if (prep !== undefined) best = Math.max(best ?? 0, prep);
+  }
+  return best;
 }
 
 type SyncCloudItem = SyncView["cloud"][number];
 
 onRoundDone(refresh);
 startServing();
+
+// A volume this device just finished recognizing is ready to be offered:
+// publish it soon instead of at the next minute's round.
+const recognized = new Set<string>();
+onOcrBooks((books) => {
+  for (const { bookId, stage } of books) {
+    if (stage !== "done" || recognized.has(bookId)) continue;
+    recognized.add(bookId);
+    forgetReadiness(bookId);
+    requestSync(2_000);
+  }
+});
 
 /** Answer the other devices' requests while this page is open. */
 function startServing(): void {
@@ -194,12 +251,10 @@ export async function download(key: BookKey): Promise<string | null> {
     const keys = await syncStore.bookKeys();
     keys.set(id, key);
     await syncStore.setBookKeys(keys);
+    if (record.format === "manga" && regs) await withText(remote, vault, key, id, regs).catch(() => {});
     const { chapters: _c, toc: _t, resources: _r, bookCss: _b, pdfBytes: _p, ...book } = record;
     const shelf: Book = book;
     host.add(shelf);
-    // No current OCR pack in the cloud: this device recognizes the volume
-    // itself (a current one arrives with the next round instead).
-    if (shelf.format === "manga" && regs?.ocr?.v !== OCR_ENGINE) void trackMangaOcr(id);
     const view = getView();
     patchView({
       cloud: view.cloud.filter((item) => item.key !== key),
@@ -211,6 +266,27 @@ export async function download(key: BookKey): Promise<string | null> {
     active.delete(key);
     setProgress(key, null);
   }
+}
+
+/** A volume from a pack without its text (1.4.4 and older, or an older
+    sender) takes it from the volume's current OCR pack before it goes on
+    the shelf. Either way the next round needn't fetch that pack again. */
+async function withText(remote: RemoteFolder, vault: VaultBinding, key: BookKey, id: string, regs: BookRegs): Promise<void> {
+  const ocr = regs.ocr?.v === OCR_ENGINE ? regs.ocr : undefined;
+  if (!ocr) return;
+  if (!isReady(await processingOf(id, "manga"))) {
+    const pack = await readOcrPack(remote, vault, ocr.d, key, OCR_ENGINE);
+    if (!pack) return;
+    const records = new Map<number, MangaOcrRecord>();
+    for (const [index, blocks] of pack.pages) records.set(index, { blocks, engine: OCR_ENGINE });
+    await putMangaOcrRecords(id, records);
+    forgetReadiness(id);
+  }
+  const note = async () => {
+    const applied = await syncStore.ocrApplied();
+    await syncStore.setOcrApplied({ ...applied, [key]: ocr.t });
+  };
+  void (navigator.locks ? navigator.locks.request("yuki-sync", note) : note());
 }
 
 /** Free a manga volume's space here; it stays in the cloud and on the shelf

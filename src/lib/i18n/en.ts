@@ -47,6 +47,7 @@ export const en = {
       ringing: "Calling {{device}}…",
       closed: "Open yuki on {{device}}",
       connecting: "Connecting to {{device}}…",
+      preparing: "“{{title}}” is still being prepared on its device",
       download: "Download “{{title}}”",
       failed: "Couldn't download “{{title}}” — try again",
       unanswered: "{{device}} didn't answer — open yuki there and tap again",
