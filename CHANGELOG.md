@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.7] - 2026-11-05
+
+- yuki has a face now: Yuki-chan in her snowy beanie is the new icon on your home screen, in the browser tab and in the installed app
+
 ## [1.4.6] - 2026-11-05
 
 - Reading: after copying a bubble's text and checking a translation in another app, pages turn again the moment you come back — no more stuck pages or the page slowly zooming out on its own
