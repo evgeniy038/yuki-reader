@@ -1,177 +1,188 @@
 import type { BookRecord } from "@/core/storage";
 import { planPack, type PackSource } from "@/core/sync/book-pack";
 import type { BookKey } from "@/core/sync/model";
-import { parsePackManifest, type PackManifest } from "@/core/sync/pack-shape";
-import { createInstaller, streamPack, type PersonalState } from "@/core/sync/pack-stream";
+import { parsePackManifest } from "@/core/sync/pack-shape";
+import { createInstaller, PackError, streamPack, type PersonalState } from "@/core/sync/pack-stream";
+import { ACK_EVERY, FRAME, MAX_METADATA, parseMessage, PeerUnreachableError, STALL_MS, WINDOW, type Message } from "./p2p-protocol";
 
-// The wire of a direct transfer (p2p.ts sets the connection up): the asker
-// sends "get", the holder a manifest, the pack stream in frames and "end".
-// Two brakes keep memory flat on both ends — the channel's own send buffer
-// (HIGH_WATER) and the asker's acknowledgements of what it has STORED
-// (WINDOW): a phone writes to storage slower than Wi-Fi delivers, and
-// without them a 300 MB volume would pile up in its page's memory.
+export { ACK_EVERY, FRAME, WINDOW, parseMessage, PeerUnavailableError, PeerUnreachableError, type Message } from "./p2p-protocol";
 
-/** Data-channel message size — safe in every browser's SCTP stack. */
-export const FRAME = 64 * 1024;
-/** Stop queueing while this much is still unsent (memory + fairness). */
+// Bound both the browser's send queue and the receiver's storage backlog.
 const HIGH_WATER = 4 * 1024 * 1024;
-/** The receiver stores what arrives (storage writes are slower than Wi-Fi
-    on a phone) and says how far it got every ACK_EVERY bytes; the sender
-    stays within WINDOW of that — so a 300 MB volume never piles up in the
-    receiving page's memory waiting to be written. */
-export const WINDOW = 16 * 1024 * 1024;
-export const ACK_EVERY = 1024 * 1024;
-/** What a transfer needs of a data channel (an in-memory one in tests). */
-export type Wire = Pick<
-  RTCDataChannel,
+export type Wire = Pick<RTCDataChannel,
   "send" | "close" | "readyState" | "bufferedAmount" | "bufferedAmountLowThreshold" | "addEventListener" | "removeEventListener"
 >;
 
-/** No device answered the doorbell (yuki isn't open on any of them). */
-export class PeerUnavailableError extends Error {
-  constructor() {
-    super("The other device didn't answer");
-    this.name = "PeerUnavailableError";
-  }
-}
-
-/** A device answered, but no direct connection came up (different networks
-    behind strict routers, or a VPN in the way). */
-export class PeerUnreachableError extends Error {
-  constructor() {
-    super("The other device answered but couldn't be reached directly");
-    this.name = "PeerUnreachableError";
-  }
-}
-
-export type Message =
-  // `window`: the asker acknowledges what it stored (older versions don't).
-  | { t: "get"; key: BookKey; window?: number }
-  | { t: "ack"; stored: number }
-  | { t: "manifest"; manifest: PackManifest }
-  | { t: "end" }
-  | { t: "error"; reason: string };
-
-export function parseMessage(text: string): Message | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null || !("t" in value)) return null;
-  if (value.t === "get" && "key" in value && typeof value.key === "string") {
-    const window = "window" in value && typeof value.window === "number" && value.window > 0 ? value.window : undefined;
-    return window ? { t: "get", key: value.key, window } : { t: "get", key: value.key };
-  }
-  if (value.t === "ack" && "stored" in value && typeof value.stored === "number") return { t: "ack", stored: value.stored };
-  if (value.t === "manifest" && "manifest" in value) {
-    const manifest = parsePackManifest(value.manifest);
-    return manifest ? { t: "manifest", manifest } : null;
-  }
-  if (value.t === "end") return { t: "end" };
-  if (value.t === "error") return { t: "error", reason: "reason" in value && typeof value.reason === "string" ? value.reason : "" };
-  return null;
-}
-
-/** Ask for the book on an open channel and store it as `id`. */
+/** Ask for a book; every exit removes listeners and unfinished storage. */
 export function receiveBook(
   channel: Wire,
   opts: { key: BookKey; id: string; personal: PersonalState; onProgress: (done: number, total: number) => void },
 ): Promise<BookRecord> {
-  return new Promise<BookRecord>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     let installer: ReturnType<typeof createInstaller> | null = null;
+    let metadata: Uint8Array | null = null;
+    let metadataAt = 0;
     let total = 0;
     let acked = 0;
-    // Messages are handled strictly in order: storage writes are async.
+    let lastProgress = -Infinity;
+    let stopped = false;
     let queue = Promise.resolve();
-    const fail = (error: unknown) => {
-      reject(error);
-      channel.close();
+    let timer: ReturnType<typeof setTimeout>;
+    const cleanup = () => {
+      clearTimeout(timer);
+      channel.removeEventListener("message", onMessage);
+      channel.removeEventListener("close", onClose);
+      channel.removeEventListener("error", onClose);
     };
-    channel.addEventListener("message", (event: MessageEvent) => {
+    const fail = (error: unknown) => {
+      if (stopped) return;
+      stopped = true;
+      cleanup();
+      channel.close();
+      // A storage write already in flight must finish before rollback.
+      void queue.then(() => installer?.abort()).then(() => reject(error), reject);
+    };
+    const touch = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fail(new PeerUnreachableError()), STALL_MS);
+    };
+    const start = (value: unknown) => {
+      const manifest = parsePackManifest(value);
+      if (!manifest || installer) throw new PackError("The book manifest is damaged or repeated");
+      total = manifest.size;
+      installer = createInstaller(manifest, opts.id, opts.personal);
+    };
+    const consume = async (data: unknown) => {
+      if (stopped) return;
+      if (typeof data === "string") {
+        const message = parseMessage(data);
+        if (!message || metadata) throw new PackError("The other device sent something unexpected");
+        if (message.t === "manifest") start(message.manifest);
+        else if (message.t === "metadata") {
+          if (installer) throw new PackError("The book manifest was repeated");
+          metadata = new Uint8Array(message.size);
+        } else if (message.t === "end") {
+          if (!installer) throw new PackError("The book never started");
+          const record = await installer.finish();
+          if (!stopped) {
+            stopped = true;
+            cleanup();
+            resolve(record);
+          }
+        } else if (message.t === "error") throw new PackError(message.reason || "The other device couldn't send the book");
+        else throw new PackError("The book arrived out of order");
+        return;
+      }
+      if (!(data instanceof ArrayBuffer)) throw new PackError("The book arrived out of order");
+      if (metadata) {
+        if (metadataAt + data.byteLength > metadata.length) throw new PackError("Too much book metadata");
+        metadata.set(new Uint8Array(data), metadataAt);
+        metadataAt += data.byteLength;
+        if (metadataAt === metadata.length) {
+          start(JSON.parse(new TextDecoder().decode(metadata)) as unknown);
+          metadata = null;
+        }
+        return;
+      }
+      if (!installer) throw new PackError("The book arrived out of order");
+      await installer.push(new Uint8Array(data));
+      if (stopped) return;
+      if (installer.received - acked >= ACK_EVERY || installer.received === total) {
+        acked = installer.received;
+        if (channel.readyState === "open") channel.send(JSON.stringify({ t: "ack", stored: acked } satisfies Message));
+      }
+      const now = Date.now();
+      if (now - lastProgress >= 100 || installer.received === total) {
+        lastProgress = now;
+        opts.onProgress(installer.received, total);
+      }
+      touch();
+    };
+    const onMessage = (event: MessageEvent) => {
+      touch();
       const data: unknown = event.data;
-      queue = queue
-        .then(async () => {
-          if (typeof data === "string") {
-            const message = parseMessage(data);
-            if (!message) throw new Error("The other device sent something unexpected");
-            if (message.t === "manifest") {
-              total = message.manifest.size;
-              installer = createInstaller(message.manifest, opts.id, opts.personal);
-            } else if (message.t === "end") {
-              if (!installer) throw new Error("The book never started");
-              resolve(await installer.finish());
-            } else if (message.t === "error") {
-              throw new Error(message.reason || "The other device couldn't send the book");
-            }
-            return;
-          }
-          if (!(data instanceof ArrayBuffer) || !installer) throw new Error("The book arrived out of order");
-          await installer.push(new Uint8Array(data));
-          if (installer.received - acked >= ACK_EVERY || installer.received === total) {
-            acked = installer.received;
-            channel.send(JSON.stringify({ t: "ack", stored: acked } satisfies Message));
-          }
-          opts.onProgress(installer.received, total);
-        })
-        .catch(async (error: unknown) => {
-          await installer?.abort();
-          fail(error);
-        });
-    });
-    channel.addEventListener("close", () => {
-      void queue.then(() => fail(new PeerUnavailableError()));
-    });
-    channel.send(JSON.stringify({ t: "get", key: opts.key, window: WINDOW } satisfies Message));
+      queue = queue.then(() => consume(data)).catch(fail);
+    };
+    const onClose = () => {
+      // An ordered "end" may already be queued behind storage writes.
+      void queue.then(() => fail(new PeerUnreachableError()));
+    };
+    channel.addEventListener("message", onMessage);
+    channel.addEventListener("close", onClose);
+    channel.addEventListener("error", onClose);
+    touch();
+    try {
+      channel.send(JSON.stringify({ t: "get", key: opts.key, window: WINDOW, framed: true } satisfies Message));
+    } catch (error) { fail(error); }
   });
 }
 
-/** Send one book down an open channel, respecting its buffer — and, when
-    the asker acknowledges, staying within `window` of what it stored. */
-export async function sendBook(channel: Wire, source: PackSource | null, window: number | undefined): Promise<void> {
+/** A bounded wait wakes on progress, failure or close — never just drain. */
+function room(channel: Wire, ready: () => boolean): Promise<void> {
+  if (channel.readyState !== "open") return Promise.reject(new PeerUnreachableError());
+  if (ready()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const events = ["bufferedamountlow", "message", "close", "error"];
+    const finish = (error?: Error) => {
+      clearTimeout(timer);
+      for (const event of events) channel.removeEventListener(event, check);
+      if (error) reject(error);
+      else resolve();
+    };
+    const check = (event: Event) => {
+      if (channel.readyState !== "open" || event.type === "error") finish(new PeerUnreachableError());
+      else if (ready()) finish();
+    };
+    const timer = setTimeout(() => finish(new PeerUnreachableError()), STALL_MS);
+    for (const event of events) channel.addEventListener(event, check);
+  });
+}
+
+export async function sendBook(
+  channel: Wire,
+  source: PackSource | null,
+  window: number | undefined,
+  options: { frame?: number; framed?: boolean } = {},
+): Promise<void> {
   const plan = source ? await planPack(source) : null;
   if (!plan) {
     channel.send(JSON.stringify({ t: "error", reason: "That book isn't on this device any more" } satisfies Message));
     return;
   }
+  const frame = Math.min(options.frame ?? FRAME, window ?? WINDOW);
   let sent = 0;
   let stored = 0;
-  let wake = () => {};
   const onMessage = (event: MessageEvent) => {
     const message = typeof event.data === "string" ? parseMessage(event.data) : null;
-    if (message?.t === "ack") {
-      stored = Math.max(stored, message.stored);
-      wake();
-    }
+    if (message?.t === "ack" && message.stored <= sent) stored = Math.max(stored, message.stored);
   };
-  const onClose = () => wake();
   channel.addEventListener("message", onMessage);
-  channel.addEventListener("close", onClose);
   channel.bufferedAmountLowThreshold = HIGH_WATER / 4;
-  channel.send(JSON.stringify({ t: "manifest", manifest: plan.manifest } satisfies Message));
   try {
-    await streamPack(plan, FRAME, async (bytes) => {
-      while (window !== undefined && sent + bytes.length - stored > window && channel.readyState === "open") {
-        await new Promise<void>((resolve) => (wake = resolve));
-      }
+    if (options.framed) {
+      // Manga sidecars and covers can exceed SCTP's single-message limit.
+      const metadata = new TextEncoder().encode(JSON.stringify(plan.manifest));
+      if (metadata.length > MAX_METADATA) throw new PackError("The book metadata is too large");
+      channel.send(JSON.stringify({ t: "metadata", size: metadata.length } satisfies Message));
+      for (let at = 0; at < metadata.length; at += frame) await sendFrame(channel, metadata.subarray(at, at + frame));
+    } else {
+      channel.send(JSON.stringify({ t: "manifest", manifest: plan.manifest } satisfies Message));
+    }
+    await streamPack(plan, frame, async (bytes) => {
+      await room(channel, () => window === undefined || sent + bytes.length - stored <= window);
       await sendFrame(channel, bytes);
       sent += bytes.length;
     });
+    channel.send(JSON.stringify({ t: "end" } satisfies Message));
   } finally {
     channel.removeEventListener("message", onMessage);
-    channel.removeEventListener("close", onClose);
   }
-  channel.send(JSON.stringify({ t: "end" } satisfies Message));
 }
 
-/** One frame, once the channel's own send buffer has room. */
 async function sendFrame(channel: Wire, bytes: Uint8Array): Promise<void> {
-  if (channel.readyState !== "open") throw new Error("The other device left");
-  if (channel.bufferedAmount > HIGH_WATER) {
-    await new Promise<void>((resolve) =>
-      channel.addEventListener("bufferedamountlow", () => resolve(), { once: true }),
-    );
-  }
-  channel.send(bytes.slice()); // its own buffer: the view may share a page's
+  await room(channel, () => channel.bufferedAmount <= HIGH_WATER);
+  // send() copies synchronously; don't copy the frame once more ourselves.
+  channel.send(bytes.buffer instanceof ArrayBuffer
+    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    : bytes.slice());
 }

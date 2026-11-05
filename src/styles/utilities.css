@@ -148,37 +148,13 @@
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 85%, 0 100%);
 }
 
-/* Dynamic spinner: steady rotation + slower eased rotation + arc-length
-   morph, so every cycle looks slightly different. */
-/* The sync indicator (sync-glow.tsx): a band of light running along the
-   top edge — the accent blue through a touch of violet, fading to nothing
-   at both ends of the band. */
-@keyframes glow-sweep {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: -100% 0;
-  }
-}
-@utility sync-glow {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in oklab, var(--color-primary) 80%, transparent) 30%,
-    color-mix(in oklab, oklch(70% 0.18 295) 80%, transparent) 50%,
-    color-mix(in oklab, var(--color-primary) 80%, transparent) 70%,
-    transparent 100%
-  );
-  background-size: 50% 100%;
-  background-repeat: no-repeat;
-  animation: glow-sweep 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-    background-size: 100% 100%;
-  }
+/* Keep recognition controls above the update card when both are visible. */
+body:has([data-update-ready]) [data-ocr-status] {
+  bottom: calc(var(--above-dock) + 4.5rem);
 }
 
+/* Dynamic spinner: steady rotation + slower eased rotation + arc-length
+   morph, so every cycle looks slightly different. */
 @keyframes spin-linear {
   to {
     transform: rotate(1turn);

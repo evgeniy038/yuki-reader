@@ -3,6 +3,13 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.8] - 2026-11-05
+
+- The update notice sits at the bottom, above the tab bar, with room for manga recognition progress
+- Sync no longer draws a glowing strip across the top of the screen
+- Books transfer faster between your devices, simultaneous downloads no longer interfere, and an interrupted connection retries automatically
+- Large manga volumes with lots of text or a large cover can transfer directly without hitting the connection's message limit
+
 ## [1.4.7] - 2026-11-05
 
 - yuki has a face now: Yuki-chan in her snowy beanie is the new icon on your home screen, in the browser tab and in the installed app

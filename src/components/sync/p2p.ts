@@ -2,51 +2,31 @@ import type { BookRecord } from "@/core/storage";
 import type { PackSource } from "@/core/sync/book-pack";
 import type { PersonalState } from "@/core/sync/pack-stream";
 import type { BookKey } from "@/core/sync/model";
-import type { RemoteFolder } from "@/core/sync/remote";
-import { answerPath, OFFER, offerPath, readSignal, writeSignal } from "@/core/sync/signal";
+import { AuthRequiredError, QuotaError, type RemoteFolder } from "@/core/sync/remote";
+import { answerPath, OFFER, offerPath, readSignal, writeSignal, type Signal } from "@/core/sync/signal";
 import type { VaultBinding } from "@/core/sync/store";
-import { parseMessage, PeerUnavailableError, PeerUnreachableError, receiveBook, sendBook } from "./p2p-wire";
+import { abortable, gathered, ICE, opened, pause } from "./p2p-connection";
+import { FRAME, parseMessage, PeerUnavailableError, PeerUnreachableError, receiveBook, sendBook } from "./p2p-wire";
 
 export { PeerUnavailableError, PeerUnreachableError } from "./p2p-wire";
 
-// Books straight from one device to another — no cloud storage, no size
-// limit, at the speed of the home Wi-Fi. The cloud only rings the doorbell
-// (core/sync/signal.ts: sealed WebRTC offer/answer); the book itself goes
-// over a WebRTC data channel (DTLS-encrypted, its fingerprints vouched for
-// by the sealed signals) as the same stream a cloud pack is made of, and
-// lands in storage file by file as it arrives. Both devices must have yuki
-// open while it moves.
-
-const ICE: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+// The cloud carries only sealed SDP; book bytes travel over DTLS/SCTP.
+// Each call has its own return address, so simultaneous downloads and tabs
+// cannot overwrite one another's offers, answers or cleanup.
 const ANSWER_WAIT_MS = 90_000;
-/** No answer this long: the other device is most likely closed — say so.
-    Not sooner: over a VPN every cloud request costs ~0.5–0.9 s, and a ring
-    that IS answered takes 5–10 s to come back. */
 const CLOSED_AFTER_MS = 20_000;
-const OPEN_WAIT_MS = 20_000;
-
-/** Where a direct transfer stands before the first byte. */
 export type DirectStage = "ringing" | "closed" | "connecting";
 
-/** Wait for ICE gathering to finish (or a few seconds — a slow STUN server
-    must not hold the doorbell: on one Wi-Fi the local candidates suffice). */
-function gathered(pc: RTCPeerConnection): Promise<void> {
-  if (pc.iceGatheringState === "complete") return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => {
-      pc.removeEventListener("icegatheringstatechange", check);
-      window.clearTimeout(timer);
-      resolve();
-    };
-    const check = () => {
-      if (pc.iceGatheringState === "complete") done();
-    };
-    const timer = window.setTimeout(done, 3_000);
-    pc.addEventListener("icegatheringstatechange", check);
-  });
+interface FetchOptions {
+  remote: RemoteFolder;
+  vault: VaultBinding;
+  peers: string[];
+  key: BookKey;
+  id: string;
+  personal: PersonalState;
+  onStage: (stage: DirectStage) => void;
+  onProgress: (done: number, total: number) => void;
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface Call {
   peer: string;
@@ -54,108 +34,111 @@ interface Call {
   channel: RTCDataChannel;
 }
 
-/** Poll every rung device's answer until one comes back for `session`. */
-async function firstAnswer(
-  remote: RemoteFolder,
-  vault: VaultBinding,
-  me: string,
-  session: string,
-  calls: Call[],
-  onClosed: () => void,
-): Promise<Call> {
-  const started = Date.now();
-  let warned = false;
-  for (;;) {
-    for (const call of calls) {
-      const answer = await readSignal(remote, vault, answerPath(call.peer, me));
-      if (answer?.session === session) {
-        await call.pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
-        return call;
-      }
+async function publish(remote: RemoteFolder, vault: VaultBinding, path: string, value: Signal, signal: AbortSignal) {
+  for (let attempt = 0; ; attempt++) {
+    signal.throwIfAborted();
+    try {
+      const write = writeSignal(remote, vault, path, value);
+      // A timed-out cloud request may finish after its call was abandoned.
+      void write.then(() => {
+        if (signal.aborted) void remote.remove(path).catch(() => {});
+      }, () => {});
+      await abortable(write, signal);
+      return;
+    } catch (error) {
+      if (signal.aborted || error instanceof AuthRequiredError || error instanceof QuotaError || attempt >= 2) throw error;
+      await pause(300 * 2 ** attempt, signal);
     }
-    const waited = Date.now() - started;
-    if (!warned && waited > CLOSED_AFTER_MS) {
-      warned = true;
-      onClosed();
-    }
-    if (waited > ANSWER_WAIT_MS) throw new PeerUnavailableError();
-    await sleep(1_000);
   }
 }
 
-/** The channel opens, or the connection fails / takes too long. */
-function opened({ pc, channel }: Call): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (channel.readyState === "open") return resolve();
-    const fail = () => {
-      window.clearTimeout(timer);
-      reject(new PeerUnreachableError());
-    };
-    const timer = window.setTimeout(fail, OPEN_WAIT_MS);
-    pc.addEventListener("connectionstatechange", () => {
-      if (pc.connectionState === "failed") fail();
-    });
-    channel.addEventListener("open", () => {
-      window.clearTimeout(timer);
-      resolve();
-    }, { once: true });
-  });
-}
-
-/** Ask the devices in `peers` for book `key` — every one is rung at once,
-    the first to answer sends it — and store it as `id`. Throws
-    PeerUnavailableError when none picks up in time, PeerUnreachableError
-    when one does but no direct connection comes up. */
-export async function fetchFromPeer(opts: {
-  remote: RemoteFolder;
-  vault: VaultBinding;
-  me: string;
-  peers: string[];
-  key: BookKey;
-  id: string;
-  personal: PersonalState;
-  onStage: (stage: DirectStage) => void;
-  onProgress: (done: number, total: number) => void;
-}): Promise<BookRecord> {
-  const { remote, vault, me } = opts;
+/** Race open channels, not answers: an unreachable device can't win. */
+async function connect(opts: FetchOptions): Promise<Call> {
+  if (opts.peers.length === 0) throw new PeerUnavailableError();
   const session = crypto.randomUUID();
-  const calls: Call[] = opts.peers.map((peer) => {
+  const abort = new AbortController();
+  const { signal } = abort;
+  const { remote, vault } = opts;
+  const calls: Call[] = [...new Set(opts.peers)].map((peer) => {
     const pc = new RTCPeerConnection(ICE);
     const channel = pc.createDataChannel("yuki-book", { ordered: true });
     channel.binaryType = "arraybuffer";
     return { peer, pc, channel };
   });
+  let answered = false;
+  let winner: Call | undefined;
+  const warning = setTimeout(() => { if (!answered) opts.onStage("closed"); }, CLOSED_AFTER_MS);
+  const deadline = setTimeout(() => abort.abort(answered ? new PeerUnreachableError() : new PeerUnavailableError()), ANSWER_WAIT_MS);
+  opts.onStage("ringing");
+  const jobs = calls.map(async (call) => {
+    const path = offerPath(session, call.peer);
+    try {
+      await call.pc.setLocalDescription(await call.pc.createOffer());
+      await gathered(call.pc, signal);
+      await publish(remote, vault, path, { v: 1, session, sdp: call.pc.localDescription?.sdp ?? "", at: Date.now() }, signal);
+      while (!signal.aborted) {
+        const answer = await abortable(readSignal(remote, vault, answerPath(call.peer, session)).catch((error: unknown) => {
+          if (error instanceof AuthRequiredError) throw error;
+          return null;
+        }), signal);
+        if (answer?.session === session) {
+          answered = true;
+          opts.onStage("connecting");
+          await call.pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
+          await opened(call.pc, call.channel, signal);
+          return call;
+        }
+        await pause(300, signal);
+      }
+      signal.throwIfAborted();
+      throw new PeerUnavailableError();
+    } finally {
+      void remote.remove(path).catch(() => {});
+    }
+  });
   try {
-    opts.onStage("ringing");
-    await Promise.all(
-      calls.map(async ({ peer, pc }) => {
-        await pc.setLocalDescription(await pc.createOffer());
-        await gathered(pc);
-        await writeSignal(remote, vault, offerPath(me, peer), {
-          v: 1,
-          session,
-          sdp: pc.localDescription?.sdp ?? "",
-          at: Date.now(),
-        });
-      }),
-    );
-    const call = await firstAnswer(remote, vault, me, session, calls, () => opts.onStage("closed"));
-    for (const other of calls) if (other !== call) other.pc.close();
-    opts.onStage("connecting");
-    await opened(call);
-    return await receiveBook(call.channel, opts);
+    winner = await Promise.any(jobs);
+    return winner;
+  } catch (error) {
+    if (signal.aborted) throw signal.reason;
+    if (error instanceof AggregateError) {
+      const permanent: unknown = error.errors.find((e: unknown) => e instanceof AuthRequiredError || e instanceof QuotaError);
+      if (permanent) throw permanent;
+    }
+    // Only the answer deadline means nobody is there; failed signaling can
+    // recover on the next connection attempt, just like a broken channel.
+    throw new PeerUnreachableError();
   } finally {
-    for (const { peer, pc } of calls) {
-      pc.close();
-      void remote.remove(offerPath(me, peer)).catch(() => {});
+    clearTimeout(warning);
+    clearTimeout(deadline);
+    abort.abort(new PeerUnreachableError());
+    for (const call of calls) if (call !== winner) call.pc.close();
+    // Delete the ephemeral folder too, so future polls don't scan empty calls.
+    void Promise.allSettled(jobs).then(async () => {
+      await Promise.allSettled(calls.map((call) => remote.remove(answerPath(call.peer, session))));
+      await remote.remove(`signal/${session}`);
+    }).catch(() => {});
+  }
+}
+
+/** A broken direct link gets a fresh connection and a clean installation. */
+export async function fetchFromPeer(opts: FetchOptions): Promise<BookRecord> {
+  for (let attempt = 0; ; attempt++) {
+    let call: Call | undefined;
+    try {
+      call = await connect(opts);
+      return await receiveBook(call.channel, opts);
+    } catch (error) {
+      if (!(error instanceof PeerUnreachableError) || attempt >= 2) throw error;
+      opts.onProgress(0, 1);
+    } finally {
+      call?.pc.close();
     }
   }
 }
 
-/** Answer other devices' doorbells and serve the books they ask for while
-    this page is open. Between looks it waits on the cloud's watch when it
-    has one (armed before each look, so no doorbell slips in between), on
-    `idle` otherwise. */
+/** Serve independent offers concurrently; unchanged signals are never
+    downloaded again, and a failed answer stays eligible for retry. */
 export function servePeers(opts: {
   remote: () => Promise<RemoteFolder | null>;
   vault: () => Promise<VaultBinding | undefined>;
@@ -164,74 +147,91 @@ export function servePeers(opts: {
   idle: () => Promise<void>;
 }): () => void {
   const abort = new AbortController();
-  const answered = new Set<string>();
-  const peers = new Set<RTCPeerConnection>();
+  const { signal } = abort;
+  const seen = new Map<string, string>();
+  const pending = new Set<string>();
+  const peers = new Set<() => void>();
 
   const answer = async (remote: RemoteFolder, vault: VaultBinding, me: string, from: string, path: string) => {
-    const offer = await readSignal(remote, vault, path);
-    if (!offer || answered.has(offer.session)) return;
-    answered.add(offer.session);
+    const offer = await abortable(readSignal(remote, vault, path), signal);
+    if (!offer) return;
+    signal.throwIfAborted();
     const pc = new RTCPeerConnection(ICE);
-    peers.add(pc);
+    const callAbort = new AbortController();
+    const callSignal = AbortSignal.any([signal, callAbort.signal]);
+    let dropped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const reply = answerPath(me, from);
     const drop = () => {
+      if (dropped) return;
+      dropped = true;
+      clearTimeout(timer);
+      callAbort.abort(new PeerUnreachableError());
       pc.close();
-      peers.delete(pc);
+      peers.delete(drop);
+      void remote.remove(reply).catch(() => {});
     };
+    peers.add(drop);
+    timer = setTimeout(drop, 60_000);
     pc.addEventListener("connectionstatechange", () => {
       if (pc.connectionState === "failed" || pc.connectionState === "closed") drop();
     });
     pc.addEventListener("datachannel", (event) => {
       const channel = event.channel;
       channel.binaryType = "arraybuffer";
+      let requested = false;
       channel.addEventListener("message", (message: MessageEvent) => {
-        if (typeof message.data !== "string") return;
-        const request = parseMessage(message.data);
-        if (request?.t !== "get") return;
-        void opts
-          .packSource(request.key)
-          .then((source) => sendBook(channel, source, request.window))
-          .catch(() => channel.close());
+        const request = typeof message.data === "string" ? parseMessage(message.data) : null;
+        if (request?.t !== "get" || requested) return;
+        requested = true;
+        clearTimeout(timer);
+        const frame = Math.min(256 * 1024, pc.sctp?.maxMessageSize || FRAME);
+        void opts.packSource(request.key)
+          .then((source) => sendBook(channel, source, request.window, { frame, framed: request.framed }))
+          .then(() => { if (!dropped) timer = setTimeout(drop, 30_000); })
+          .catch(drop);
       });
       channel.addEventListener("close", drop);
+      channel.addEventListener("error", drop);
     });
-    await pc.setRemoteDescription({ type: "offer", sdp: offer.sdp });
-    await pc.setLocalDescription(await pc.createAnswer());
-    await gathered(pc);
-    await writeSignal(remote, vault, answerPath(me, from), {
-      v: 1,
-      session: offer.session,
-      sdp: pc.localDescription?.sdp ?? "",
-      at: Date.now(),
-    });
-    // Nobody connected within a minute: give the slot back.
-    window.setTimeout(() => {
-      if (pc.connectionState !== "connected") drop();
-    }, 60_000);
+    try {
+      await pc.setRemoteDescription({ type: "offer", sdp: offer.sdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await gathered(pc, callSignal);
+      await publish(remote, vault, reply, { v: 1, session: offer.session, sdp: pc.localDescription?.sdp ?? "", at: Date.now() }, callSignal);
+      if (dropped) throw new PeerUnreachableError();
+    } catch (error) {
+      drop();
+      throw error;
+    }
   };
 
   void (async () => {
-    while (!abort.signal.aborted) {
+    while (!signal.aborted) {
       try {
-        const [remote, vault, me] = await Promise.all([opts.remote(), opts.vault(), opts.me()]);
-        if (!remote || !vault) {
-          await sleep(10_000);
-          continue;
-        }
-        const changed = remote.watch ? await remote.watch("signal") : null;
-        for (const entry of await remote.list("signal")) {
+        const [remote, vault, me] = await abortable(Promise.all([opts.remote(), opts.vault(), opts.me()]), signal);
+        if (!remote || !vault) { await pause(10_000, signal); continue; }
+        const changed = remote.watch ? await abortable(remote.watch("signal"), signal) : null;
+        const entries = await abortable(remote.list("signal"), signal);
+        const paths = new Set(entries.map((entry) => entry.path));
+        for (const path of seen.keys()) if (!paths.has(path)) seen.delete(path);
+        for (const entry of entries) {
           const match = OFFER.exec(entry.path);
-          if (match && match[2] === me && match[1] !== me) await answer(remote, vault, me, match[1]!, entry.path);
+          if (!match || match[2] !== me || match[1] === me || seen.get(entry.path) === entry.rev || pending.has(entry.path)) continue;
+          pending.add(entry.path);
+          void answer(remote, vault, me, match[1]!, entry.path)
+            .then(() => seen.set(entry.path, entry.rev), () => {})
+            .finally(() => pending.delete(entry.path));
         }
-        await (changed ? changed(abort.signal) : opts.idle());
+        await abortable(changed ? changed(signal) : opts.idle(), signal);
       } catch {
-        await sleep(5_000);
+        await pause(5_000, signal);
       }
     }
   })();
 
   return () => {
-    abort.abort();
-    for (const pc of peers) pc.close();
-    peers.clear();
+    abort.abort(new PeerUnreachableError());
+    for (const drop of peers) drop();
   };
 }

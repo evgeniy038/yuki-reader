@@ -4,7 +4,7 @@ Node-side units and parser smokes are self-contained (fixtures built on the
 fly). `pnpm test` runs all twelve: epub, dictionaries, backup, shelf, stats,
 book-css, resources, reader-touch, storage (the v7 → v8 book split), zip
 (lazy archive reading vs unzipSync), ocr-lines (the OCR line splitter on
-synthetic glyph rasters), icons, sync (six files, below). Standalone extras:
+synthetic glyph rasters), icons, sync (seven files, below). Standalone extras:
 
 ```
 pnpm tsx tests/ocr-download.ts
@@ -31,6 +31,22 @@ is set — also the mixed novel+manga group: the whole group folds into one
 stack, and the manga h3 subsection folds on its own.
 
 ## Sync (no fixtures, no account)
+
+`pnpm tsx tests/sync-peer-smoke.ts` against the sync dev server below
+measures three 32 MiB transfers between isolated Chrome profiles over real
+WebRTC, verifies every received byte, then exercises large metadata,
+failed signaling requests, simultaneous downloads, an unreachable device
+answering before a reachable one, and an interrupted data channel. Only
+the signaling folder is emulated. `LATENCY_MS` adds delay to each cloud
+request; this measures the local browser transport, not physical Wi-Fi.
+`sync-wire-unit.ts` covers rollback on close, blocked send buffers, stalled
+channels, metadata framing and invalid acknowledgements.
+
+`YUKI_TEST_BASE=http://localhost:1480 pnpm tsx tests/update-toast-smoke.ts`
+checks the update card at desktop and phone widths, including overlap with
+recognition progress and a working update button. It substitutes only the
+service-worker readiness hook and saves screenshots in
+`artifacts/local/update-toast/`.
 
 `pnpm test:sync` (part of `pnpm test`) covers the sync rules in Node: merge
 (blank records never win, latest dwell wins, the further position is offered,

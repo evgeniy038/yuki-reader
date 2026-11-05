@@ -233,7 +233,6 @@ export async function download(key: BookKey): Promise<string | null> {
         record = await fetchFromPeer({
           remote,
           vault,
-          me: (await device()).id,
           peers: peers.map((peer) => peer.id),
           key,
           id,

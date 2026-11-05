@@ -7,9 +7,9 @@ import type { VaultBinding } from "./store";
 // answer. Sealed with the library key, so only the person's own devices can
 // read them — and the DTLS fingerprints inside are what the data channel
 // then authenticates against: nobody, the cloud included, can step in
-// between. Each device writes only its own folder:
-//   signal/<from>/<to>.offer.bin    from wants something from to
-//   signal/<from>/<to>.answer.bin   from answers to's offer
+// between. Calls have separate return addresses:
+//   signal/<call>/<device>.offer.bin    a unique call rings a device
+//   signal/<device>/<call>.answer.bin   the device answers that call
 
 export interface Signal {
   v: 1;
@@ -41,8 +41,8 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 export function parseSignal(value: unknown, now = Date.now()): Signal | null {
   if (!isObject(value)) return null;
   const v = value;
-  if (v.v !== 1 || typeof v.session !== "string" || typeof v.sdp !== "string" || typeof v.at !== "number") return null;
-  if (now - v.at > SIGNAL_TTL_MS) return null;
+  if (v.v !== 1 || typeof v.session !== "string" || typeof v.sdp !== "string" || typeof v.at !== "number" || !Number.isFinite(v.at)) return null;
+  if (Math.abs(now - v.at) > SIGNAL_TTL_MS) return null;
   return { v: 1, session: v.session, sdp: v.sdp, at: v.at };
 }
 
@@ -52,7 +52,7 @@ export async function readSignal(
   vault: VaultBinding,
   path: string,
 ): Promise<Signal | null> {
-  const sealed = await remote.read(path).catch(() => null);
+  const sealed = await remote.read(path);
   if (!sealed) return null;
   return unsealJson(vault.keys, vault.id, path, sealed).then((v) => parseSignal(v), () => null);
 }

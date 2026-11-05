@@ -102,7 +102,8 @@ export async function folder(): Promise<RemoteFolder | null> {
   const session = await syncStore.session();
   if (!session) return null;
   const auth = PROVIDERS[session.kind];
-  const fetchImpl = (input: string, init?: RequestInit) => fetch(input, init);
+  const fetchImpl = (input: string, init?: RequestInit) =>
+    fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(60_000) });
   const keeper = new TokenKeeper(session, auth, CLIENT_IDS[session.kind], (s) => syncStore.setSession(s), fetchImpl);
   return auth.folder(keeper, fetchImpl);
 }

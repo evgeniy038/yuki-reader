@@ -29,7 +29,6 @@ import { useShelf, type OpenedData } from "@/components/library/use-shelf";
 import { useFileDrop } from "@/components/library/use-drag-drop";
 import { useGoalBook } from "@/components/library/use-goal-book";
 import { ReaderScreen } from "@/components/reader/reader-screen";
-import { SyncGlow } from "@/components/sync/sync-glow";
 import { useReadingSession } from "@/components/reader/use-reading-session";
 import { useSync } from "@/components/sync/use-sync";
 import { DashRing } from "@/components/ui/dash-ring";
@@ -163,7 +162,7 @@ export default function App() {
   });
 
   // Device sync (lazy: loads only on devices that sync) — see use-sync.ts.
-  const { readerKey, cloud, busy: syncBusy } = useSync({
+  const { readerKey, cloud } = useSync({
     books: shelf.books,
     shelfReady: shelf.shelfReady,
     setBooks: shelf.setBooks,
@@ -200,7 +199,6 @@ export default function App() {
   if (openedBook && openedData) {
     return (
       <>
-        <SyncGlow active={syncBusy} />
         <ReaderScreen
           key={readerKey}
           book={openedBook}
@@ -325,7 +323,6 @@ export default function App() {
         onViewChange={(next) => navigate(next === "library" ? "/" : `/${next}`)}
       />
       <OcrQueuePanel books={shelf.books} />
-      <SyncGlow active={syncBusy} />
       {dragging ? (
         <div className="fixed inset-0 z-40 grid place-items-center bg-scrim animate-in fade-in-0 duration-100">
           <p className="rounded-card bg-raised px-6 py-3 text-sm text-strong animate-in fade-in-0 zoom-in-95 duration-100">

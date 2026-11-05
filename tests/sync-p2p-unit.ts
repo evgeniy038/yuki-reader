@@ -138,6 +138,11 @@ const random = (max: number): number => {
   assert.equal((await readSignal(cloud, vault, path))?.session, "s-1", "the other device reads it back");
   assert.equal(await readSignal(cloud, vault, answerPath("mac", "phone")), null, "no answer yet");
   assert.equal(parseSignal({ v: 1, session: "x", sdp: "", at: Date.now() - SIGNAL_TTL_MS - 1 }), null, "a stale doorbell is ignored");
+  assert.equal(parseSignal({ v: 1, session: "x", sdp: "", at: Infinity }), null, "invalid clocks cannot make signals live forever");
+  const offline = new MemoryFolder();
+  offline.read = async () => { throw new Error("offline"); };
+  await assert.rejects(readSignal(offline, vault, path), /offline/,
+    "a failed read must remain retryable, not cached as a missing offer");
   // Moved to another path: bound to its own, it doesn't open.
   cloud.files.set(answerPath("mac", "phone"), cloud.files.get(path)!);
   assert.equal(await readSignal(cloud, vault, answerPath("mac", "phone")), null, "a signal moved to another path doesn't open");
@@ -255,7 +260,14 @@ const random = (max: number): number => {
   await settle(tx);
   assert.ok(bytesSent(tx) <= 8 * 1024 * 1024 + WINDOW, "each acknowledgement lets exactly that much more through");
   const size = (await planPack(volume))!.manifest.size;
-  for (let stored = 0; stored < size; stored += ACK_EVERY) ack(tx, stored + ACK_EVERY);
+  const beforeInvalid = bytesSent(tx);
+  ack(tx, size + ACK_EVERY);
+  await settle(tx);
+  assert.equal(bytesSent(tx), beforeInvalid, "an acknowledgement for unsent bytes cannot bypass the window");
+  while (bytesSent(tx) < size) {
+    ack(tx, bytesSent(tx));
+    await settle(tx);
+  }
   await sending;
   assert.equal(bytesSent(tx), size, "acknowledged to the end, the whole volume goes");
   assert.equal(parseMessage(String(tx.sent.at(-1)))?.t, "end");
@@ -275,7 +287,11 @@ const random = (max: number): number => {
     const message = typeof (event as MessageEvent).data === "string" ? parseMessage((event as MessageEvent).data) : null;
     if (message?.t === "get") void sendBook(b, volume, message.window);
   });
-  a.addEventListener("message", () => (peakAhead = Math.max(peakAhead, bytesSent(b) - stored)));
+  a.addEventListener("message", () => {
+    const acknowledged = a.sent.flatMap((item) => typeof item === "string" ? [parseMessage(item)] : [])
+      .filter((message) => message?.t === "ack").at(-1);
+    peakAhead = Math.max(peakAhead, bytesSent(b) - (acknowledged?.stored ?? 0));
+  });
   const record = await receiveBook(a, {
     key: "m1:big",
     id: "wired",
@@ -287,6 +303,7 @@ const random = (max: number): number => {
   assert.ok(acks.length >= size / ACK_EVERY - 1, `the receiver acknowledges as it stores (${acks.length} acks)`);
   assert.ok(peakAhead <= WINDOW + 64 * 1024, `never more than the window waiting to be stored (${(peakAhead / 1048576).toFixed(1)} MB)`);
   assert.equal(record.id, "wired");
+  assert.equal(stored, size, "the progress callback always reports completion");
   assert.ok(same(new Uint8Array(await (await loadMangaPageBlob("wired", 39))!.arrayBuffer()), pages[39]!), "…and the last page arrives exactly");
   console.log("  ✓ wire: the sender stays within the window of what the receiver stored");
 }
