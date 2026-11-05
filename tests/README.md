@@ -61,6 +61,13 @@ heavy library (`NOVELS`, `NOVEL_MB`, `PAGES`) and prints the page's renderer
 RSS from the OS for each phase — a synced app start must sit at the level of
 one with sync off (iOS kills a page that grows too big).
 
+`pnpm tsx tests/ocr-memory-bench.ts` (any dev server; macOS, it reads
+`footprint`) does the same for on-device OCR on an emulated phone: the page
+plus the GPU process while a volume without text arrives, while reading it,
+and on a fresh start with the queue unfinished. It fails a run above
+`BUDGET_MB` (2048, what iOS lets a page use). `OCR_POOL=2` reproduces the
+two-worker pool that crash-looped an iPhone; `OCR_VOL` takes a real volume.
+
 `pnpm test:sync-smoke` drives two Chrome profiles as two devices through the
 real UI, with Yandex Disk (OAuth, REST, upload/download hosts) emulated by
 request interception — including a novel that arrives on the other device by

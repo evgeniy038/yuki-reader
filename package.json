@@ -37,12 +37,13 @@
     "test:storage": "tsx tests/storage-unit.ts",
     "test:zip": "tsx tests/zip-unit.ts",
     "test:ocr-lines": "tsx tests/ocr-lines-unit.ts",
+    "test:ocr-topology": "tsx tests/ocr-topology-unit.ts",
     "test:icons": "tsx tests/icons-unit.ts",
     "test:mobile": "tsx tests/mobile-touch-smoke.ts",
     "test:sync": "tsx tests/sync-unit.ts && tsx tests/sync-engine-unit.ts && tsx tests/sync-providers-unit.ts && tsx tests/sync-files-unit.ts && tsx tests/sync-p2p-unit.ts",
     "test:sync-smoke": "tsx tests/sync-smoke.ts",
     "test:book-sanitize": "tsx tests/book-sanitize-smoke.ts",
-    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup && pnpm test:shelf && pnpm test:stats && pnpm test:book-css && pnpm test:resources && pnpm test:reader-touch && pnpm test:storage && pnpm test:zip && pnpm test:ocr-lines && pnpm test:icons && pnpm test:sync",
+    "test": "pnpm test:epub && pnpm test:dictionaries && pnpm test:backup && pnpm test:shelf && pnpm test:stats && pnpm test:book-css && pnpm test:resources && pnpm test:reader-touch && pnpm test:storage && pnpm test:zip && pnpm test:ocr-lines && pnpm test:ocr-topology && pnpm test:icons && pnpm test:sync",
     "preinstall": "npx only-allow pnpm"
   },
   "dependencies": {

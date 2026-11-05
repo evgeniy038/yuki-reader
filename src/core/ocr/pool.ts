@@ -1,14 +1,15 @@
 import { detectPreferredEp } from "./models";
 import { cacheModelFiles, type OcrModelRefs } from "./download";
 import type { OcrEp } from "./ort-runtime";
+import { ocrTopology } from "./topology";
 import type { OcrWorkerIn, OcrWorkerOut } from "./ocr.worker";
 import { jobCurrent, pump, releaseJob, retryJob, type Job } from "./ocr";
 import { emitPage, emitStatus, notePageDone, status } from "./progress";
 
-// The worker-pool half of the OCR scheduler: pool/threads topology, worker
-// spawn, message/crash handling and the one-time model download that births
-// the pool (ensureFiles). The page queue it drains lives in ocr.ts; the
-// progress it reports lives in progress.ts.
+// The worker-pool half of the OCR scheduler: worker spawn, message/crash
+// handling and the one-time model download that births the pool
+// (ensureFiles; its size comes from topology.ts). The page queue it drains
+// lives in ocr.ts; the progress it reports lives in progress.ts.
 
 export interface PoolWorker {
   worker: Worker;
@@ -26,55 +27,10 @@ const ISOLATED = globalThis.crossOriginIsolated === true;
 const CORES = navigator.hardwareConcurrency ?? 4;
 const poolOverride = Number(urlParams.get("ocrPool"));
 const threadsOverride = Number(urlParams.get("ocrThreads"));
+/** `?ocrDebug=1` logs per-stage page timings. */
 const OCR_DEBUG = urlParams.has("ocrDebug");
-
-/** Pool/threads topology, decided once the execution provider is known
-    (workers are spawned in initPool). `?ocrPool=N` / `?ocrThreads=M` override
-    for probes; `?ocrDebug=1` logs per-stage page timings. The split that
-    matters is the execution provider:
-      wasm EP, isolated — ONE worker with half the cores as wasm threads
-        (P-cores). int8 GEMM is memory-bandwidth-bound, so extra workers only
-        fight over the bus (measured on an M3 Pro, kaguya vol 1: single-thread
-        ~830ms/block; 1×4 ~210; 1×6 ~148 ← sweet spot; 2×3 ~300, same
-        throughput at 2× the memory; 1×8 ~255, E-cores stall the barriers).
-      webgpu EP — a small POOL of workers, isolated or not. The detector and
-        encoder run on the GPU and only the decoder is CPU, so separate
-        workers overlap one page's CPU decode with the next page's GPU work.
-        Measured on a 12-core M3 Pro, kny vol 1, BYTE-IDENTICAL output at
-        every pool size. The initial sweep reached 1×6 ≈ 150, 2×3 ≈ 230,
-        3×2 ≈ 248, 4×1 ≈ 277 pages/min; after detector reuse + selective
-        decoder fetch: 4×1 ≈ 356, 5×1 ≈ 423, 6×1 ≈ 380. Five workers win on
-        12+ cores; the sixth loses to contention. Threads stay at 1 — the GPU
-        carries the encoder/detector and workers already parallelize the
-        GEMM-bound decoder. Each worker is its OWN runtime instance with strictly
-        serialized runs, so one runtime never runs two sessions at once —
-        but a pool can still crash, which is exactly what the dead-worker
-        replacement below is for.
-      not isolated, wasm — no SharedArrayBuffer → one thread; a small pool of
-        single-threaded workers is the fallback (3 on 8+ cores, else 2). */
-function topology(ep: OcrEp): { pool: number; threads: number } {
-  const pool =
-    Number.isFinite(poolOverride) && poolOverride >= 1
-      ? Math.min(6, Math.floor(poolOverride))
-      : ep === "webgpu"
-        ? CORES >= 12
-          ? 5
-          : Math.min(4, Math.max(2, Math.floor(CORES / 3)))
-        : ISOLATED
-          ? 1
-          : CORES >= 8
-            ? 3
-            : 2;
-  const threads =
-    Number.isFinite(threadsOverride) && threadsOverride >= 1
-      ? Math.min(8, Math.floor(threadsOverride))
-      : ep === "webgpu"
-        ? 1
-        : ISOLATED
-          ? Math.min(8, Math.max(1, Math.floor(CORES / 2)))
-          : 1;
-  return { pool, threads };
-}
+/** A phone or a tablet: one worker (see ocrTopology). */
+const TOUCH = globalThis.matchMedia?.("(pointer: coarse)").matches === true;
 
 export let pool: PoolWorker[] | null = null;
 let filesPromise: Promise<OcrModelRefs> | null = null;
@@ -209,7 +165,14 @@ function initPool(files: OcrModelRefs): void {
   // the same resolved files promise, so this runs exactly once. The topology
   // depends on the execution provider decided just before (ocrEp).
   if (pool) return;
-  const { pool: size, threads } = topology(ocrEp);
+  const { pool: size, threads } = ocrTopology({
+    ep: ocrEp,
+    cores: CORES,
+    isolated: ISOLATED,
+    touch: TOUCH,
+    poolOverride,
+    threadsOverride,
+  });
   workerThreads = threads;
   pool = Array.from({ length: size }, () => spawnWorker(files, threads));
 }
