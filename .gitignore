@@ -40,3 +40,4 @@ Thumbs.db
 
 # playwright-cli local state
 .playwright-cli/
+.wrangler/

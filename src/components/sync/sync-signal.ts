@@ -7,6 +7,7 @@ export const SYNC_FLAG_KEY = "yuki-sync";
 
 /** Fired by the controller after a round changed local data. */
 export const SYNC_APPLIED_EVENT = "yuki:sync-applied";
+export const SYNC_ENABLED_EVENT = "yuki:sync-enabled";
 
 export interface SyncAppliedDetail {
   books: boolean;
@@ -29,6 +30,7 @@ export function setSyncEnabled(on: boolean): void {
   } catch {
     // storage may be unavailable
   }
+  if (on) window.dispatchEvent(new Event(SYNC_ENABLED_EVENT));
 }
 
 /** True when the page was opened by a provider's OAuth redirect. */

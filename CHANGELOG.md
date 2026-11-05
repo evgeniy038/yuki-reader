@@ -3,6 +3,12 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.9] - 2026-11-05
+
+- Connect your devices by code to sync books, reading progress and statistics over Wi-Fi, without signing into Dropbox or Yandex Disk
+- Paired devices reconnect automatically; books share the live connection and interrupted transfers retry without leaving incomplete copies
+- Cloud sync is optional and a slow or disconnected cloud no longer holds up direct transfers
+
 ## [1.4.8] - 2026-11-05
 
 - The update notice sits at the bottom, above the tab bar, with room for manga recognition progress

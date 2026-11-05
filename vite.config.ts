@@ -48,6 +48,7 @@ const CSP = [
   "worker-src 'self' blob:",
   [
     "connect-src 'self' blob: data:",
+    "wss://pair.yukireader.app",
     "https://oauth.yandex.ru https://cloud-api.yandex.net https://*.disk.yandex.net https://*.disk.yandex.ru",
     "https://api.dropboxapi.com https://content.dropboxapi.com https://notify.dropboxapi.com",
     "https://huggingface.co https://*.huggingface.co https://*.hf.co",

@@ -30,7 +30,10 @@ pnpm test       # node-side smokes: epub, dictionaries, backup, shelf, stats, cs
 
 ## Release
 
-Tags deploy to GitHub Pages: CHANGELOG entry → bump `version` in package.json →
-`git tag vX.Y.Z && git push --tags`. First-time setup: Pages → Source:
-GitHub Actions, and allow tag deployments (`v*`) in the `github-pages`
-environment.
+Cloudflare Pages deploys pushes to `main` after type checking, tests and the
+production build pass. Add a CHANGELOG entry, bump the patch version, and tag
+the release. Verify the Cloudflare deployment and the version on
+[yukireader.app](https://yukireader.app/) after pushing.
+
+Account-free Wi-Fi pairing uses a separate small Worker; deployment and local
+verification are described in [worker/README.md](worker/README.md).

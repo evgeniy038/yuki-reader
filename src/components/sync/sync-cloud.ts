@@ -12,6 +12,8 @@ import type { RemoteFolder } from "@/core/sync/remote";
 import type { VaultBinding } from "@/core/sync/store";
 import { syncStore } from "@/core/sync/store";
 import { fetchFromPeer, servePeers, type DirectStage } from "./p2p";
+import { downloadNearby, nearbyHas, nearbyKnows } from "./sync-nearby";
+import { PeerUnavailableError } from "./p2p-protocol";
 import { packSourceOf } from "./sync-bridge";
 import { forgetReadiness } from "./sync-ready";
 import { currentHost, device, folder, getView, onRoundDone, patchView, remotes, requestSync, type SyncView } from "./sync-controller";
@@ -97,6 +99,7 @@ async function refresh(): Promise<void> {
   };
   for (const [key, regs] of Object.entries(shadow.books)) {
     if (regs.deleted?.v === true || localKeys.has(key)) continue;
+    if (nearbyHas(key)) continue;
     const manifest = await manifestOf(key, regs, cache);
     if (!manifest) continue;
     // An older pack without the text, still being recognized on its device:
@@ -133,7 +136,7 @@ async function refresh(): Promise<void> {
     .map(([id]) => id);
   patchView({ cloud, inCloud });
   for (const item of cloud) {
-    if (item.from || item.preparing !== undefined || item.desc.format === "manga" || item.desc.size > AUTO_BYTES) continue;
+    if ((item.from && !nearbyHas(item.key)) || item.preparing !== undefined || item.desc.format === "manga" || item.desc.size > AUTO_BYTES) continue;
     await download(item.key).catch(() => null);
   }
 }
@@ -216,33 +219,34 @@ export async function download(key: BookKey): Promise<string | null> {
   active.add(key);
   try {
     const [host, remote, vault, shadow] = await Promise.all([currentHost(), folder(), syncStore.vault(), syncStore.shadow()]);
-    if (!host || !remote || !vault) throw new Error("Sync is off");
+    if (!host) throw new Error("Sync is off");
     const regs = shadow?.books[key];
     const id = crypto.randomUUID();
     const personal = personalOf(regs);
     const progress = (done: number, total: number) => setProgress(key, total > 0 ? done / total : 1);
     setProgress(key, 0);
     let record: BookRecord;
-    const manifest = regs ? await manifestOf(key, regs, await syncStore.packManifests()) : null;
-    if (manifest && regs?.file) {
+    const peers = await holders(key);
+    const paired = nearbyHas(key) || (!remote && peers.some((peer) => nearbyKnows(peer.id)));
+    const manifest = !paired && regs ? await manifestOf(key, regs, await syncStore.packManifests()) : null;
+    if (manifest && regs?.file && remote && vault) {
       record = await installPack(remote, vault, packDir(regs.file.d, await folderName(vault.keys, key)), manifest, id, personal, progress);
     } else {
-      const peers = await holders(key);
       if (peers.length === 0) throw new Error("No device has this book any more");
       try {
-        record = await fetchFromPeer({
-          remote,
-          vault,
-          peers: peers.map((peer) => peer.id),
+        const options = {
           key,
           id,
           personal,
-          onStage: (stage) => setStage(key, stage),
-          onProgress: (done, total) => {
+          onStage: (stage: DirectStage) => setStage(key, stage),
+          onProgress: (done: number, total: number) => {
             setStage(key, null);
             progress(done, total);
           },
-        });
+        };
+        if (paired) record = await downloadNearby(options);
+        else if (remote && vault) record = await fetchFromPeer({ ...options, remote, vault, peers: peers.map((peer) => peer.id) });
+        else throw new PeerUnavailableError();
       } finally {
         setStage(key, null);
       }
@@ -250,7 +254,7 @@ export async function download(key: BookKey): Promise<string | null> {
     const keys = await syncStore.bookKeys();
     keys.set(id, key);
     await syncStore.setBookKeys(keys);
-    if (record.format === "manga" && regs) await withText(remote, vault, key, id, regs).catch(() => {});
+    if (record.format === "manga" && regs && remote && vault) await withText(remote, vault, key, id, regs).catch(() => {});
     const { chapters: _c, toc: _t, resources: _r, bookCss: _b, pdfBytes: _p, ...book } = record;
     const shelf: Book = book;
     host.add(shelf);

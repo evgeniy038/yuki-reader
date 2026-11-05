@@ -1,0 +1,14 @@
+{
+  "name": "yuki-pairing",
+  "main": "index.js",
+  "compatibility_date": "2026-11-05",
+  "account_id": "8a68449447f8367d39cbfb2fee6ff80a",
+  "workers_dev": false,
+  "routes": [{ "pattern": "pair.yukireader.app", "custom_domain": true }],
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "PairingRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PairingRoom"] }],
+  "ratelimits": [{ "name": "CONNECTIONS", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }],
+  "vars": { "ALLOWED_ORIGINS": "https://yukireader.app,https://yuki-reader.pages.dev" }
+}

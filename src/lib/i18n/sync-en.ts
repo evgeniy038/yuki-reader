@@ -1,8 +1,28 @@
 // Settings → Sync strings (split from en.ts to keep it readable); en.ts
 // mounts this object at settings.sync, so the Messages type still covers it.
 export const syncEn = {
-  title: "Sync",
-  intro: "Your library, positions and statistics on every device. Kept in your own cloud and end-to-end encrypted: the cloud can't read it, and yuki has no server at all.",
+  title: "Cloud sync · optional",
+  intro: "Keep an encrypted copy in your own cloud to sync even when your other device is closed. Wi-Fi sync above works without a cloud account.",
+  nearby: {
+    title: "Wi-Fi sync",
+    intro: "Connect your devices once with a code. Books, reading progress and statistics travel directly between them, without an account. Internet is needed to establish the connection.",
+    create: "Show connection code",
+    code: "Code from other device",
+    join: "Connect",
+    waiting: "Enter this code in yuki on your other device. It expires in 5 minutes.",
+    joining: "Connecting… Confirm on your other device.",
+    confirm: "Allow {{device}} to sync with this library?",
+    allow: "Allow sync",
+    connected: "Connected directly",
+    offline: "Waiting for this device",
+    keepOpen: "Keep yuki open on both devices on the same Wi-Fi. Manga and large books download when you tap them.",
+    forget: "Disconnect",
+    errors: {
+      code: "Check the code: it has 10 letters and digits.",
+      expired: "The code expired. Show a new one.",
+      connection: "Couldn't connect. Check the code, keep yuki open on both devices and use the same Wi-Fi.",
+    },
+  },
   connect: "Connect {{provider}}",
   connectHint: "Sign in once — then everything syncs on its own",
   notConfigured: "Sync isn't set up in this build.",

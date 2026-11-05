@@ -12,7 +12,7 @@ import type { OpenedData } from "@/components/library/use-shelf";
 import type { DirectStage } from "./p2p";
 import type { SyncHost } from "./sync-bridge";
 import { deviceLabel } from "./sync-labels";
-import { isAuthRedirect, syncEnabled } from "./sync-signal";
+import { isAuthRedirect, syncEnabled, SYNC_ENABLED_EVENT } from "./sync-signal";
 
 type Controller = typeof import("./sync-controller");
 type Actions = typeof import("./sync-actions");
@@ -61,6 +61,7 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
   const actions = useRef<Actions | null>(null);
   const cloudModule = useRef<Cloud | null>(null);
   const [readerKey, setReaderKey] = useState(0);
+  const [enabled, setEnabled] = useState(() => syncEnabled() || isAuthRedirect(window.location.search));
   const [cloudView, setCloudView] = useState<Pick<CloudShelf, "books" | "downloads" | "direct" | "inCloud">>({
     books: [],
     downloads: {},
@@ -69,8 +70,14 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
   });
 
   useEffect(() => {
+    const enable = () => setEnabled(true);
+    window.addEventListener(SYNC_ENABLED_EVENT, enable);
+    return () => window.removeEventListener(SYNC_ENABLED_EVENT, enable);
+  }, []);
+
+  useEffect(() => {
     const redirect = isAuthRedirect(window.location.search);
-    if (!redirect && !syncEnabled()) return;
+    if (!enabled) return;
     let alive = true;
     let detach = () => {};
     const host: SyncHost = {
@@ -149,7 +156,7 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
       unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 
   // Edits come in bursts while reading: any shelf or settings change asks for
   // a round a little later; the round itself reads the then-current state.

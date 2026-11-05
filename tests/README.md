@@ -248,3 +248,13 @@ dev server's unbundled modules dominate startup. Compare A/B by alternating
 runs of both builds and taking the best of several — other load on the
 machine skews single runs badly. `YUKI_BENCH_ENGINE=webkit` runs the same
 scenarios in Playwright's WebKit (the closest stand-in for iPhone Safari).
+# Account-free Wi-Fi sync
+
+`pnpm test:sync-nearby` uses two isolated real Chromium profiles and the local
+pairing Worker. See `worker/README.md` for the two dev-server commands. It checks
+approval before data sharing, book/progress/statistics exchange without a
+provider session or vault, automatic reconnection after reload, a byte-exact
+32 MiB manga transfer, and recovery after dropping the connection mid-transfer.
+Set `YUKI_TEST_PAIRED_CLOUD=1` (with `VITE_YANDEX_CLIENT_ID=smoke` on the app server)
+to also verify that an unavailable cloud on the first device, and disconnecting
+that cloud, do not break the account-free phone's pairing.

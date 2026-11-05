@@ -125,7 +125,7 @@ export function createSyncStore(dbName = "yuki-sync") {
         ...(isStr(v.refreshToken) ? { refreshToken: v.refreshToken } : {}),
       };
     },
-    setSession: (session: ProviderSession) => put("session", session),
+    setSession: (session: ProviderSession | null) => put("session", session),
 
     async pendingAuth(): Promise<PendingAuth | undefined> {
       const v = await get("pendingAuth");
@@ -144,7 +144,7 @@ export function createSyncStore(dbName = "yuki-sync") {
       const mode = v.mode === "creator" ? "creator" : "joiner";
       return { id: v.id, keys: { enc, name, fingerprint }, mode };
     },
-    setVault: (vault: VaultBinding) => put("vault", vault),
+    setVault: (vault: VaultBinding | null) => put("vault", vault),
 
     async shadow(): Promise<Shadow | undefined> {
       const v = await get("shadow");

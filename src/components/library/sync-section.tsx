@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SettingsBlock, SettingsGroup, SettingsRow } from "./settings-group";
 import { RoundBar, SyncTransfers, transfersOf } from "./sync-activity";
 import { AuthorizingView, ForeignCodeView, NewKeyView, UnlockView } from "./sync-key-views";
+import { NearbySyncSection } from "./sync-nearby-section";
 
 // Settings → Sync: connect a cloud, keep the recovery key, see when it last
 // synced and what is moving right now (sync-activity.tsx: the round's bar,
@@ -204,6 +205,7 @@ export function SyncSection() {
 
   return (
     <>
+      <NearbySyncSection />
       <SettingsGroup title={t("settings.sync.title")}>{rows}</SettingsGroup>
       {devices.length > 0 ? <SettingsGroup title={t("settings.sync.devices")}>{devices}</SettingsGroup> : null}
       <ConfirmDialog

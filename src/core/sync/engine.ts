@@ -26,6 +26,7 @@ import type { PackDesc } from "./pack-shape";
 import { syncOcr, type OcrBridge } from "./ocr-sync";
 import type { RemoteEntry, RemoteFolder } from "./remote";
 import type { PreSyncSnapshot, SyncStore, VaultBinding } from "./store";
+import { portableState, pullPeers, type PeerExchange } from "./peer-snapshot";
 
 // One sync round — pull before push, always:
 //   1. list devices/ and download only files whose revision changed;
@@ -62,9 +63,11 @@ export interface RoundProgress {
 }
 
 export interface EngineContext {
-  remote: RemoteFolder;
+  remote: RemoteFolder | null;
   store: SyncStore;
-  vault: VaultBinding;
+  vault: VaultBinding | null;
+  peer?: PeerExchange;
+  joinMode?: "creator" | "joiner";
   device: DeviceInfo;
   bridge: LocalBridge;
   /** Book-file uploads stop between parts after this moment (ms epoch). */
@@ -150,7 +153,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   let bytes = 0;
 
   // 1. Pull.
-  const entries: RemoteEntry[] = await remote.list("devices");
+  const entries: RemoteEntry[] = remote && vault ? await remote.list("devices") : [];
   const remotes = new Map((await store.remotes()).map((r) => [r.state.device.id, r]));
   const remoteStats = await store.remoteStats();
   const remoteCatalogs = await store.remoteCatalogs();
@@ -166,6 +169,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   const pull = { phase: "pull" as const, done: 0, total: entries.filter(stale).length };
   ctx.onProgress?.(pull);
   for (const entry of entries) {
+    if (!remote || !vault) break;
     if (stale(entry)) {
       pull.done += 1;
       ctx.onProgress?.({ ...pull });
@@ -206,6 +210,8 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
     if (days) remoteStats.set(slot, { days, rev: entry.rev });
   }
 
+  if (ctx.peer) pullPeers(ctx.peer.snapshots(), device.id, hlc, remotes, remoteStats, remoteCatalogs);
+
   // 2. Merge.
   const stored = await store.shadow();
   const shadow = stored ?? emptyShadow();
@@ -216,7 +222,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   // that hasn't loaded, a wiped storage or a fresh install must never send
   // tombstones for the whole library (Anx Reader wiped libraries this way).
   const basis = local.books.length === 0 ? { ...shadow, held: [] } : shadow;
-  const self = stampLocalEdits(basis, local, hlc, device.id, vault.mode);
+  const self = stampLocalEdits(basis, local, hlc, device.id, vault?.mode ?? ctx.joinMode ?? "creator");
   const remoteStates = [...remotes.values()].map((r) => r.state);
   const merged = mergeStates(self, remoteStates, hlc);
   const plan = planLocal(merged, local, shadow.held);
@@ -226,11 +232,12 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   const held = [...new Set(local.books.map((b) => b.key).filter((k) => !removed.has(k)))];
   const sent = changedRegisters(shadow, self);
   const ocrApplied = await store.ocrApplied();
-  bytes += await syncOcr(remote, vault, device, bridge, merged, local, hlc, ocrApplied);
+  if (remote && vault) bytes += await syncOcr(remote, vault, device, bridge, merged, local, hlc, ocrApplied);
 
   // 3. Push: the state, the stats months, the catalog.
   ctx.onProgress?.({ phase: "push", done: 0, total: 3 });
   const publish = async (): Promise<void> => {
+    if (!remote || !vault) return;
     const body = { books: merged.books, settings: merged.settings };
     const hash = await sha256Hex(canonical(body));
     const published = await store.published();
@@ -247,6 +254,7 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   const months = monthsOf(await bridge.localStats(), (id) => bridge.keyOf(id));
   const publishedStats = await store.publishedStats();
   for (const [month, days] of months) {
+    if (!remote || !vault) break;
     const monthHash = await sha256Hex(canonical(days));
     if (publishedStats[month] === monthHash) continue;
     const path = statsPath(device.id, month);
@@ -258,9 +266,9 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
 
   ctx.onProgress?.({ phase: "push", done: 2, total: 3 });
   // This device's catalog, when its shelf changed.
-  const catalog = { v: 1, books: await bridge.catalog() };
+  const catalog = { v: 1 as const, books: await bridge.catalog() };
   const catalogHash = await sha256Hex(canonical(catalog));
-  if (catalogHash !== (await store.publishedCatalog())) {
+  if (remote && vault && catalogHash !== (await store.publishedCatalog())) {
     const path = catalogPath(device.id);
     const sealed = await sealJson(vault.keys, vault.id, path, catalog);
     await remote.write(path, sealed);
@@ -270,13 +278,13 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
 
   // 4. Book files, then their registers.
   ctx.onProgress?.({ phase: "files", done: 0, total: 1 });
-  const files = await syncFiles(
+  const files = remote && vault ? await syncFiles(
     remote, vault, device, bridge, merged, local, hlc, ctx.filesDeadline ?? Date.now() + 30_000,
     (key, title, sent, total) => {
       ctx.onUpload?.(key, title, sent, total);
       ctx.onProgress?.({ phase: "files", done: sent, total });
     },
-  );
+  ) : { bytes: 0, pending: false, full: false };
   bytes += files.bytes;
   await publish();
 
@@ -287,6 +295,12 @@ export async function syncRound(ctx: EngineContext): Promise<RoundReport> {
   await store.setPublishedStats(publishedStats);
   await store.setOcrApplied(ocrApplied);
   await store.setHlc(hlc.value);
+  await ctx.peer?.publish({
+    v: 1,
+    state: portableState({ v: 1, vault: vault?.id ?? "peer", seq: (await store.published()).seq, device, ...merged }),
+    stats: Object.fromEntries(months),
+    catalog,
+  });
   return {
     sent,
     received: plan.patches.length + plan.deletions.length + Object.keys(plan.settings).length,

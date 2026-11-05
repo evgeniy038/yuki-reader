@@ -508,7 +508,23 @@ device that uploaded it, not by every device holding the book. There is no relay
 two devices that can't reach each other directly (strict NAT on different
 networks) can't swap books this way — the cloud path remains.
 
-There is no yuki server. The person connects THEIR cloud — **Yandex Disk** or
+**Account-free Wi-Fi sync** is the first option in Settings. The first device
+shows a short code and approves the second. `worker/` is a separate Cloudflare
+Worker at `pair.yukireader.app`: per-room Durable Objects forward only encrypted
+WebRTC signaling, never library data. Codes expire after five minutes and are
+replaced with a random 256-bit secret after approval. Pairings live in the
+`yuki-peers` IndexedDB and reconnect automatically. Persistent WebRTC connections
+carry framed metadata updates and independent book channels; reading updates
+do not resend unchanged covers. The same merge engine, device identity, book
+keys and statistics store serve both transports. Cloud file references and
+cloud encryption keys never cross the pairing boundary. OCR updates can travel
+separately for manga already stored on a device. Direct rounds run first and can
+interrupt a cloud request; disconnecting the cloud preserves paired devices.
+Both apps must stay open. Novels arrive automatically, manga and large books
+remain downloadable tiles. There is no TURN/file relay, so devices must be
+directly reachable, normally on the same Wi-Fi.
+
+Cloud sync is optional. The person connects THEIR cloud — **Yandex Disk** or
 **Dropbox**, the only two that let a static site sign in once with no secret
 and stay signed in — and yuki works inside the app folder it is given
 (`Приложения/<app>`, `/Apps/<app>`). Everything there is **end-to-end
