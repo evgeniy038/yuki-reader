@@ -18,6 +18,7 @@ dev-dist
 .env
 .env.*
 !.env.example
+!.env.production
 
 # editor / os
 .vscode/*

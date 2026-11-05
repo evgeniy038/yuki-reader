@@ -2,10 +2,11 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import pkg from "./package.json";
+import { modelParts, partRange } from "./src/core/ocr/model-parts";
 
 // Dev-only: the ONNX runtime builds its glue/wasm URLs dynamically and Vite's
 // worker transform appends `?import` to them — which the public/ middleware
@@ -76,8 +77,46 @@ const cspMeta: Plugin = {
   },
 };
 
-// yuki is a static site: `base` comes from VITE_BASE at build time, so the
-// same code deploys to a domain root or a GitHub Pages project subpath.
+// OCR models above the host's per-file cap ship as parts (see
+// src/core/ocr/model-parts.ts). The build cuts them in dist/; the dev server
+// answers `<file>.partN` by slicing the whole file in public/, so the
+// downloader takes the same path everywhere.
+const modelPartsPlugin: Plugin = {
+  name: "model-parts",
+  configureServer(server) {
+    server.middlewares.use("/ocr-models", (req, res, next) => {
+      const match = /^\/([\w.-]+)\.part(\d+)$/.exec((req.url ?? "").split("?")[0] ?? "");
+      if (!match) return next();
+      const file = join(process.cwd(), "public", "ocr-models", match[1]!);
+      if (!existsSync(file)) return next();
+      const { start, end } = partRange(statSync(file).size, Number(match[2]));
+      if (end <= start) return next();
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Length", String(end - start));
+      res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+      createReadStream(file, { start, end: end - 1 }).pipe(res);
+    });
+  },
+  closeBundle() {
+    const dir = join(process.cwd(), "dist", "ocr-models");
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      const file = join(dir, name);
+      const size = statSync(file).size;
+      const count = modelParts(size);
+      if (count === 1) continue;
+      const bytes = readFileSync(file);
+      for (let i = 0; i < count; i += 1) {
+        const { start, end } = partRange(size, i);
+        writeFileSync(`${file}.part${i}`, bytes.subarray(start, end));
+      }
+      unlinkSync(file);
+    }
+  },
+};
+
+// yuki is a static site at a domain root; VITE_BASE can still move it under
+// a subpath.
 // __APP_VERSION__ surfaces the release version in Settings.
 export default defineConfig({
   base: process.env.VITE_BASE ?? "/",
@@ -88,6 +127,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     ortStatic,
+    modelPartsPlugin,
     cspMeta,
     VitePWA({
       registerType: "prompt",
@@ -114,14 +154,13 @@ export default defineConfig({
         // Not precached on purpose:
         // - ocr-models/: the merged decoder is fetched once into IndexedDB
         //   (the model cache), a second copy in the SW cache buys nothing.
-        // - the WebGPU-only runtime (jsep/asyncify, ~50MB): needed solely
+        // - the WebGPU-only runtime (asyncify, ~24MB): needed solely
         //   when WebGPU is present, and that first run is online anyway —
         //   the models themselves download over the network then.
         // - dist duplicates of the threaded wasm that rolldown emits next to
         //   the ort bundles (the runtime loads them from /ort via wasmPaths).
         globIgnores: [
           "ocr-models/**",
-          "ort/ort-wasm-simd-threaded.jsep.*",
           "ort/ort-wasm-simd-threaded.asyncify.*",
           "assets/ort-wasm-simd-threaded.*",
         ],

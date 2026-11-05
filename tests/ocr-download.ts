@@ -14,6 +14,7 @@ import {
   type OcrModelFileSpec,
   type OcrModelFiles,
 } from "../src/core/ocr/download.ts";
+import { MODEL_PART_BYTES, modelParts, partRange, partUrl } from "../src/core/ocr/model-parts.ts";
 
 const MB = 1024 * 1024;
 const SIZES: Record<keyof OcrModelFiles, number> = {
@@ -40,6 +41,8 @@ interface MockFile {
   dropGet?: number; // kill this GET ordinal mid-stream
   shortStream?: boolean; // close every stream at 60% (middlebox truncation)
   dead?: boolean; // every request network-errors
+  split?: boolean; // served only as <url>.partN (a host's per-file cap)
+  offset?: number; // a part: where its bytes sit in the whole file
   // filled by the mock:
   getCount: number;
   resumed: boolean;
@@ -49,6 +52,7 @@ function bodyStream(
   start: number,
   length: number,
   behavior?: "drop" | "short",
+  offset = 0,
 ): ReadableStream<Uint8Array> {
   let sent = 0;
   const limit =
@@ -66,17 +70,29 @@ function bodyStream(
       }
       const n = Math.min(65536, limit - sent);
       const buf = new Uint8Array(n);
-      for (let i = 0; i < n; i++) buf[i] = byteAt(start + sent + i);
+      for (let i = 0; i < n; i++) buf[i] = byteAt(offset + start + sent + i);
       sent += n;
       controller.enqueue(buf);
     },
   });
 }
 
-function mockNetwork(specs: Partial<Record<keyof OcrModelFiles, MockFile>>) {
+function mockNetwork(
+  specs: Partial<Record<keyof OcrModelFiles, MockFile>>,
+  specUrls: Partial<Record<keyof OcrModelFiles, OcrModelFileSpec>> = {},
+) {
   const files = new Map<string, MockFile>();
   for (const [key, spec] of Object.entries(specs)) {
-    files.set(SPECS[key as keyof OcrModelFiles].url, {
+    const url = (specUrls[key as keyof OcrModelFiles] ?? SPECS[key as keyof OcrModelFiles]).url;
+    if (spec.split) {
+      // Only the parts exist: asking for the whole file is an error.
+      for (let i = 0; i < modelParts(spec.size); i++) {
+        const { start, end } = partRange(spec.size, i);
+        files.set(partUrl(url, i), { getCount: 0, resumed: false, ...spec, size: end - start, offset: start });
+      }
+      continue;
+    }
+    files.set(url, {
       getCount: 0,
       resumed: false,
       ...spec,
@@ -96,7 +112,7 @@ function mockNetwork(specs: Partial<Record<keyof OcrModelFiles, MockFile>>) {
     const behavior = file.dropGet === file.getCount ? "drop" : file.shortStream ? "short" : undefined;
     if (!range || file.ignoreRange) {
       if (range && file.ignoreRange) file.resumed = true;
-      return new Response(bodyStream(0, file.size, behavior), { status: 200 });
+      return new Response(bodyStream(0, file.size, behavior, file.offset), { status: 200 });
     }
     const start = Number(range[1]);
     const end = range[2] ? Number(range[2]) : file.size - 1;
@@ -105,7 +121,7 @@ function mockNetwork(specs: Partial<Record<keyof OcrModelFiles, MockFile>>) {
     }
     if (start > 0) file.resumed = true;
     const length = Math.min(end, file.size - 1) - start + 1;
-    return new Response(bodyStream(start, length, behavior), {
+    return new Response(bodyStream(start, length, behavior, file.offset), {
       status: 206,
       headers: {
         "content-range": `bytes ${start}-${start + length - 1}/${file.size}`,
@@ -146,9 +162,9 @@ function progressNeverOvershoots(emissions: Emission[]): boolean {
   return true;
 }
 
-function landsExactlyAt100(emissions: Emission[]): boolean {
+function landsExactlyAt100(emissions: Emission[], total = GRAND_TOTAL): boolean {
   const last = emissions.at(-1);
-  return !!last && last.loaded === GRAND_TOTAL && last.total === GRAND_TOTAL;
+  return !!last && last.loaded === total && last.total === total;
 }
 
 function bytesMatch(label: string, files: OcrModelFiles): boolean {
@@ -245,6 +261,32 @@ await scenario("server ignores Range (plain 200 everywhere)", async () => {
   check(progressNeverOvershoots(w.emissions), "never exceeds 100%");
   check(landsExactlyAt100(w.emissions), "lands at exactly 100%");
   check(bytesMatch("ignoreRange", files), "whole-file fallback downloads right");
+});
+
+await scenario("a model over the host's file cap comes down in parts", async () => {
+  // Cloudflare serves at most 25 MiB per file: a 47 MB detector ships as
+  // three parts and the whole-file URL doesn't exist at all.
+  const big = 47 * MB + 12345;
+  const specs = { ...SPECS, detector: { url: "https://models.test/big.onnx", size: big } };
+  const files = mockNetwork(
+    {
+      detector: { size: big, split: true, dropGet: 1 } as MockFile,
+      encoder: { size: SIZES.encoder } as MockFile,
+      decoder: { size: SIZES.decoder } as MockFile,
+      vocab: { size: SIZES.vocab } as MockFile,
+    },
+    { detector: specs.detector },
+  );
+  const w = watch();
+  const result = await downloadFiles(specs, w.onProgress);
+  check(modelParts(big) === 3 && MODEL_PART_BYTES < 25 * MB, "three parts, each under the 25 MiB cap");
+  check(progressNeverOvershoots(w.emissions), "never exceeds 100%");
+  check(landsExactlyAt100(w.emissions, GRAND_TOTAL - SIZES.detector + big), "lands at exactly 100%");
+  check(result.detector.length === big, `joined to the exact size (${result.detector.length})`);
+  let exact = true;
+  for (let i = 0; i < big; i += 4093) if (result.detector[i] !== byteAt(i)) exact = false;
+  check(exact && result.detector[big - 1] === byteAt(big - 1), "bytes join in order, across every seam");
+  check([...files.entries()].some(([url, f]) => url.endsWith(".part0") && f.resumed), "a dropped part resumes from its received bytes");
 });
 
 await scenario("truncated responses reject (middlebox poison)", async () => {

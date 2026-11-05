@@ -562,7 +562,9 @@ touches the library. After the first visit the site is fully cached by a
 service worker and works offline. A new version doesn't interrupt reading:
 the updated worker waits in the background, and the quiet "New version
 ready" card offers to reload now — otherwise the next natural visit applies
-it. A release is a git tag `v*`: Actions builds the site (the base path is
-derived automatically: root for a user-site, `/<repo>/` for a project-site)
-and publishes to Pages. One changelog — `CHANGELOG.md` at the root; the
+it. Hosting is Cloudflare Pages, connected to the repository: every push to
+`main` is built there (`pnpm typecheck && pnpm test && pnpm build` — a red
+check means no deploy) and goes live at yukireader.app; other branches get
+preview URLs. Version tags `v*` mark releases. OCR models above the host's
+25 MiB file cap ship as parts and are joined on download. One changelog — `CHANGELOG.md` at the root; the
 "About yuki" group in Settings is built from it too.

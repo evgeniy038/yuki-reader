@@ -1,4 +1,5 @@
 import { hasOcrModel, loadOcrModel, putOcrModel } from "../storage";
+import { modelParts, partRange, partUrl } from "./model-parts";
 import type { OcrEp } from "./ort-runtime";
 
 // OCR model downloads. Every file is SAME-ORIGIN — shipped in the repo
@@ -33,7 +34,8 @@ import type { OcrEp } from "./ort-runtime";
 // wait several-fold on throttled per-connection links) — and kept in
 // IndexedDB forever after. Broken transfers resume from the bytes already
 // received (HTTP Range) and retry a few times before the download is
-// declared failed.
+// declared failed. A model above the host's file cap is served in parts
+// (model-parts.ts): those come down in parallel and are joined here.
 //
 // Sizes are in BYTES of the exact files in public/ocr-models — update them
 // when a model is re-exported.
@@ -256,11 +258,34 @@ async function modelBytes(
   return bytes;
 }
 
+/** A model the host serves in parts: every part at once, joined in order. */
+async function fetchSplit(
+  url: string,
+  total: number,
+  onBytes: (loaded: number, total: number) => void,
+): Promise<Uint8Array> {
+  const count = modelParts(total);
+  const loaded = new Array<number>(count).fill(0);
+  const parts = await Promise.all(
+    Array.from({ length: count }, (_, i) => {
+      const { start, end } = partRange(total, i);
+      return fetchWhole(partUrl(url, i), end - start, (n) => {
+        loaded[i] = n;
+        onBytes(loaded.reduce((sum, part) => sum + part, 0), total);
+      });
+    }),
+  );
+  return concat(parts, total);
+}
+
 async function fetchModel(
   spec: OcrModelFileSpec,
   onBytes: (loaded: number, total: number) => void,
 ): Promise<Uint8Array> {
-  const bytes = await fetchRanged(spec.url, spec.size, onBytes);
+  const bytes =
+    modelParts(spec.size) > 1
+      ? await fetchSplit(spec.url, spec.size, onBytes)
+      : await fetchRanged(spec.url, spec.size, onBytes);
   if (bytes.length !== spec.size) {
     throw new Error(`OCR model corrupted (${spec.url})`);
   }
