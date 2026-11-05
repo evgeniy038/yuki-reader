@@ -3,6 +3,16 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.6] - 2026-11-05
+
+- Reading: after copying a bubble's text and checking a translation in another app, pages turn again the moment you come back — no more stuck pages or the page slowly zooming out on its own
+- Sync: a book you download from your other devices now waits on the shelf instead of jumping straight into the reader
+- Sync: while yuki syncs, a thin band of light runs along the top of the screen — you can see it's working without anything getting in the way of your reading
+- Manga: on a phone the series header no longer pushes "Add volume" off the screen — it's a compact + button next to the menu
+- The progress pill for recognizing manga sits centered above the tab bar, and the "new version" card moved up to where notices appear
+- The tab bar captions no longer clip the tails of letters like y and g
+- Settings → Sync: "Undo" and "Disconnect this device" look like the rest of the app's buttons
+
 ## [1.4.5] - 2026-11-05
 
 - Phone: fixed yuki crashing and reloading over and over while recognizing manga text — a phone now recognizes one page at a time, using half the memory
