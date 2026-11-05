@@ -111,8 +111,15 @@ const { binding: vault, recoveryKey } = await createVault(cloud);
   cloud.breakAfter = Infinity;
   const existing = new Set((await cloud.list(dir)).map((entry) => entry.path));
   const before = cloud.writes;
-  const resumed = await uploadPack(cloud, vault, dir, plan, existing, Date.now() + 60_000);
+  const reported: number[] = [];
+  const resumed = await uploadPack(cloud, vault, dir, plan, existing, Date.now() + 60_000, (sent, total) => {
+    assert.equal(total, plan.manifest.size, "progress is out of the book's size");
+    reported.push(sent);
+  });
   assert.ok(resumed.done, "the second try finishes");
+  assert.equal(reported[0], CHUNK_BYTES, "the part already up counts from the start");
+  assert.equal(reported.at(-1), plan.manifest.size, "…and the bar ends full");
+  assert.ok(reported.every((v, i) => i === 0 || v >= reported[i - 1]!), "…never going back");
   assert.equal(cloud.writes - before, totalParts - 1 + 1, "only the missing chunk, then the manifest");
   const sealedTitle = [...cloud.files.values()].some((file) =>
     new TextDecoder().decode(file).includes("台所"),

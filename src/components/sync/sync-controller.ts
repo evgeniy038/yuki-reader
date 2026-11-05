@@ -1,4 +1,4 @@
-import { syncRound } from "@/core/sync/engine";
+import { syncRound, type RoundProgress } from "@/core/sync/engine";
 import type { DeviceInfo, DeviceState } from "@/core/sync/model";
 import { newState, pkcePair, postTokenForm, TokenKeeper } from "@/core/sync/oauth";
 import { AuthRequiredError, QuotaError, type ProviderKind, type RemoteFolder } from "@/core/sync/remote";
@@ -28,6 +28,8 @@ export type SyncPhase =
 export interface SyncView {
   phase: SyncPhase;
   syncing: boolean;
+  /** The running round, step by step (undefined between rounds). */
+  round?: RoundProgress;
   status?: SyncStatus;
   devices: { info: DeviceInfo; self: boolean }[];
   /** The pre-sync snapshot exists ("undo the first sync" for 7 days). */
@@ -35,17 +37,21 @@ export interface SyncView {
   /** Last sign-in attempt failed. */
   signInFailed?: boolean;
   /** Books another device holds that this one doesn't (sync-cloud.ts):
-      in the cloud, or — with `from` — only on that device. */
-  cloud: { key: BookKey; desc: PackDesc; from?: DeviceInfo }[];
+      in the cloud, or — with `from` — only on that device. `preparing`:
+      still being processed there (0..1 done) — not downloadable yet. */
+  cloud: { key: BookKey; desc: PackDesc; from?: DeviceInfo; preparing?: number }[];
   /** Downloads in flight: content key → 0..1. */
   downloads: Record<BookKey, number>;
   /** Direct transfers before their first byte: ringing, closed, connecting. */
   direct: Record<BookKey, DirectStage>;
   /** Local ids whose files are in the cloud — "remove from this device". */
   inCloud: string[];
+  /** Book uploads under way: content key → title and 0..1 in the cloud.
+      Kept between rounds while an upload carries on in the next one. */
+  uploads: Record<BookKey, { title: string; progress: number }>;
 }
 
-let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, direct: {}, inCloud: [] };
+let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, direct: {}, inCloud: [], uploads: {} };
 const roundListeners = new Set<() => Promise<void>>();
 const listeners = new Set<() => void>();
 let host: SyncHost | null = null;
@@ -271,6 +277,13 @@ async function round(): Promise<void> {
       device: await device(),
       bridge: await createBridge(host),
       filesDeadline: Date.now() + FILES_BUDGET_MS,
+      onProgress: (progress) => setView({ round: progress }),
+      onUpload: (key, title, sent, total) => {
+        const uploads = { ...view.uploads };
+        if (total > 0 && sent >= total) delete uploads[key];
+        else uploads[key] = { title, progress: total > 0 ? sent / total : 0 };
+        setView({ uploads });
+      },
     });
     const status: SyncStatus = {
       at: Date.now(),
@@ -288,13 +301,14 @@ async function round(): Promise<void> {
     for (const listener of roundListeners) await listener();
     // A book upload ran out of budget: carry on shortly, not in a minute.
     if (report.filesPending) rerun = true;
+    else setView({ uploads: {} });
   } catch (error) {
     const previous = view.status;
     const status: SyncStatus = { at: Date.now(), ok: false, sent: 0, received: 0, bytes: 0, error: errorOf(error), heldDeletions: previous?.heldDeletions ?? [] };
     await syncStore.setStatus(status);
-    setView({ status });
+    setView({ status, uploads: {} });
   } finally {
-    setView({ syncing: false });
+    setView({ syncing: false, round: undefined });
   }
 }
 
@@ -345,7 +359,7 @@ export async function disconnect(): Promise<void> {
   await syncStore.clear();
   setSyncEnabled(false);
   remotesCache = [];
-  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, direct: {}, inCloud: [] });
+  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, direct: {}, inCloud: [], uploads: {} });
 }
 
 /** Lost recovery key: wipe the unreadable cloud copy and make a new vault

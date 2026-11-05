@@ -44,6 +44,7 @@ export const ru: Messages = {
       ringing: "Связываемся с {{device}}…",
       closed: "Откройте yuki на {{device}}",
       connecting: "Подключаемся к {{device}}…",
+      preparing: "«{{title}}» ещё готовится на своём устройстве",
       download: "Скачать «{{title}}»",
       failed: "Не удалось скачать «{{title}}» — попробуйте ещё раз",
       unanswered: "{{device}} не ответил — откройте там yuki и нажмите ещё раз",

@@ -26,6 +26,9 @@ export interface PackDesc {
   volumeIndex?: number;
   /** Bytes of the book itself, all files together. */
   size: number;
+  /** Catalog only: still being processed on its device — the share of
+      pages done, 0..1. Not offered until it's ready. */
+  prep?: number;
 }
 
 export interface PackManifest {
@@ -39,6 +42,8 @@ export interface PackManifest {
   resources: { path: string; mime: string; file: number }[];
   pdf?: number;
   manga?: { pages: MangaStoredPage[]; files: number[] };
+  /** The volume's in-app OCR as one file, and the engine that made it. */
+  ocr?: { file: number; engine: number };
 }
 
 /** The book without its bulk: file 0 of the pack. Personal state (position,
@@ -73,6 +78,7 @@ export function parseDesc(v: unknown): PackDesc | undefined {
   if (isNum(v.pageCount)) desc.pageCount = v.pageCount;
   if (isStr(v.series)) desc.series = v.series;
   if (isNum(v.volumeIndex)) desc.volumeIndex = v.volumeIndex;
+  if (isNum(v.prep) && v.prep >= 0 && v.prep <= 1) desc.prep = v.prep;
   return desc;
 }
 
@@ -116,6 +122,10 @@ export function parsePackManifest(v: unknown): PackManifest | null {
     const pageFiles = v.manga.files;
     if (pages.some((p) => !p) || pageFiles.length !== pages.length || !pageFiles.every(known)) return null;
     manifest.manga = { pages: pages.filter((p): p is MangaStoredPage => p !== undefined), files: pageFiles.filter(known) };
+  }
+  if (v.ocr !== undefined) {
+    if (!isObject(v.ocr) || !known(v.ocr.file) || !isIndex(v.ocr.engine)) return null;
+    manifest.ocr = { file: v.ocr.file, engine: v.ocr.engine };
   }
   return files.length > 0 ? manifest : null;
 }

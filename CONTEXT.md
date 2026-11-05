@@ -434,8 +434,7 @@ renames and series, deletions, the daily statistics and the taste settings
 option, the daily goal, shelf sort and section order). Font size, line height,
 margins and folded sections stay per device: a phone and a Mac want different
 ones. Manga **OCR results** travel too: a volume recognized on one device
-arrives with its text on the others, and their OCR queue simply finds those
-pages done.
+arrives with its text on the others, and they never recognize it again.
 
 **Book files** follow: a book imported on one device appears on the others.
 EPUB and PDF go to the cloud on their own; a manga volume only when its
@@ -454,6 +453,31 @@ downloaded volume can be **removed from this device**: it stays in the cloud
 or on the device it came from. A book deleted everywhere, or a series no longer kept in
 the cloud, has its files taken out of the cloud by the device that uploaded
 them. A full cloud stops uploads (Settings says so), never reading sync.
+
+A book is **offered only once it is ready** on its device — a novel or a
+PDF once its import is stored, a manga volume once every page has text,
+from its sidecar or from a finished in-app OCR at the current engine. Until
+then it isn't uploaded, isn't sent directly, and the other devices show it
+as a dimmed tile with a ring of that device's real progress (the same look
+as a volume being processed on its own shelf; a tap does nothing yet) — a
+quiet sign that it's coming, with no new words, rather than a book that
+silently isn't there. The volume then travels **with its text**: the OCR
+rides at the end of the pack, cloud or direct, and lands in storage before
+the book does, so it is never on a shelf without it. A device **never
+recognizes a volume it received** — not in the background pass on start,
+not in the reader; only volumes imported on it. When the OCR engine
+changes, the devices that imported a volume recognize it again and publish
+the new text (the volume's OCR pack); the others keep the volume and wait
+for that text. Packs uploaded before 1.4.5 carry no text: they are not
+uploaded again — the receiver takes the text from the volume's OCR pack
+right after the pages, and a volume whose device hasn't finished it waits
+as a dimmed tile like any other.
+
+Settings → Sync says what is moving and nothing else: the last sync, a thin
+bar along it while a round runs (the other devices' changes read, this
+one's published, book files checked), and a row per book on its way — up
+to the cloud, down from it, or straight from another device — with its
+share done. The devices sit in their own group.
 
 **Straight from another device**: a book that never went to the cloud —
 manga above all — still shows on the other devices, as a tile **On Mac**.

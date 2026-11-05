@@ -7,8 +7,9 @@
 // reading on the phone travels back; the phone's reading time reaches the
 // Mac's statistics without double counting; manga kept in the cloud comes
 // down as a tile; manga that never went up comes straight from the open Mac
-// over WebRTC; an offline phone catches up; and nothing in the cloud is
-// readable.
+// over WebRTC; a volume still being recognized on the Mac waits on the
+// phone, then arrives with its text and is never recognized there; an
+// offline phone catches up; and nothing in the cloud is readable.
 // Needs a dev server started with a provider id, e.g.:
 //   VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480
 //   YUKI_TEST_BASE=http://localhost:1480 pnpm tsx tests/sync-smoke.ts
@@ -65,11 +66,32 @@ async function mangaVolume(root: string, title: string, colors: string[], width:
   return [...pages, sidecar];
 }
 
+// A volume of scans with no sidecar: every page needs in-app OCR. One zip,
+// so the archive name becomes the title.
+async function bareVolume(root: string, title: string, colors: string[]): Promise<string> {
+  const pages: Record<string, Uint8Array> = {};
+  for (const [i, color] of colors.entries()) {
+    pages[`p${i + 1}.png`] = new Uint8Array(await sharp({ create: { width: 300, height: 420, channels: 3, background: color } }).png().toBuffer());
+  }
+  const path = join(root, `${title}.zip`);
+  writeFileSync(path, zipSync(pages));
+  return path;
+}
+
+/** Requests for the OCR model, per device: a device that never recognizes
+    anything never asks for it. (Blocked everywhere: no OCR runs here.) */
+const modelRequests = new WeakMap<BrowserContext, number>();
+
 async function device(browser: Awaited<ReturnType<typeof chromium.launch>>): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   for (const host of ["https://oauth.yandex.ru/**", "https://cloud-api.yandex.net/**", "https://*.disk.yandex.net/**", "https://*.disk.yandex.ru/**"]) {
     await context.route(host, yandex);
   }
+  modelRequests.set(context, 0);
+  await context.route("**/ocr-models/**", (route) => {
+    modelRequests.set(context, (modelRequests.get(context) ?? 0) + 1);
+    return route.abort();
+  });
   const page = await context.newPage();
   await page.goto(BASE);
   return { context, page };
@@ -166,7 +188,7 @@ async function main(): Promise<void> {
       return (await storage.loadAllBooks()).find((book) => book.title === "台所の本")?.favorite === true;
     });
     check(pinned, "the Mac's pin reached the phone");
-    check((await phone.page.locator("[data-sync-devices] li").count()) === 2, "the phone lists two devices");
+    check((await phone.page.locator("[data-sync-device]").count()) === 2, "the phone lists two devices");
 
     // --- A setting travels Mac → phone. ----------------------------------
     await mac.page.goto(`${BASE}/#/settings`);
@@ -262,6 +284,64 @@ async function main(): Promise<void> {
       signals.every(([, bytes]) => !Buffer.from(bytes).toString("latin1").includes("a=fingerprint")),
       "the doorbell (addresses, keys) is unreadable in the cloud",
     );
+
+    // --- Still being recognized on the Mac: it waits, then comes with text. --
+    await mac.page.goto(`${BASE}/#/`);
+    await mac.page.setInputFiles('input[accept*=".mokuro"]', await bareVolume(dir, "まだの巻", ["#a33", "#3a3"]));
+    await mac.page.locator("[data-book-id]").filter({ hasText: "まだの巻" }).first().waitFor({ timeout: 30_000 });
+    await syncNow(mac.page);
+    await syncNow(phone.page);
+    await phone.page.goto(`${BASE}/#/`);
+    const waiting = phone.page.locator("[data-cloud-prep]").filter({ hasText: "まだの巻" });
+    await waiting.first().waitFor({ timeout: 15_000 }).catch(() => {});
+    check((await waiting.count()) === 1, "a volume the Mac hasn't recognized yet waits on the phone");
+    check(await waiting.first().isDisabled().catch(() => false), "…and can't be fetched meanwhile");
+    // The Mac finishes it (written straight in: no OCR model in this test).
+    await mac.page.evaluate(async () => {
+      const storage = await import("/src/core/storage.ts");
+      const book = (await storage.loadShelfBooks()).find((b) => b.title.includes("まだの巻"));
+      const manga = book ? await storage.loadManga(book.id) : undefined;
+      if (!book || !manga) return;
+      const records = new Map();
+      for (let i = 0; i < manga.pages.length; i += 1) {
+        records.set(i, { blocks: [{ box: [10, 10, 60, 120], vertical: true, font_size: 20, lines: [`まだ${i}`] }], engine: storage.OCR_ENGINE });
+      }
+      await storage.putMangaOcrRecords(book.id, records);
+    });
+    await mac.page.reload(); // a fresh look at what's ready; it stays open and answers
+    await syncNow(mac.page);
+    await syncNow(phone.page);
+    await phone.page.goto(`${BASE}/#/`);
+    const ready = phone.page.locator('[data-cloud-from="device"]').filter({ hasText: "まだの巻" });
+    await ready.first().waitFor({ timeout: 15_000 }).catch(() => {});
+    check((await phone.page.locator("[data-cloud-prep]").count()) === 0, "once recognized on the Mac, it's offered");
+    await ready.first().click();
+    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 60_000 }).catch(() => {});
+    const landed = await phone.page.evaluate(async () => {
+      const storage = await import("/src/core/storage.ts");
+      const book = (await storage.loadShelfBooks()).find((b) => b.title.includes("まだの巻"));
+      if (!book) return null;
+      const text = await storage.loadMangaOcr(book.id);
+      return { id: book.id, received: (await storage.loadManga(book.id))?.received === true, lines: [...text.values()].map((r) => r.blocks[0]?.lines[0]) };
+    });
+    check(landed?.lines.join(",") === "まだ0,まだ1", `it lands with the Mac's text (${landed?.lines.join(",") ?? "none"})`);
+    check(landed?.received === true, "…marked as received");
+    // Even with its text gone (an engine bump, say), the phone waits for the
+    // Mac: no resume pass after a reload, no OCR while reading it.
+    await phone.page.evaluate(async (id) => {
+      const { MANGA_OCR, open } = await import("/src/core/storage/db.ts");
+      const db = await open();
+      for (const key of await db.getAllKeys(MANGA_OCR)) if (String(key).startsWith(`${id}/`)) await db.delete(MANGA_OCR, key);
+    }, landed?.id ?? "");
+    await phone.page.goto(`${BASE}/#/`);
+    await phone.page.reload();
+    await phone.page.waitForSelector("[data-book-id]", { timeout: 30_000 });
+    await phone.page.goto(`${BASE}/#/read/${landed?.id ?? ""}`);
+    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 30_000 }).catch(() => {});
+    check((await phone.page.locator("[data-manga-current] img").count()) >= 1, "…the volume opens without its text");
+    await phone.page.waitForTimeout(3_000);
+    check(modelRequests.get(phone.context) === 0, "the phone never asks for the OCR model: nothing is recognized twice");
+    check((modelRequests.get(mac.context) ?? 0) > 0, "…while the Mac, which imported it, does (the check above can fail)");
 
     // --- Reading on the phone travels back; its time counts on the Mac. ----
     await phone.page.goto(`${BASE}/#/`);

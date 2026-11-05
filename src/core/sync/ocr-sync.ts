@@ -12,6 +12,8 @@ import type { VaultBinding } from "./store";
 // battery. Each device publishes its finished packs under its OWN folder
 // (devices/<id>/ocr/<book folder>.bin); the book's `ocr` register says
 // whose pack is current. A pack from an older OCR engine is never applied.
+// After an engine bump the devices that imported a volume recognize it
+// again and publish anew; the ones it was sent to only wait for that.
 
 /** The app side of OCR sync. */
 export interface OcrBridge {
@@ -25,6 +27,21 @@ export interface OcrBridge {
 
 export const ocrPath = (deviceId: string, folder: string): string =>
   `devices/${deviceId}/ocr/${folder}.bin`;
+
+/** A device's published OCR pack of a book, when it's from `engine`. */
+export async function readOcrPack(
+  remote: RemoteFolder,
+  vault: VaultBinding,
+  deviceId: string,
+  key: BookKey,
+  engine: number,
+): Promise<{ pages: Map<number, MokuroBlock[]>; bytes: number } | null> {
+  const path = ocrPath(deviceId, await folderName(vault.keys, key));
+  const sealed = await remote.read(path);
+  if (!sealed) return null;
+  const pack = await unsealJson(vault.keys, vault.id, path, sealed).then(parseOcrPack, () => undefined);
+  return pack && pack.engine === engine ? { pages: pack.pages, bytes: sealed.length } : null;
+}
 
 /** One OCR pass over the manga volumes this device holds; mutates `merged`
     (its own uploads stamp the register) and `applied`. Returns bytes moved. */
@@ -47,12 +64,9 @@ export async function syncOcr(
       // A current pack exists: ours (nothing to do) or another device's
       // (download once per pack).
       if (current.d === device.id || applied[book.key] === current.t) continue;
-      const path = ocrPath(current.d, await folderName(vault.keys, book.key));
-      const sealed = await remote.read(path);
-      if (!sealed) continue;
-      bytes += sealed.length;
-      const pack = await unsealJson(vault.keys, vault.id, path, sealed).then(parseOcrPack, () => undefined);
-      if (!pack || pack.engine !== bridge.ocrEngine) continue;
+      const pack = await readOcrPack(remote, vault, current.d, book.key, bridge.ocrEngine);
+      if (!pack) continue;
+      bytes += pack.bytes;
       await bridge.applyOcr(book.id, pack.pages);
       applied[book.key] = current.t;
       continue;

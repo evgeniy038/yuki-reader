@@ -59,6 +59,14 @@ export async function loadBookContent(id: string): Promise<BookContent | undefin
   return db.get(BOOK_CONTENT, id);
 }
 
+/** Whether a book's content is stored — a key lookup, nothing is read.
+    putBook writes the record and its content in one transaction, so a book
+    with content is a book whose import finished. */
+export async function hasBookContent(id: string): Promise<boolean> {
+  const db = await open();
+  return (await db.getKey(BOOK_CONTENT, id)) !== undefined;
+}
+
 /** Whole records (metadata + content), newest first — for callers that need
     every byte (backup export). */
 export async function loadAllBooks(): Promise<BookRecord[]> {

@@ -2,6 +2,8 @@ import type { Book } from "@/core/library";
 import { loadManga, loadMangaPageBlob } from "@/core/storage";
 import type { PackDesc } from "@/core/sync/pack-shape";
 import type { BookKey } from "@/core/sync/model";
+import { isReady } from "@/core/sync/ready";
+import { readinessOf } from "./sync-ready";
 
 // This device's catalog for the others (core/sync/catalog.ts): one tile's
 // worth per held book — a small cover and, for a manga volume, the size it
@@ -11,6 +13,11 @@ import type { BookKey } from "@/core/sync/model";
 // read, but a novel's or a PDF's size means its whole content in memory —
 // every book on every start, which is what got a phone's page killed. Those
 // go to the cloud anyway; their tile simply shows no size (0).
+// Only what is fully processed here is offered (core/sync/ready.ts): a
+// volume still being recognized is listed with `prep` — how far it got —
+// so the others show it waiting, not downloadable; one that came from
+// another device and still waits for that device's text isn't listed at
+// all (its own device lists it).
 
 const THUMB_PX = 200;
 const cache = new Map<string, PackDesc>();
@@ -81,7 +88,14 @@ export async function catalogOf(
   const out: Record<BookKey, PackDesc> = {};
   for (const book of books) {
     const key = keyOf(book.id);
-    if (key) out[key] = await descOf(book);
+    if (!key) continue;
+    const processing = await readinessOf(book.id, book.format);
+    if (!processing) continue;
+    if (isReady(processing)) out[key] = await descOf(book);
+    else if (!processing.received) {
+      // Two decimals: the catalog is rewritten only when it changes.
+      out[key] = { ...(await descOf(book)), prep: Math.floor((processing.done / processing.total) * 100) / 100 };
+    }
   }
   return out;
 }

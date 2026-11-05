@@ -33,7 +33,8 @@ export function useMangaOcrBlocks(
         setOcrBlocks((prev) => new Map([...blocksMap, ...prev]));
       }
     });
-    if (missing.length > 0) {
+    // A received volume is recognized on the device it came from.
+    if (missing.length > 0 && !record.received) {
       enqueueDetect(bookId, missing);
     }
     const unsubscribe = onOcrPage((doneBookId, pageIndex, blocks) => {

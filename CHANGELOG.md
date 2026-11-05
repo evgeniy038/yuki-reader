@@ -3,6 +3,13 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.4.5] - 2026-11-05
+
+- Sync: a manga volume reaches your other devices only once your Mac has finished reading its text — the phone gets it ready to read, text and all, and never spends its own battery recognizing it again
+- Sync: a volume your Mac is still working on shows on the phone dimmed, with a ring of how far along it is; tap it once it's ready
+- Sync: Settings → Sync shows what's moving right now — a thin bar while it syncs, and every book on its way up or down with its progress; your devices have a group of their own
+- Sync: a book coming down from the cloud or the Mac fills a progress bar right on its cover
+
 ## [1.4.4] - 2026-11-04
 
 - Reading: don't like the page sliding? Turn off "Page-turn animation" in Settings → Reading (or right in the reader's quick settings on a phone) — taps and swipes then just flip the page, in novels, PDFs and manga alike
