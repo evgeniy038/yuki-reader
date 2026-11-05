@@ -14,14 +14,13 @@
 //   VITE_YANDEX_CLIENT_ID=smoke pnpm dev --port 1480
 //   YUKI_TEST_BASE=http://localhost:1480 pnpm tsx tests/sync-smoke.ts
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import sharp from "sharp";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { strToU8, zipSync } from "fflate";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 import { exitToShelf } from "./import-open.ts";
 import { fake, files, yandex } from "./sync-smoke-cloud.ts";
+import { bareVolume, epub, mangaVolume } from "./sync-smoke-books.ts";
 
 const BASE = process.env.YUKI_TEST_BASE ?? "http://localhost:1420";
 
@@ -29,53 +28,6 @@ const problems: string[] = [];
 function check(ok: boolean, label: string): void {
   if (!ok) problems.push(label);
   console.log(`${ok ? "  ✓" : "  ✗"} ${label}`);
-}
-
-// --- Books ------------------------------------------------------------------
-function epub(title: string, sentence: string): Uint8Array {
-  const body = Array.from({ length: 2000 }, (_, i) => `<p>${sentence}${i}。</p>`).join("");
-  return zipSync({
-    mimetype: strToU8("application/epub+zip"),
-    "META-INF/container.xml": strToU8(`<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oasis.opendocument.package"/></rootfiles></container>`),
-    "content.opf": strToU8(`<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0"><metadata><dc:title>${title}</dc:title><dc:language>ja</dc:language></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>`),
-    "c1.xhtml": strToU8(`<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>${title}</title></head><body>${body}</body></html>`),
-  });
-}
-
-// A mokuro volume: page images plus a sidecar with a box on every page, so
-// the in-app OCR has nothing to do. Returns the files to import.
-async function mangaVolume(root: string, title: string, colors: string[], width: number, height: number): Promise<string[]> {
-  const folder = join(root, title);
-  mkdirSync(folder);
-  const pages: string[] = [];
-  for (const [i, color] of colors.entries()) {
-    const path = join(folder, `p${i + 1}.png`);
-    await sharp({ create: { width, height, channels: 3, background: color } }).png().toFile(path);
-    pages.push(path);
-  }
-  const sidecar = join(folder, `${title} 第01巻.mokuro`);
-  writeFileSync(sidecar, JSON.stringify({
-    version: "0.2.1",
-    title,
-    volume: `${title} 第01巻`,
-    pages: pages.map((_, i) => ({
-      img_path: `p${i + 1}.png`, img_width: width, img_height: height,
-      blocks: [{ box: [20, 20, 120, 160], vertical: true, font_size: 24, lines: ["テスト"] }],
-    })),
-  }));
-  return [...pages, sidecar];
-}
-
-// A volume of scans with no sidecar: every page needs in-app OCR. One zip,
-// so the archive name becomes the title.
-async function bareVolume(root: string, title: string, colors: string[]): Promise<string> {
-  const pages: Record<string, Uint8Array> = {};
-  for (const [i, color] of colors.entries()) {
-    pages[`p${i + 1}.png`] = new Uint8Array(await sharp({ create: { width: 300, height: 420, channels: 3, background: color } }).png().toBuffer());
-  }
-  const path = join(root, `${title}.zip`);
-  writeFileSync(path, zipSync(pages));
-  return path;
 }
 
 /** Requests for the OCR model, per device: a device that never recognizes
@@ -116,6 +68,15 @@ const progressOf = (page: Page, title: string) =>
     const storage = await import("/src/core/storage.ts");
     return (await storage.loadAllBooks()).find((book) => book.title === title)?.progress ?? -1;
   }, title);
+
+/** A downloaded volume waits on the shelf; open it like a person would. */
+async function openVolume(page: Page, series: string): Promise<void> {
+  await page.goto(`${BASE}/#/`);
+  await page.locator("[data-book-id]").filter({ hasText: series }).first().click();
+  await page.waitForURL(/#\/manga\//, { timeout: 15_000 }).catch(() => {});
+  if (page.url().includes("/manga/")) await page.locator("[data-book-id]").first().click();
+  await page.waitForSelector("[data-manga-current] img", { timeout: 30_000 }).catch(() => {});
+}
 
 async function openSync(page: Page): Promise<void> {
   await page.goto(`${BASE}/#/settings`);
@@ -232,10 +193,11 @@ async function main(): Promise<void> {
     await tile.first().waitFor({ timeout: 15_000 }).catch(() => {});
     check((await tile.count()) === 1, "the phone shows the volume as a cloud tile");
     await tile.first().click();
-    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 30_000 }).catch(() => {});
-    check((await phone.page.locator("[data-manga-current] img").count()) >= 1, "a tap downloads the volume and opens it");
-    await phone.page.goto(`${BASE}/#/`);
-    check((await phone.page.locator("[data-cloud-book]").count()) === 0, "…and it's a book on the shelf now, not a tile");
+    await phone.page.waitForFunction(() => document.querySelectorAll("[data-cloud-book]").length === 0, null, { timeout: 30_000 }).catch(() => {});
+    check((await phone.page.locator("[data-cloud-book]").count()) === 0, "a tap downloads the volume: it's a book on the shelf now, not a tile");
+    check(!phone.page.url().includes("/read/"), "…and it waits there instead of opening by itself");
+    await openVolume(phone.page, "テスト漫画");
+    check((await phone.page.locator("[data-manga-current] img").count()) >= 1, "…and opens with a tap");
 
     // --- Never in the cloud: straight from the open Mac, over WebRTC. -------
     await mac.page.goto(`${BASE}/#/`);
@@ -259,8 +221,10 @@ async function main(): Promise<void> {
     });
     fake.latencyMs = 700;
     await fromMac.first().click();
-    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 90_000 }).catch(() => {});
+    await phone.page.waitForFunction(() => !document.querySelector('[data-cloud-from="device"]'), null, { timeout: 90_000 }).catch(() => {});
     fake.latencyMs = 0;
+    check(!phone.page.url().includes("/read/"), "the volume from the Mac lands on the shelf without opening itself");
+    await openVolume(phone.page, "ちょくせつ");
     const stages = (await phone.page.evaluate(() => document.body.dataset.stages ?? "")).split(",");
     check(stages[0] === "ringing" && stages.includes("connecting"), `the tile calls the Mac, then connects (${stages.join(" → ")})`);
     check(!stages.includes("closed"), "…and never asks to open yuki on a Mac that is open, even through a slow cloud");
@@ -316,7 +280,7 @@ async function main(): Promise<void> {
     await ready.first().waitFor({ timeout: 15_000 }).catch(() => {});
     check((await phone.page.locator("[data-cloud-prep]").count()) === 0, "once recognized on the Mac, it's offered");
     await ready.first().click();
-    await phone.page.waitForSelector("[data-manga-current] img", { timeout: 60_000 }).catch(() => {});
+    await phone.page.waitForFunction(() => ![...document.querySelectorAll("[data-cloud-book]")].some((el) => el.textContent?.includes("まだの巻")), null, { timeout: 60_000 }).catch(() => {});
     const landed = await phone.page.evaluate(async () => {
       const storage = await import("/src/core/storage.ts");
       const book = (await storage.loadShelfBooks()).find((b) => b.title.includes("まだの巻"));

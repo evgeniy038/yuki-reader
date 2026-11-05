@@ -75,7 +75,7 @@ export function OcrQueuePanel({
   books: Book[];
   /** Reader mounts this collapsed — reading chrome stays minimal. */
   defaultCollapsed?: boolean;
-  /** Shelf: bottom-right (above the dock on a phone). Reader: bottom-left,
+  /** Shelf: centered above the dock (where the update card shows). Reader: bottom-left,
       clear of the page counter on the right. */
   placement?: "shelf" | "reader";
   /** Hidden while something else owns the reader's bottom edge. */
@@ -171,6 +171,7 @@ export function OcrQueuePanel({
   }, [visible, applyGeometry]);
 
   const reduce = reduceMotion();
+  const anchor = placement === "reader" ? "right-0" : "left-1/2 -translate-x-1/2";
 
   return (
     <div
@@ -180,11 +181,11 @@ export function OcrQueuePanel({
       className={
         placement === "reader"
           ? "fixed bottom-safe-3 left-safe-4 z-40"
-          : "fixed right-safe-4 bottom-above-dock z-40 sm:bottom-safe-4"
+          : "pointer-events-none fixed inset-x-0 bottom-above-dock z-40 flex justify-center"
       }
       style={{
-        // Grows from its anchor corner.
-        transformOrigin: placement === "reader" ? "0% 100%" : "100% 100%",
+        // Grows from its anchor: the reader's corner, the shelf's center.
+        transformOrigin: placement === "reader" ? "0% 100%" : "50% 100%",
         transition: visible
           ? `opacity ${ENTER_EXIT_MS}ms ease-out, filter ${ENTER_EXIT_MS}ms ease-out, transform ${ENTER_EXIT_MS}ms ease-out, visibility 0s`
           : `opacity ${ENTER_EXIT_MS}ms ease-out, filter ${ENTER_EXIT_MS}ms ease-out, transform ${ENTER_EXIT_MS}ms ease-out, visibility 0s ${ENTER_EXIT_MS}ms`,
@@ -196,15 +197,16 @@ export function OcrQueuePanel({
     >
       <div
         ref={surfaceRef}
-        className="relative overflow-hidden border border-subtle bg-raised shadow-card"
+        className="pointer-events-auto relative overflow-hidden border border-subtle bg-raised shadow-card"
         style={{
           transition: `width ${MORPH_MS}ms ${MORPH_CURVE}, height ${MORPH_MS}ms ${MORPH_CURVE}, border-radius ${MORPH_MS}ms ${MORPH_CURVE}`,
         }}
       >
-        {/* Pill content (collapsed state) — anchored bottom-right. */}
+        {/* Pill content (collapsed state) — anchored at the bottom, centered
+            on the shelf so the morph grows evenly both ways. */}
         <div
           ref={pillRef}
-          className="absolute bottom-0 right-0 whitespace-nowrap"
+          className={`absolute bottom-0 whitespace-nowrap ${anchor}`}
           style={{
             transition: expanded
               ? `opacity ${CONTENT_OUT_MS}ms ease-out, filter ${CONTENT_OUT_MS}ms ease-out`
@@ -229,7 +231,7 @@ export function OcrQueuePanel({
         {/* Panel content (expanded state) — fixed width, height by content. */}
         <div
           ref={panelRef}
-          className="absolute bottom-0 right-0 w-80 max-w-[calc(100vw-2rem)]"
+          className={`absolute bottom-0 w-80 max-w-[calc(100vw-2rem)] ${anchor}`}
           style={{
             transition: expanded
               ? `opacity ${CONTENT_IN_MS}ms ease-out ${CONTENT_DELAY_MS}ms, filter ${CONTENT_IN_MS}ms ease-out ${CONTENT_DELAY_MS}ms`

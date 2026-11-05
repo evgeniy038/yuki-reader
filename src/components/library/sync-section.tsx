@@ -178,7 +178,7 @@ export function SyncSection() {
                 <span className="block text-sm text-default">{t("settings.sync.undo")}</span>
                 <span className="block text-xs text-muted-content">{t("settings.sync.undoHint")}</span>
               </span>
-              <Button variant="secondary" onClick={() => void syncActions.undoFirstSync()}>
+              <Button variant="ghost" onClick={() => void syncActions.undoFirstSync()}>
                 {t("settings.sync.undoAction")}
               </Button>
             </SettingsRow>,

@@ -28,8 +28,11 @@ const buttonVariants = cva(
           "border-0 bg-muted-surface text-strong shadow-secondary hover:bg-hover-surface active:bg-active-surface aria-expanded:bg-hover-surface",
         ghost:
           "text-default hover:bg-hover-surface hover:text-strong active:bg-active-surface aria-expanded:bg-hover-surface aria-expanded:text-strong aria-pressed:bg-hover-surface aria-pressed:text-strong",
+        // Same family as secondary (yuki's accent for danger is near-black,
+        // so a tinted fill read as a stray gray box): the weight is in the
+        // label, not in a frame.
         destructive:
-          "border-0 bg-destructive/10 text-destructive shadow-destructive hover:bg-destructive/15 active:bg-destructive/20",
+          "border-0 bg-muted-surface text-destructive shadow-secondary hover:bg-hover-surface active:bg-active-surface",
       },
       size: {
         sm: "h-8 gap-1.5 px-2.5",

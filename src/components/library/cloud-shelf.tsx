@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import type { Book } from "@/core/library";
 import type { CloudShelf } from "@/components/sync/use-sync";
@@ -26,16 +25,15 @@ import { GRID_CLASSES } from "./library-grid";
 
 export function CloudSection({ cloud }: { cloud: CloudShelf }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [failed, setFailed] = useState<string | null>(null);
   if (cloud.books.length === 0) return null;
 
   const open = (key: string, title: string, device: string) => {
     setFailed(null);
+    // A finished download just takes its place on the shelf: the reader
+    // opens when the person taps the book, not on its own.
     void cloud.download(key).then(
-      (id) => {
-        if (id) navigate(`/read/${id}`);
-      },
+      () => {},
       (error: unknown) => {
         setFailed(key);
         // By name: the error classes live in the lazily loaded sync code.

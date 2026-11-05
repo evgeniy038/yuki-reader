@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent, RefObject } from "react";
-import { animateSpring, type SpringHandle } from "@/lib/spring";
+import { animateSpring, projectMomentum, type SpringHandle } from "@/lib/spring";
 
 // Zoom + pan for the manga stage. The transform lives in a ref and is
 // written straight to the page layer — a pinch or a wheel burst repaints
@@ -44,6 +44,29 @@ export function clampPan(
   const clamp = (value: number, max: number) =>
     max === 0 ? 0 : Math.min(max, Math.max(-max, value));
   return { zoom: t.zoom, x: clamp(t.x, maxX), y: clamp(t.y, maxY) };
+}
+
+/** Zoomed pans decelerate like scrolling. */
+const PAN_DECELERATION = 0.995;
+
+/** Where a released pan, flung at (vx, vy) px/s, comes to rest — inside the
+    page bounds. */
+export function flingPan(
+  t: ZoomPan,
+  vx: number,
+  vy: number,
+  layer: { width: number; height: number },
+  stage: { width: number; height: number },
+): ZoomPan {
+  return clampPan(
+    {
+      zoom: t.zoom,
+      x: t.x + projectMomentum(vx, PAN_DECELERATION),
+      y: t.y + projectMomentum(vy, PAN_DECELERATION),
+    },
+    layer,
+    stage,
+  );
 }
 
 export function useZoomPan({

@@ -89,7 +89,7 @@ that text, while the phone never asks for the OCR model (not after a
 reload, not in the reader, even with the text gone) — and, with the Mac
 closed, asks to open yuki there. The OCR model is blocked in every
 profile: no recognition runs, text is written straight into storage. The fake Yandex lives in
-`sync-smoke-cloud.ts`. Start a dev server with a provider id first:
+`sync-smoke-cloud.ts`, the books it builds in `sync-smoke-books.ts`. Start a dev server with a provider id first:
 
 ```
 VITE_YANDEX_CLIENT_ID=smoke VITE_DROPBOX_APP_KEY=smoke pnpm dev --port 1480
@@ -117,7 +117,8 @@ and clear of the status bar, middle-band toggle with the scrubber bar,
 band taps and swipes in both reading directions, the page-turn animation
 switch in the text reader and on the manga pager (a volume drawn on the fly:
 on, turns slide and the page follows the finger; off, they just flip), the
-16px field guard. The pure touch geometry (bands, swipes, the pager's
+a touch whose lift got lost on an app switch (the next tap and swipe still
+turn, no ghost pinch), the 16px field guard. The pure touch geometry (bands, swipes, the pager's
 turn-or-stay verdict, spring, manga neighbour sets, pan bounds) is
 unit-tested in `pnpm test:reader-touch` (part of `pnpm test`).
 

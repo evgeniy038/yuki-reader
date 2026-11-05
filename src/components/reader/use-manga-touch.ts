@@ -1,12 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { useLatest } from "@/lib/use-latest";
-import {
-  animateSpring,
-  projectMomentum,
-  rubberband,
-  type SpringHandle,
-} from "@/lib/spring";
+import { animateSpring, rubberband, type SpringHandle } from "@/lib/spring";
 import {
   TAP_MAX_MS,
   TAP_SLOP_PX,
@@ -16,7 +11,7 @@ import {
   velocityOf,
   type Sample,
 } from "./touch-zones";
-import { clampPan, IDENTITY, type ZoomPan, type useZoomPan } from "./use-zoom-pan";
+import { clampPan, flingPan, IDENTITY, type ZoomPan, type useZoomPan } from "./use-zoom-pan";
 
 // Finger reading for manga — the pager and the loupe in one recognizer,
 // because they share every touch and must hand off mid-gesture:
@@ -42,7 +37,6 @@ import { clampPan, IDENTITY, type ZoomPan, type useZoomPan } from "./use-zoom-pa
 const DOUBLE_TAP_MS = 260;
 const DOUBLE_TAP_SLOP_PX = 30;
 const DOUBLE_TAP_ZOOM = 2.5;
-const PAN_DECELERATION = 0.995;
 
 type ZoomApi = Pick<
   ReturnType<typeof useZoomPan>,
@@ -195,14 +189,18 @@ export function useMangaTouch({
       // OCR boxes stay draggable (bubbles cover the page); real controls
       // are left alone entirely.
       if (el?.closest(TOUCH_IGNORE_SELECTOR) && !el.closest("[data-ocr-block]")) return;
+      // A first finger means no other is down: drop a lift iOS never sent
+      // (an app switch mid-touch — copy an OCR line, check a translation),
+      // or every swipe after it reads as a pinch with a ghost finger.
+      if (event.isPrimary) forget();
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       zoomRef.current.stop();
       if (pointers.size === 2) {
         // A page drag in progress gives way to the pinch.
         if (mode === "page") {
-        if (animateRef.current) springTrack(0);
-        else paintTrack(0);
-      }
+          if (animateRef.current) springTrack(0);
+          else paintTrack(0);
+        }
         beginPinch();
         return;
       }
@@ -350,34 +348,44 @@ export function useMangaTouch({
       if (gesture === "pan") {
         samples.push({ x: event.clientX, y: event.clientY, t: performance.now() });
         const { vx, vy } = velocityOf(samples);
-        const t = zoomRef.current.transformRef.current;
         const { layer, stage: box } = sizes();
-        const target = clampPan(
-          {
-            zoom: t.zoom,
-            x: t.x + projectMomentum(vx, PAN_DECELERATION),
-            y: t.y + projectMomentum(vy, PAN_DECELERATION),
-          },
-          layer,
-          box,
-        );
-        zoomRef.current.animateTo(target);
+        zoomRef.current.animateTo(flingPan(zoomRef.current.transformRef.current, vx, vy, layer, box));
       }
     };
 
     const onCancel = (event: PointerEvent) => {
       if (!pointers.delete(event.pointerId)) return;
       if (pointers.size > 0) return;
-      if (mode === "page") springTrack(0);
+      if (mode === "page") {
+        if (animateRef.current) springTrack(0);
+        else paintTrack(0);
+      }
       if (mode === "pinch" || mode === "pan") zoomRef.current.settle();
       mode = "idle";
+    };
+
+    /** Drop every finger and gesture — a fresh start (stale touches, or the
+        app going to the background mid-gesture). */
+    const forget = () => {
+      if (pointers.size === 0 && mode === "idle") return;
+      pointers.clear();
+      if (mode === "page") paintTrack(0);
+      if (mode === "pinch" || mode === "pan") zoomRef.current.settle();
+      mode = "idle";
+    };
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") forget();
     };
 
     stage.addEventListener("pointerdown", onDown);
     stage.addEventListener("pointermove", onMove);
     stage.addEventListener("pointerup", onUp);
     stage.addEventListener("pointercancel", onCancel);
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("blur", forget);
     return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("blur", forget);
       window.clearTimeout(tapTimer);
       trackSpringRef.current?.stop();
       stage.removeEventListener("pointerdown", onDown);

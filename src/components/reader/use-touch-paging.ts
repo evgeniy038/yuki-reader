@@ -115,8 +115,10 @@ export function useTouchPaging({
 
     const onDown = (event: PointerEvent) => {
       if (event.pointerType === "mouse") return;
-      // A second finger: this is not a page gesture.
-      if (active) {
+      // A second finger: this is not a page gesture. (A first finger with a
+      // gesture still on record means that gesture's lift never came — iOS
+      // drops it on an app switch — so it starts fresh instead.)
+      if (active && !event.isPrimary) {
         active = null;
         setShift(0);
         return;

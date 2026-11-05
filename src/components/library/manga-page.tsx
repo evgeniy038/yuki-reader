@@ -227,13 +227,17 @@ export function MangaPage({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {/* On a phone an icon, like the menu beside it: the series title
+              keeps the room, and the header can never run off the edge. */}
           <Button
             size="sm"
             onClick={() => fileRef.current?.click()}
             aria-label={t("manga.addVolume")}
+            title={t("manga.addVolume")}
+            className="max-sm:w-8 max-sm:px-0"
           >
             <Plus />
-            <span className="max-xs:sr-only">{t("manga.addVolume")}</span>
+            <span className="max-sm:sr-only">{t("manga.addVolume")}</span>
           </Button>
         </PageActions>
       </PageHeader>

@@ -56,14 +56,16 @@ export function NavPill({
               aria-label={label}
               aria-current={active ? "page" : undefined}
               onClick={() => onViewChange(value)}
-              className={`relative flex w-24 cursor-pointer flex-col items-center gap-1 rounded-lg px-2 py-2 transition-colors ${
+              className={`relative flex w-24 cursor-pointer flex-col items-center gap-0.5 rounded-lg px-2 py-2 transition-colors ${
                 active
                   ? "text-strong"
                   : "text-default hover:bg-muted-surface hover:text-strong"
               }`}
             >
               <Icon className="size-4" filled={active} />
-              <span className="text-xs leading-none">{label}</span>
+              {/* A full line box: with leading-none Safari clips the
+                  descenders of "y" and "g". */}
+              <span className="text-xs leading-4">{label}</span>
             </button>
           );
         })}

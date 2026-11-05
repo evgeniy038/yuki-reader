@@ -67,6 +67,16 @@ const controlsUp = (page: Page) =>
     return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
   });
 
+/** A finger that went down and whose lift the page never heard — what iOS
+    does when you switch apps mid-touch (copy an OCR line, open a translator,
+    come back). */
+const ghostTouch = (page: Page, x: number, y: number) =>
+  page.evaluate(({ x, y }) => {
+    document.elementFromPoint(x, y)?.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerId: 4242, pointerType: "touch", isPrimary: true, clientX: x, clientY: y }),
+    );
+  }, { x, y });
+
 async function settle(page: Page): Promise<void> {
   await page.waitForTimeout(450);
 }
@@ -141,6 +151,11 @@ try {
   await tap(cdp, WIDTH * 0.12, HEIGHT / 2);
   await settle(page);
   check(!(await controlsUp(page)), "a page turn puts the controls away");
+  await ghostTouch(page, 200, 500);
+  const beforeGhost = await pageNumber(page);
+  await tap(cdp, WIDTH * 0.12, HEIGHT / 2);
+  await settle(page);
+  check((await pageNumber(page)) === beforeGhost + 1, "after a touch whose lift got lost (an app switch), the next tap still turns");
 
   // --- the page-turn animation: on by default, a switch in Settings -----------
   // Slides are Web Animations on the page box; a drag moves it by transform.
@@ -264,6 +279,16 @@ try {
     await swipe(cdp, 80, 360, HEIGHT / 2);
     await settle(page);
     check((await mangaPage()) !== m1 && !(await trackAway()), `manga, animation ${mode}: a swipe turns and the track comes home`);
+    await ghostTouch(page, 200, 500);
+    const m2 = await mangaPage();
+    await swipe(cdp, 80, 360, HEIGHT / 2);
+    await settle(page);
+    const unzoomed = await page.evaluate(() => {
+      const layer = document.querySelector<HTMLElement>("[data-manga-current]");
+      const t = layer ? getComputedStyle(layer).transform : "none";
+      return t === "none" || t.startsWith("matrix(1, 0, 0, 1");
+    });
+    check((await mangaPage()) !== m2 && unzoomed, `manga, animation ${mode}: after a lost touch (an app switch), a swipe still turns — no ghost pinch`);
   }
 
   // --- the field focus zoom guard ---------------------------------------------

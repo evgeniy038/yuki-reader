@@ -448,7 +448,8 @@ stopped. Book chunks live apart from the reading state, so a round stays
 quick however big the library grows; uploads run on a budget each round
 and the next round picks up at once, so reading state never waits. On another device a novel or a PDF up to 25 MB just
 arrives; manga and bigger files wait in the shelf's **On your other
-devices** section as tiles — a tap downloads the book and opens it. A
+devices** section as tiles — a tap downloads the book onto the shelf (it
+opens when tapped there, not on its own). A
 downloaded volume can be **removed from this device**: it stays in the cloud
 or on the device it came from. A book deleted everywhere, or a series no longer kept in
 the cloud, has its files taken out of the cloud by the device that uploaded

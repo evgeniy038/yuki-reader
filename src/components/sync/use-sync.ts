@@ -53,7 +53,7 @@ interface SyncDeps {
 // the reading settings schedules a round (debounced); the controller adds
 // the open/return/online/minute triggers itself. Returns a key that remounts
 // the reader when the "continue from 45% · iPhone" offer is taken.
-export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf } {
+export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf; busy: boolean } {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const latest = useLatest(deps);
@@ -61,6 +61,7 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
   const actions = useRef<Actions | null>(null);
   const cloudModule = useRef<Cloud | null>(null);
   const [readerKey, setReaderKey] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [cloudView, setCloudView] = useState<Pick<CloudShelf, "books" | "downloads" | "direct" | "inCloud">>({
     books: [],
     downloads: {},
@@ -118,6 +119,8 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
       let last: ReturnType<typeof sync.getView> | null = null;
       const mirror = () => {
         const view = sync.getView();
+        // Busy: a round is on, or a book is moving either way.
+        setBusy(view.syncing || Object.keys(view.downloads).length > 0 || Object.keys(view.uploads).length > 0);
         if (
           last &&
           last.cloud === view.cloud &&
@@ -192,5 +195,5 @@ export function useSync(deps: SyncDeps): { readerKey: number; cloud: CloudShelf 
       void cloudModule.current?.removeDownload(id);
     },
   };
-  return { readerKey, cloud };
+  return { readerKey, cloud, busy };
 }
