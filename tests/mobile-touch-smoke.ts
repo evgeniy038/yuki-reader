@@ -6,7 +6,9 @@
 // in the book's reading direction (vertical Japanese: left = forward;
 // horizontal: right = forward), a turn puts the controls away; and the
 // page-turn animation switch — on, a turn slides and the page follows the
-// finger; off, it just flips — in the text reader and on the manga pager.
+// finger; off, it just flips — in the text reader and on the manga pager;
+// and zoomed manga moves without a jump: double-tap zoom, a released pan and
+// a pan let go past the page edge, measured frame by frame.
 // No fixtures (the manga volume is drawn on the fly).
 // Run: pnpm tsx tests/mobile-touch-smoke.ts
 
@@ -290,6 +292,87 @@ try {
     });
     check((await mangaPage()) !== m2 && unzoomed, `manga, animation ${mode}: after a lost touch (an app switch), a swipe still turns — no ghost pinch`);
   }
+
+  // --- zoomed manga: released motion has no jump -------------------------------
+  // Regression (phone recording): every release ended in one frame that
+  // covered half the way, then froze. Records the live transform each frame.
+  console.log("manga zoom motion");
+  // A string: tsx wraps named functions in a helper the page doesn't have.
+  const record = () =>
+    page.evaluate(`(() => {
+      const frames = [];
+      window.__frames = frames;
+      const tick = () => {
+        const style = document.querySelector("[data-manga-current]")?.style.transform ?? "";
+        const m = /translate\\((-?[\\d.]+)px, (-?[\\d.]+)px\\) scale\\((-?[\\d.]+)\\)/.exec(style);
+        frames.push(m ? { x: Number(m[1]), y: Number(m[2]), z: Number(m[3]) } : { x: 0, y: 0, z: 1 });
+        if (frames.length < 240) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    })()`);
+  const recorded = () =>
+    page.evaluate(() => (window as unknown as { __frames: { x: number; y: number; z: number }[] }).__frames);
+  const largestStep = (values: number[]) =>
+    Math.max(0, ...values.slice(1).map((value, i) => Math.abs(value - values[i]!)));
+  const near = (a: number, b: number, within: number) => Math.abs(a - b) <= within;
+
+  // A tap first closes an OCR box the swipes above may have left open.
+  await tap(cdp, WIDTH / 2, HEIGHT / 2);
+  await settle(page);
+  await record();
+  await tap(cdp, WIDTH / 2, HEIGHT / 2);
+  await new Promise((r) => setTimeout(r, 60));
+  await tap(cdp, WIDTH / 2, HEIGHT / 2);
+  await new Promise((r) => setTimeout(r, 1_000));
+  const zoomIn = (await recorded()).map((f) => f.z);
+  const zoomTo = zoomIn.at(-1) ?? 1;
+  check(zoomTo > 2, `double tap zooms in (to ${zoomTo.toFixed(2)})`);
+  const zoomStep = largestStep(zoomIn) / Math.max(0.01, zoomTo - 1);
+  check(zoomStep < 0.3, `double tap zoom has no jump (largest frame ${(zoomStep * 100).toFixed(0)}% of the way)`);
+
+  // A flick at about 12 px per 16 ms, released while moving.
+  await touch(cdp, "touchStart", [{ x: 150, y: 500 }]);
+  for (let i = 1; i <= 8; i++) {
+    await touch(cdp, "touchMove", [{ x: 150 + i * 12, y: 500 }]);
+    await new Promise((r) => setTimeout(r, 16));
+  }
+  const atRelease = await page.evaluate(() => {
+    const style = document.querySelector<HTMLElement>("[data-manga-current]")?.style.transform ?? "";
+    return Number(/translate\((-?[\d.]+)px/.exec(style)?.[1] ?? "0");
+  });
+  await record();
+  await touch(cdp, "touchEnd", []);
+  await new Promise((r) => setTimeout(r, 1_500));
+  const glide = (await recorded()).map((f) => f.x);
+  const glideEnd = glide.at(-1) ?? 0;
+  check(glideEnd - atRelease > 30, `a released pan glides on (${atRelease.toFixed(0)} → ${glideEnd.toFixed(0)} px)`);
+  check(largestStep(glide) < 30, `the glide has no jump (largest frame ${largestStep(glide).toFixed(1)} px)`);
+
+  // Dragged far past the edge and held still: eases back from rest.
+  const maxX = await page.evaluate(() => {
+    const layer = document.querySelector<HTMLElement>("[data-manga-current]");
+    const stage = layer?.parentElement?.parentElement?.parentElement;
+    const zoomNow = Number(/scale\(([\d.]+)\)/.exec(layer?.style.transform ?? "")?.[1] ?? "1");
+    return ((layer?.offsetWidth ?? 0) * zoomNow - (stage?.clientWidth ?? 0)) / 2;
+  });
+  await touch(cdp, "touchStart", [{ x: 20, y: 500 }]);
+  for (let i = 1; i <= 20; i++) {
+    await touch(cdp, "touchMove", [{ x: 20 + i * 40, y: 500 }]);
+    await new Promise((r) => setTimeout(r, 16));
+  }
+  await new Promise((r) => setTimeout(r, 250));
+  await record();
+  await touch(cdp, "touchEnd", []);
+  await new Promise((r) => setTimeout(r, 1_500));
+  const back = (await recorded()).map((f) => f.x);
+  const backFrom = back[0] ?? 0;
+  const backEnd = back.at(-1) ?? 0;
+  check(backFrom > maxX + 5, `the page stretches past its edge (${backFrom.toFixed(0)} > ${maxX.toFixed(0)} px)`);
+  check(near(backEnd, maxX, 0.5), `let go past the edge, it comes to rest on it (${backEnd.toFixed(1)} px)`);
+  check(
+    largestStep(back) < (backFrom - maxX) * 0.3,
+    `…with no jump (largest frame ${largestStep(back).toFixed(1)} of ${(backFrom - maxX).toFixed(0)} px)`,
+  );
 
   // --- the field focus zoom guard ---------------------------------------------
   const fontSize = await page.evaluate(() => {

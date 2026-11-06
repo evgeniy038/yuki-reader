@@ -11,7 +11,7 @@ import {
   velocityOf,
   type Sample,
 } from "./touch-zones";
-import { clampPan, flingPan, IDENTITY, type ZoomPan, type useZoomPan } from "./use-zoom-pan";
+import { clampPan, IDENTITY, type ZoomPan, type useZoomPan } from "./use-zoom-pan";
 
 // Finger reading for manga — the pager and the loupe in one recognizer,
 // because they share every touch and must hand off mid-gesture:
@@ -21,8 +21,9 @@ import { clampPan, flingPan, IDENTITY, type ZoomPan, type useZoomPan } from "./u
 //     momentum-projected landing decides turn or stay; the turn commits at
 //     once and the slide finishes on a spring carrying the finger's speed.
 //     Past the book's edge the track resists (rubber band).
-//   one finger, zoomed page → PAN, rubber-banded at the page bounds, flung
-//     with momentum, settled back inside on release.
+//   one finger, zoomed page → PAN, rubber-banded at the page bounds; on
+//     release it glides on at the finger's speed to a stop, or eases back
+//     inside if let go past an edge.
 //   two fingers → PINCH around their midpoint (two-finger pan included);
 //     lifting one hands over to pan without a jump.
 //   tap → outer bands turn (left = forward), the middle band shows the
@@ -40,7 +41,7 @@ const DOUBLE_TAP_ZOOM = 2.5;
 
 type ZoomApi = Pick<
   ReturnType<typeof useZoomPan>,
-  "transformRef" | "setTransform" | "settle" | "animateTo" | "stop" | "reset"
+  "transformRef" | "setTransform" | "settle" | "release" | "animateTo" | "stop" | "reset"
 >;
 
 export function useMangaTouch({
@@ -348,8 +349,7 @@ export function useMangaTouch({
       if (gesture === "pan") {
         samples.push({ x: event.clientX, y: event.clientY, t: performance.now() });
         const { vx, vy } = velocityOf(samples);
-        const { layer, stage: box } = sizes();
-        zoomRef.current.animateTo(flingPan(zoomRef.current.transformRef.current, vx, vy, layer, box));
+        zoomRef.current.release(vx, vy);
       }
     };
 

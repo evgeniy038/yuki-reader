@@ -11,6 +11,8 @@ export interface SpringOptions {
   response?: number;
   /** px/s at the start — the finger's release velocity. */
   velocity?: number;
+  /** How close counts as arrived, in the animated value's own units. */
+  precision?: number;
 }
 
 /** One integration step (unit mass), exported for the unit test. */
@@ -29,9 +31,9 @@ export function springStep(
   return { x: x + nextV * dt, v: nextV };
 }
 
-/** Settled when within half a pixel and nearly still. */
-export function springSettled(x: number, v: number, target: number): boolean {
-  return Math.abs(x - target) < 0.5 && Math.abs(v) < 8;
+/** Settled when within `precision` (half a pixel) and nearly still. */
+export function springSettled(x: number, v: number, target: number, precision = 0.5): boolean {
+  return Math.abs(x - target) < precision && Math.abs(v) < precision * 16;
 }
 
 export interface SpringHandle {
@@ -49,7 +51,7 @@ export function animateSpring(
   from: number,
   to: number,
   onFrame: (value: number) => void,
-  { damping = 1, response = 0.32, velocity = 0 }: SpringOptions = {},
+  { damping = 1, response = 0.32, velocity = 0, precision = 0.5 }: SpringOptions = {},
   onDone?: () => void,
 ): SpringHandle {
   if (reduceMotion()) {
@@ -72,12 +74,58 @@ export function animateSpring(
       ({ x, v } = springStep(x, v, to, step, damping, response));
       dt -= step;
     }
-    if (springSettled(x, v, to)) {
+    if (springSettled(x, v, to, precision)) {
       onFrame(to);
       onDone?.();
       return;
     }
     onFrame(x);
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  return {
+    stop: () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    },
+  };
+}
+
+/** A spring on a 0→1 progress, for callers that map it onto many values.
+    Pixel thresholds mean nothing on this scale. */
+export function animateProgress(
+  onFrame: (progress: number) => void,
+  options: Pick<SpringOptions, "damping" | "response"> = {},
+  onDone?: () => void,
+): SpringHandle {
+  return animateSpring(0, 1, onFrame, { ...options, precision: 0.0005 }, onDone);
+}
+
+/** Glide a 0→1 progress to rest the way a scroll does: full speed at once,
+    then only ever slowing, with no spring in it. `seconds` is the decay's
+    time constant, so a value travelling D leaves at D / seconds per second —
+    pick D = speed × seconds and the motion continues the finger seamlessly.
+    It ends once less than `precision` of the way is left. */
+export function animateGlide(
+  seconds: number,
+  precision: number,
+  onFrame: (progress: number) => void,
+): SpringHandle {
+  if (reduceMotion()) {
+    onFrame(1);
+    return { stop: () => {} };
+  }
+  const start = performance.now();
+  let raf = 0;
+  let stopped = false;
+  const tick = (now: number) => {
+    if (stopped) return;
+    const left = Math.exp(-Math.max(0, now - start) / 1000 / seconds);
+    if (left < precision) {
+      onFrame(1);
+      return;
+    }
+    onFrame(1 - left);
     raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);

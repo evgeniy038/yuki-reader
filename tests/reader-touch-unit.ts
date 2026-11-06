@@ -19,6 +19,8 @@ import {
 } from "../src/components/reader/spread-paging.ts";
 import { clampPan } from "../src/components/reader/use-zoom-pan.ts";
 import {
+  animateGlide,
+  animateProgress,
   projectMomentum,
   rubberband,
   springSettled,
@@ -143,6 +145,50 @@ import {
   assert.equal(rubberband(-100, 440), -rubberband(100, 440));
   assert.ok(rubberband(100_000, 440) < 440);
   console.log("  ✓ projectMomentum and rubberband");
+}
+
+// --- frame-by-frame motion ----------------------------------------------------------
+/** Drive an rAF animation on a 60 Hz clock; every value it painted, in order. */
+function framesOf(run: (onFrame: (value: number) => void) => void): number[] {
+  const queue: FrameRequestCallback[] = [];
+  globalThis.requestAnimationFrame = (cb) => queue.push(cb);
+  globalThis.cancelAnimationFrame = () => {};
+  const values: number[] = [];
+  run((value) => values.push(value));
+  let now = performance.now();
+  for (let i = 0; i < 1000 && queue.length > 0; i++) {
+    now += 1000 / 60;
+    queue.shift()!(now);
+  }
+  return values;
+}
+const steps = (values: readonly number[]) =>
+  values.map((value, i) => value - (values[i - 1] ?? 0));
+
+{
+  // Regression (phone recording): the release spring ran on a 0→1 progress
+  // but stopped by pixel thresholds, so it called itself done at k≈0.5 and
+  // the page teleported the other half in one frame, then froze.
+  const values = framesOf((onFrame) => animateProgress(onFrame, { response: 0.3 }));
+  const moves = steps(values);
+  assert.ok(Math.max(...moves) < 0.2, `no frame jumps: largest ${Math.max(...moves).toFixed(3)}`);
+  assert.equal(values.at(-1), 1, "lands exactly on the target");
+  assert.ok(moves.at(-1)! < 0.002, `arrives at rest: last step ${moves.at(-1)!.toFixed(4)}`);
+  console.log("  ✓ animateProgress: no jump, lands on target at rest");
+}
+
+{
+  // A pan released at 600 px/s glides 120 px over a 0.2 s constant: the first
+  // frame keeps the finger's speed (10 px per frame), every later one is
+  // slower, and it comes to rest exactly on the target with no jump.
+  const px = framesOf((onFrame) => animateGlide(0.2, 0.25 / 120, (k) => onFrame(k * 120)));
+  const moves = steps(px);
+  assert.ok(Math.abs(moves[0]! - 10) < 1, `leaves at the finger's speed: ${moves[0]!.toFixed(2)} px`);
+  for (let i = 1; i < moves.length - 1; i++)
+    assert.ok(moves[i]! < moves[i - 1]!, `only slows down (frame ${i}: ${moves[i]!.toFixed(3)} px)`);
+  assert.equal(px.at(-1), 120, "ends on the target");
+  assert.ok(moves.at(-1)! <= 0.3, `the last step is invisible: ${moves.at(-1)!.toFixed(3)} px`);
+  console.log("  ✓ animateGlide: continues the finger, only slows, no jump");
 }
 
 // --- manga neighbour sets ---------------------------------------------------------

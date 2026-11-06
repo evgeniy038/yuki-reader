@@ -3,6 +3,10 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.5.0] - 2026-11-06
+
+- Moving around a zoomed manga page is smooth now: when you lift your finger the page glides to a stop instead of jerking and freezing, and double-tap zoom no longer jumps
+
 ## [1.4.9] - 2026-11-05
 
 - Connect your devices by code to sync books, reading progress and statistics over Wi-Fi, without signing into Dropbox or Yandex Disk

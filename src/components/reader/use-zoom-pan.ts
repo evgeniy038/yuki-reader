@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent, RefObject } from "react";
-import { animateSpring, projectMomentum, type SpringHandle } from "@/lib/spring";
+import { animateGlide, animateProgress, projectMomentum, type SpringHandle } from "@/lib/spring";
 
 // Zoom + pan for the manga stage. The transform lives in a ref and is
 // written straight to the page layer — a pinch or a wheel burst repaints
@@ -11,8 +11,9 @@ import { animateSpring, projectMomentum, type SpringHandle } from "@/lib/spring"
 // zoom-out. A drag pans whenever zoom ≠ 1. No bounds, no snap to center;
 // the user owns the page position.
 //   Touch (driven by useMangaTouch through `setTransform`/`settle`): pinch
-// around the fingers, pan inside the page's bounds, and on release the
-// page springs back inside them — never smaller than fitted.
+// around the fingers, pan inside the page's bounds. A released pan keeps the
+// finger's speed and glides to rest; one let go past an edge, or a pinch,
+// springs back inside the bounds — never smaller than fitted.
 // Page turns call `reset`.
 const MAX_ZOOM = 5;
 const MIN_ZOOM = 1 / 3;
@@ -48,6 +49,9 @@ export function clampPan(
 
 /** Zoomed pans decelerate like scrolling. */
 const PAN_DECELERATION = 0.995;
+/** The time constant of that deceleration: a glide of this many seconds'
+    worth of the release speed starts at exactly that speed. */
+const PAN_GLIDE_SECONDS = PAN_DECELERATION / (1 - PAN_DECELERATION) / 1000;
 
 /** Where a released pan, flung at (vx, vy) px/s, comes to rest — inside the
     page bounds. */
@@ -120,9 +124,7 @@ export function useZoomPan({
     (to: ZoomPan) => {
       stop();
       const from = transformRef.current;
-      springRef.current = animateSpring(
-        0,
-        1,
+      springRef.current = animateProgress(
         (k) =>
           setTransform({
             zoom: from.zoom + (to.zoom - from.zoom) * k,
@@ -155,6 +157,32 @@ export function useZoomPan({
     if (target.zoom !== t.zoom || target.x !== t.x || target.y !== t.y)
       animateTo(target);
   }, [animateTo, layerRef, targetRef]);
+
+  /** Finger lifted off a pan, moving at (vx, vy) px/s. */
+  const release = useCallback(
+    (vx: number, vy: number) => {
+      const layer = layerRef.current;
+      const stage = targetRef.current;
+      if (!layer || !stage) return;
+      const t = transformRef.current;
+      const layerSize = { width: layer.offsetWidth, height: layer.offsetHeight };
+      const stageSize = { width: stage.clientWidth, height: stage.clientHeight };
+      const inside = clampPan(t, layerSize, stageSize);
+      // Held past an edge: no speed to continue, come back from rest.
+      if (inside.x !== t.x || inside.y !== t.y) {
+        animateTo(inside);
+        return;
+      }
+      const to = flingPan(t, vx, vy, layerSize, stageSize);
+      const travel = Math.max(Math.abs(to.x - t.x), Math.abs(to.y - t.y));
+      if (travel < 0.25) return;
+      stop();
+      springRef.current = animateGlide(PAN_GLIDE_SECONDS, 0.25 / travel, (k) =>
+        setTransform({ zoom: t.zoom, x: t.x + (to.x - t.x) * k, y: t.y + (to.y - t.y) * k }),
+      );
+    },
+    [animateTo, layerRef, setTransform, stop, targetRef],
+  );
 
   const reset = useCallback(() => {
     stop();
@@ -240,6 +268,7 @@ export function useZoomPan({
     setTransform,
     animateTo,
     settle,
+    release,
     stop,
     reset,
     handlers,
