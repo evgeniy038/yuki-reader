@@ -1,13 +1,22 @@
 import { addStatsDelta, loadMangaPageBlob, loadShelfBooks, putBook, putMangaVolume, restoreBookProgress } from "../src/core/storage";
-import { currentHost, requestSync } from "../src/components/sync/sync-controller";
+import { currentHost, getView, requestSync, subscribe } from "../src/components/sync/sync-controller";
 
 const connections = new Set<RTCPeerConnection>();
+let cloudBusy = false;
+let cloudStatus = false;
+let rounds = 0;
 export function instrument(): void {
+  subscribe(() => {
+    cloudBusy ||= getView().syncing;
+    cloudStatus ||= getView().status !== undefined;
+  });
+  window.addEventListener("yuki:sync-applied", () => rounds++);
   const Original = RTCPeerConnection;
   window.RTCPeerConnection = class extends Original {
     constructor(options?: RTCConfiguration) { super(options); connections.add(this); }
   };
 }
+export const activity = () => ({ cloudBusy, cloudStatus, rounds });
 export function dropConnection(): void {
   for (const pc of connections) pc.close();
   window.dispatchEvent(new Event("yuki-test:drop-peer"));

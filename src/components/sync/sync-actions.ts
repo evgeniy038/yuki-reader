@@ -40,7 +40,7 @@ export async function undoFirstSync(): Promise<void> {
 /** Answer the mass-deletion guard. */
 export async function resolveHeldDeletions(remove: boolean): Promise<void> {
   const view = getView();
-  const ids = view.status?.heldDeletions ?? [];
+  const ids = view.heldDeletions;
   if (ids.length === 0) return;
   if (remove) {
     currentHost()?.remove(ids);
@@ -58,7 +58,7 @@ export async function resolveHeldDeletions(remove: boolean): Promise<void> {
       await syncStore.setHlc(hlc.value);
     }
   }
-  if (view.status) patchView({ status: { ...view.status, heldDeletions: [] } });
+  patchView({ heldDeletions: [] });
   requestSync(0);
 }
 

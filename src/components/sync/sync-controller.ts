@@ -34,6 +34,7 @@ export interface SyncView {
   /** The running round, step by step (undefined between rounds). */
   round?: RoundProgress;
   status?: SyncStatus;
+  heldDeletions: string[];
   devices: { info: DeviceInfo; self: boolean }[];
   /** The pre-sync snapshot exists ("undo the first sync" for 7 days). */
   snapshotAt?: number;
@@ -54,12 +55,14 @@ export interface SyncView {
   uploads: Record<BookKey, { title: string; progress: number }>;
 }
 
-let view: SyncView = { phase: { kind: "off" }, syncing: false, devices: [], cloud: [], downloads: {}, direct: {}, inCloud: [], uploads: {} };
+let view: SyncView = { phase: { kind: "off" }, syncing: false, heldDeletions: [], devices: [], cloud: [], downloads: {}, direct: {}, inCloud: [], uploads: {} };
 const roundListeners = new Set<() => Promise<void>>();
 const listeners = new Set<() => void>();
 let host: SyncHost | null = null;
 let remotesCache: DeviceState[] = [];
 let rerun = false;
+let running = false;
+let forceCloud = false;
 let timer = 0;
 let triggersOn = false;
 let cloudAbort: AbortController | undefined;
@@ -160,7 +163,7 @@ async function round(peerOnly = false): Promise<void> {
   const [remote, vault, session] = await Promise.all([peerOnly ? null : folder(abort.signal), syncStore.vault(), syncStore.session()]);
   if (!peerOnly && (!remote || !vault || !session)) return;
   if (!peerOnly) cloudAbort = abort;
-  setView({ syncing: true });
+  if (!peerOnly) setView({ syncing: true });
   try {
     if (remote && vault && session) {
       const found = await inspectVault(remote);
@@ -180,7 +183,7 @@ async function round(peerOnly = false): Promise<void> {
       device: await device(),
       bridge: await createBridge(host),
       filesDeadline: Date.now() + FILES_BUDGET_MS,
-      onProgress: (progress) => setView({ round: progress }),
+      onProgress: peerOnly ? undefined : (progress) => setView({ round: progress }),
       onUpload: (key, title, sent, total) => {
         const uploads = { ...view.uploads };
         if (total > 0 && sent >= total) delete uploads[key];
@@ -197,23 +200,25 @@ async function round(peerOnly = false): Promise<void> {
       heldDeletions: report.heldDeletions,
       ...(report.filesFull ? { full: true } : {}),
     };
-    await syncStore.setStatus(status);
-    setView({ status, snapshotAt: (await syncStore.snapshot())?.at });
+    if (!peerOnly) {
+      await syncStore.setStatus(status);
+      setView({ status });
+    }
+    setView({ heldDeletions: report.heldDeletions, snapshotAt: (await syncStore.snapshot())?.at });
     await refreshDevices(report.remotes);
     emitSyncApplied({ books: report.received > 0, settings: report.received > 0, stats: true });
     for (const listener of roundListeners) await listener();
     // A book upload ran out of budget: carry on shortly, not in a minute.
     if (report.filesPending) rerun = true;
-    else setView({ uploads: {} });
+    else if (!peerOnly) setView({ uploads: {} });
   } catch (error) {
-    if (abort.signal.aborted) return;
-    const previous = view.status;
-    const status: SyncStatus = { at: Date.now(), ok: false, sent: 0, received: 0, bytes: 0, error: errorOf(error), heldDeletions: previous?.heldDeletions ?? [] };
+    if (abort.signal.aborted || peerOnly) return;
+    const status: SyncStatus = { at: Date.now(), ok: false, sent: 0, received: 0, bytes: 0, error: errorOf(error), heldDeletions: view.heldDeletions };
     await syncStore.setStatus(status);
     setView({ status, uploads: {} });
   } finally {
     if (cloudAbort === abort) cloudAbort = undefined;
-    setView({ syncing: false, round: undefined });
+    if (!peerOnly) setView({ syncing: false, round: undefined });
   }
 }
 
@@ -222,21 +227,26 @@ async function round(peerOnly = false): Promise<void> {
 const FILES_BUDGET_MS = 45_000;
 
 /** One round now (queued behind a running one). */
-export async function syncNow(): Promise<void> {
+export async function syncNow(manual = false): Promise<void> {
   if (view.phase.kind !== "ready" && !nearbyEnabled()) return;
-  if (view.syncing) {
+  forceCloud ||= manual;
+  if (running) {
     rerun = true;
     return;
   }
+  running = true;
   const run = async () => {
     if (nearbyEnabled()) await round(true);
-    if (view.phase.kind === "ready" && (!nearbyEnabled() || Date.now() - lastCloudRound >= 60_000)) {
+    if (view.phase.kind === "ready" && (forceCloud || !nearbyEnabled() || Date.now() - lastCloudRound >= 60_000)) {
+      forceCloud = false;
       lastCloudRound = Date.now();
       await round();
     }
   };
-  if (navigator.locks) await navigator.locks.request("yuki-sync", run);
-  else await run();
+  try {
+    if (navigator.locks) await navigator.locks.request("yuki-sync", run);
+    else await run();
+  } finally { running = false; }
   if (rerun) {
     rerun = false;
     void syncNow();
@@ -280,7 +290,7 @@ export async function disconnect(): Promise<void> {
   else await run();
   setSyncEnabled(nearbyEnabled());
   if (!nearbyEnabled()) remotesCache = [];
-  setView({ phase: { kind: "off" }, devices: [], status: undefined, snapshotAt: undefined, cloud: [], downloads: {}, direct: {}, inCloud: [], uploads: {} });
+  setView({ phase: { kind: "off" }, devices: [], status: undefined, heldDeletions: [], snapshotAt: undefined, cloud: [], downloads: {}, direct: {}, inCloud: [], uploads: {} });
   if (nearbyEnabled()) requestSync(0);
 }
 

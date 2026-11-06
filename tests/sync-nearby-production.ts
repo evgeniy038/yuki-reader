@@ -5,7 +5,7 @@ import { strict as assert } from "node:assert";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { chromium } from "playwright-core";
+import { chromium, webkit } from "playwright-core";
 import { epub } from "./sync-smoke-books.ts";
 
 const base = "https://yukireader.app";
@@ -15,10 +15,11 @@ const title = "Account-free Wi-Fi verification";
 const phrase = "This book arrived over a direct connection";
 writeFileSync(file, epub(title, phrase));
 const browser = await chromium.launch({ channel: "chromium", headless: true, args: ["--disable-features=WebRtcHideLocalIpsWithMdns"] });
+const receiver = process.env.YUKI_TEST_WEBKIT === "1" ? await webkit.launchPersistentContext(join(dir, "webkit-profile"), { headless: true, locale: "ru", viewport: { width: 390, height: 844 } }) : undefined;
 const errors: string[] = [];
 let providers = 0;
 try {
-  const contexts = await Promise.all([browser.newContext({ locale: "en" }), browser.newContext({ locale: "ru", viewport: { width: 390, height: 844 } })]);
+  const contexts = await Promise.all([browser.newContext({ locale: "en" }), receiver ?? browser.newContext({ locale: "ru", viewport: { width: 390, height: 844 } })]);
   for (const context of contexts) {
     if (process.env.YUKI_TEST_BUILT === "1") {
       await context.route(`${base}/**`, async (route) => {
@@ -38,12 +39,16 @@ try {
   await mac.locator("[data-book-id]").filter({ hasText: title }).waitFor({ timeout: 30_000 });
   await mac.goto(`${base}/#/settings`);
   await mac.locator("[data-pair-create]").click();
+  await phone.locator("[data-pair-create]").click();
+  mkdirSync("artifacts/local/nearby-sync", { recursive: true });
+  await phone.screenshot({ path: "artifacts/local/nearby-sync/pairing-dialog.png" });
+  assert.equal(await phone.locator('[role="dialog"]').evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth), true);
   await phone.locator("[data-pair-input]").fill(await mac.locator("[data-pair-code]").innerText());
   await phone.locator("[data-pair-join]").click();
   await mac.locator("[data-pair-confirm]").waitFor({ timeout: 40_000 });
   await mac.locator("[data-pair-confirm]").click();
   await Promise.all([mac.waitForSelector('[data-peer-connected="true"]', { timeout: 40_000 }), phone.waitForSelector('[data-peer-connected="true"]', { timeout: 40_000 })]);
-  mkdirSync("artifacts/local/nearby-sync", { recursive: true });
+  await phone.locator('[role="dialog"]').waitFor({ state: "hidden" });
   await phone.locator("[data-pair-create]").evaluate((element) => element.scrollIntoView({ block: "center" }));
   await phone.screenshot({ path: "artifacts/local/nearby-sync/production-phone.png" });
   await phone.goto(`${base}/#/`);
@@ -56,4 +61,4 @@ try {
   assert.equal(providers, 0);
   assert.deepEqual(errors, []);
   console.log(`✓ ${process.env.YUKI_TEST_BUILT === "1" ? "built" : "deployed"} site pairs through pair.yukireader.app, transfers and opens a real EPUB; no cloud account or browser errors`);
-} finally { await browser.close(); rmSync(dir, { recursive: true, force: true }); }
+} finally { await browser.close(); await receiver?.close(); rmSync(dir, { recursive: true, force: true }); }

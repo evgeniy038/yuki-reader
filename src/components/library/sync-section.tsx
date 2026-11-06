@@ -111,7 +111,7 @@ export function SyncSection() {
       break;
     case "ready": {
       const status = view.status;
-      const held = status?.heldDeletions ?? [];
+      const held = view.heldDeletions;
       const statusLine = view.syncing
         ? t("settings.sync.syncing")
         : !status
@@ -147,7 +147,7 @@ export function SyncSection() {
                   {t("settings.sync.signInAgain")}
                 </Button>
               ) : (
-                <Button variant="secondary" loading={view.syncing} onClick={() => void sync.syncNow()} data-sync-now="">
+                <Button variant="secondary" loading={view.syncing} onClick={() => void sync.syncNow(true)} data-sync-now="">
                   <ArrowsClockwise />
                   {t("settings.sync.syncNow")}
                 </Button>

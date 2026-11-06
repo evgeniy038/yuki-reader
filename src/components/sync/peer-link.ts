@@ -1,6 +1,7 @@
 import { ICE, opened } from "./p2p-connection";
 import { PeerUnreachableError } from "./p2p-protocol";
-import { decodeSignal, encodeSignal, signalingSecret } from "./peer-secret";
+import { signalingSecret } from "./peer-secret";
+import { PeerSignaling } from "./peer-signaling";
 
 interface Options {
   secret: string;
@@ -13,40 +14,42 @@ interface Options {
 
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
-/** One remembered peer, one live connection. Books use independent data
-    channels on it: no cloud polling or ICE handshake per book. */
+/** One remembered peer, one transport. Signaling reconnection preserves it;
+    network changes restart ICE on it; only a closed transport is replaced. */
 export class PeerLink {
   private pc?: RTCPeerConnection;
-  private socket?: WebSocket;
+  private controlChannel?: RTCDataChannel;
+  private signaling?: PeerSignaling;
   private session = "";
   private candidates: RTCIceCandidateInit[] = [];
-  private stopped = false;
+  private localCandidates: RTCIceCandidateInit[] = [];
+  private descriptionSent = false;
   private connected = false;
-  private ready = false;
-  private attempts = 0;
-  private reconnect?: ReturnType<typeof setTimeout>;
+  private negotiating = false;
   private negotiation?: ReturnType<typeof setTimeout>;
-  private heartbeat?: ReturnType<typeof setInterval>;
-  private lastPong = 0;
-  private received = Promise.resolve();
-  private sent = Promise.resolve();
-  private credentials?: Awaited<ReturnType<typeof signalingSecret>>;
   private abort = new AbortController();
 
   constructor(private readonly options: Options) {
     void signalingSecret(options.secret).then((credentials) => {
-      if (this.stopped) return;
-      this.credentials = credentials;
+      if (this.abort.signal.aborted) return;
+      const start = () => {
+        this.signaling = new PeerSignaling(credentials, options.side, options.temporary === true, this.abort.signal,
+          () => {
+            void this.send({ type: "hello", session: this.pc ? this.session : "", connected: this.connected }).catch(() => {});
+            if (!this.pc && options.side === 0) void this.offer();
+          },
+          (value) => this.signal(value),
+          () => { if (this.pc && ["failed", "disconnected", "closed"].includes(this.pc.connectionState)) this.recover(); });
+      };
       if (!options.temporary && navigator.locks) {
-        // Tabs share a device identity and pairing. Only one may own its
-        // socket; otherwise they continually disconnect one another.
+        // A shared device identity has one owner, including across tabs.
         void navigator.locks.request(`yuki-peer:${credentials.room}:${options.side}`, { signal: this.abort.signal }, async () => {
-          if (this.stopped) return;
-          this.connectSocket();
+          if (this.abort.signal.aborted) return;
+          start();
           await new Promise<void>((resolve) => this.abort.signal.addEventListener("abort", () => resolve(), { once: true }));
         }).catch(() => {});
-      } else this.connectSocket();
-    });
+      } else start();
+    }).catch(() => {});
   }
 
   isConnected(): boolean { return this.connected; }
@@ -63,78 +66,48 @@ export class PeerLink {
   frameSize(): number { return Math.min(256 * 1024, this.pc?.sctp?.maxMessageSize || 64 * 1024); }
 
   stop(): void {
-    this.stopped = true;
     this.abort.abort(new PeerUnreachableError());
-    clearTimeout(this.reconnect);
-    clearInterval(this.heartbeat);
-    this.socket?.close();
     this.drop();
+  }
+
+  private state(connected: boolean): void {
+    if (this.connected === connected) return;
+    this.connected = connected;
+    this.options.onState(connected);
   }
 
   private drop(): void {
     clearTimeout(this.negotiation);
     const old = this.pc;
     this.pc = undefined;
+    this.controlChannel = undefined;
+    this.negotiating = false;
     old?.close();
-    if (this.connected) { this.connected = false; this.options.onState(false); }
-  }
-
-  private connectSocket(): void {
-    if (this.stopped || !this.credentials) return;
-    const base: string = import.meta.env.VITE_PAIRING_URL || "wss://pair.yukireader.app";
-    const url = new URL(`/v1/rooms/${this.credentials.room}`, base);
-    url.searchParams.set("side", String(this.options.side));
-    if (this.options.temporary) url.searchParams.set("temporary", "1");
-    const socket = new WebSocket(url);
-    this.socket = socket;
-    socket.onopen = () => {
-      this.attempts = 0;
-      this.lastPong = Date.now();
-      this.heartbeat = setInterval(() => {
-        if (Date.now() - this.lastPong > 55_000) socket.close();
-        else if (socket.readyState === WebSocket.OPEN) socket.send("ping");
-      }, 20_000);
-    };
-    socket.onmessage = (event: MessageEvent) => {
-      const message: unknown = event.data;
-      if (message === "pong") { this.lastPong = Date.now(); return; }
-      if (typeof message !== "string" || message.length > 32_768) return;
-      this.received = this.received.then(async () => {
-        if (socket !== this.socket || this.stopped) return;
-        if (message === '{"type":"ready"}') {
-          this.ready = true;
-          if (this.options.side === 0) await this.offer();
-        } else if (this.credentials) {
-          await this.signal(await decodeSignal(this.credentials.key, message));
-        }
-      }).catch(() => this.retryConnection());
-    };
-    socket.onclose = () => {
-      clearInterval(this.heartbeat);
-      this.ready = false;
-      if (this.stopped || socket !== this.socket) return;
-      const delay = Math.min(15_000, 800 * 2 ** Math.min(this.attempts++, 5));
-      this.reconnect = setTimeout(() => this.connectSocket(), delay + Math.random() * 300);
-    };
-    socket.onerror = () => socket.close();
+    this.state(false);
   }
 
   private send(value: unknown): Promise<void> {
-    const socket = this.socket;
-    const task = this.sent.then(async () => {
-      if (!this.credentials || !socket || socket.readyState !== WebSocket.OPEN) throw new PeerUnreachableError();
-      const encrypted = await encodeSignal(this.credentials.key, value);
-      if (socket === this.socket && socket.readyState === WebSocket.OPEN) socket.send(encrypted);
-    });
-    this.sent = task.catch(() => {});
-    return task;
+    return this.signaling?.send(value) ?? Promise.reject(new PeerUnreachableError());
   }
 
-  private retryConnection(): void {
-    if (this.stopped) return;
-    this.drop();
-    if (this.options.side === 0 && this.ready) {
-      this.negotiation = setTimeout(() => { void this.offer().catch(() => this.retryConnection()); }, 2_000);
+  private deadline(pc: RTCPeerConnection, ms = 25_000, rebuild = true): void {
+    clearTimeout(this.negotiation);
+    this.negotiation = setTimeout(() => {
+      if (this.pc === pc && (!this.connected || pc.signalingState !== "stable")) this.recover(rebuild);
+    }, ms);
+  }
+
+  private recover(rebuild = false): void {
+    if (this.abort.signal.aborted) return;
+    const session = this.session;
+    rebuild ||= !this.pc || this.pc.connectionState === "closed" || this.controlChannel?.readyState === "closed";
+    if (rebuild) this.drop();
+    if (!this.signaling?.ready) return;
+    if (this.options.side === 0) void this.offer();
+    else {
+      void this.send({ type: "restart", session, rebuild }).catch(() => {});
+      clearTimeout(this.negotiation);
+      this.negotiation = setTimeout(() => this.recover(true), 25_000);
     }
   }
 
@@ -142,21 +115,27 @@ export class PeerLink {
     this.drop();
     this.session = session;
     this.candidates = [];
+    this.localCandidates = [];
+    this.descriptionSent = false;
     const pc = new RTCPeerConnection(ICE);
     this.pc = pc;
-    this.negotiation = setTimeout(() => { if (this.pc === pc) this.retryConnection(); }, 25_000);
+    this.deadline(pc);
     pc.onicecandidate = ({ candidate }) => {
-      if (candidate && this.pc === pc) void this.send({ type: "ice", session, candidate: candidate.toJSON() }).catch(() => {});
+      if (!candidate || this.pc !== pc) return;
+      if (!this.descriptionSent) this.localCandidates.push(candidate.toJSON());
+      else void this.send({ type: "ice", session, candidate: candidate.toJSON() }).catch(() => {});
     };
     pc.onconnectionstatechange = () => {
       if (this.pc !== pc) return;
-      if (pc.connectionState === "failed" || pc.connectionState === "closed") this.retryConnection();
-      else if (pc.connectionState === "disconnected") {
-        clearTimeout(this.negotiation);
-        this.negotiation = setTimeout(() => { if (this.pc === pc) this.retryConnection(); }, 8_000);
-      } else if (pc.connectionState === "connected") clearTimeout(this.negotiation);
+      if (pc.connectionState === "failed" || pc.connectionState === "closed") { this.state(false); this.recover(); }
+      else if (pc.connectionState === "disconnected") { this.state(false); this.deadline(pc, 8_000, false); }
+      else if (pc.connectionState === "connected") {
+        if (this.controlChannel?.readyState === "open") clearTimeout(this.negotiation);
+        this.state(this.controlChannel?.readyState === "open");
+      }
     };
     pc.ondatachannel = ({ channel }) => {
+      if (this.pc !== pc) { channel.close(); return; }
       channel.binaryType = "arraybuffer";
       if (channel.label === "yuki-sync") this.control(channel, pc);
       else this.options.onChannel(channel);
@@ -165,41 +144,76 @@ export class PeerLink {
   }
 
   private control(channel: RTCDataChannel, pc: RTCPeerConnection): void {
+    this.controlChannel = channel;
     const ready = () => {
-      if (this.pc !== pc || this.stopped) { channel.close(); return; }
+      if (this.pc !== pc || this.abort.signal.aborted) { channel.close(); return; }
       clearTimeout(this.negotiation);
-      this.connected = true;
       this.options.onControl(channel);
-      this.options.onState(true);
+      this.state(true);
     };
     if (channel.readyState === "open") ready();
     else channel.addEventListener("open", ready, { once: true });
-    channel.addEventListener("close", () => { if (this.pc === pc) this.retryConnection(); });
+    channel.addEventListener("close", () => { if (this.pc === pc) this.recover(true); });
+  }
+
+  private async describe(pc: RTCPeerConnection, type: "offer" | "answer"): Promise<void> {
+    if (this.pc !== pc) return;
+    await this.send({ type, session: this.session, sdp: pc.localDescription?.sdp });
+    if (this.pc !== pc) return;
+    this.descriptionSent = true;
+    for (const candidate of this.localCandidates.splice(0)) await this.send({ type: "ice", session: this.session, candidate });
   }
 
   private async offer(): Promise<void> {
-    if (this.stopped || !this.ready) return;
-    const session = crypto.randomUUID();
-    const pc = this.makeConnection(session);
-    this.control(pc.createDataChannel("yuki-sync", { ordered: true }), pc);
-    await pc.setLocalDescription(await pc.createOffer());
-    if (this.pc === pc) await this.send({ type: "offer", session, sdp: pc.localDescription?.sdp });
+    if (this.abort.signal.aborted || !this.signaling?.ready || this.negotiating || this.pc?.signalingState === "have-local-offer") return;
+    const restart = !!this.pc;
+    const pc = this.pc ?? this.makeConnection(crypto.randomUUID());
+    if (!restart) this.control(pc.createDataChannel("yuki-sync", { ordered: true }), pc);
+    this.negotiating = true;
+    this.descriptionSent = false;
+    this.deadline(pc);
+    try {
+      await pc.setLocalDescription(await pc.createOffer({ iceRestart: restart }));
+      await this.describe(pc, "offer");
+    } catch {
+      if (this.pc === pc && !this.connected) this.deadline(pc, 2_000);
+    } finally { if (this.pc === pc) this.negotiating = false; }
+  }
+
+  private async candidate(pc: RTCPeerConnection, candidate: RTCIceCandidateInit): Promise<void> {
+    // Late candidates from a previous ICE generation are normal on resume.
+    try { if (this.pc === pc) await pc.addIceCandidate(candidate); } catch { /* Keep the negotiated transport. */ }
   }
 
   private async signal(value: unknown): Promise<void> {
-    if (!record(value) || typeof value.session !== "string") return;
+    if (this.abort.signal.aborted || !record(value) || typeof value.session !== "string") return;
+    if (value.type === "hello" && this.options.side === 0) {
+      if (!this.connected && this.pc && (this.negotiating || this.pc.signalingState !== "stable")) return;
+      if (!this.pc || value.session !== this.session) { this.drop(); await this.offer(); }
+      else if (!this.connected && this.pc.signalingState === "stable") await this.offer();
+      return;
+    }
+    if (value.type === "restart" && this.options.side === 0 && value.session === this.session) {
+      if (value.rebuild === true) this.drop();
+      await this.offer();
+      return;
+    }
     if (value.type === "offer" && this.options.side === 1 && typeof value.sdp === "string") {
-      const pc = this.makeConnection(value.session);
+      const pc = this.pc && value.session === this.session ? this.pc : this.makeConnection(value.session);
+      this.descriptionSent = false;
+      this.deadline(pc);
       await pc.setRemoteDescription({ type: "offer", sdp: value.sdp });
+      if (this.pc !== pc) return;
       await pc.setLocalDescription(await pc.createAnswer());
-      if (this.pc === pc) await this.send({ type: "answer", session: value.session, sdp: pc.localDescription?.sdp });
+      await this.describe(pc, "answer");
       return;
     }
     const pc = this.pc;
     if (!pc || value.session !== this.session) return;
     if (value.type === "answer" && this.options.side === 0 && typeof value.sdp === "string" && pc.signalingState === "have-local-offer") {
       await pc.setRemoteDescription({ type: "answer", sdp: value.sdp });
-      for (const candidate of this.candidates.splice(0)) await pc.addIceCandidate(candidate);
+      if (this.pc !== pc) return;
+      for (const candidate of this.candidates.splice(0)) await this.candidate(pc, candidate);
     } else if (value.type === "ice" && record(value.candidate)) {
       const raw = value.candidate;
       if (typeof raw.candidate !== "string") return;
@@ -207,9 +221,10 @@ export class PeerLink {
         candidate: raw.candidate,
         sdpMid: typeof raw.sdpMid === "string" ? raw.sdpMid : null,
         sdpMLineIndex: typeof raw.sdpMLineIndex === "number" ? raw.sdpMLineIndex : null,
+        usernameFragment: typeof raw.usernameFragment === "string" ? raw.usernameFragment : undefined,
       };
-      if (pc.remoteDescription) await pc.addIceCandidate(candidate);
-      else this.candidates.push(candidate);
+      if (pc.remoteDescription) await this.candidate(pc, candidate);
+      else if (this.candidates.length < 64) this.candidates.push(candidate);
     }
   }
 }

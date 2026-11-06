@@ -26,6 +26,7 @@ export function pairing(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let generation = 0;
   let approved = false;
+  let persisted = false;
   const stop = () => {
     generation++;
     clearTimeout(timer);
@@ -35,6 +36,7 @@ export function pairing(
     link = undefined;
     candidate = undefined;
     approved = false;
+    persisted = false;
   };
   const cancel = () => { stop(); changed({ phase: "idle" }); };
 
@@ -61,11 +63,9 @@ export function pairing(
             if (role === 0) changed({ phase: "confirm", code, candidate: peer });
           } else if (value.type === "pair" && role === 1 && candidate && "secret" in value && typeof value.secret === "string" && /^[\w-]{43}$/.test(value.secret)) {
             await remember({ device: candidate, secret: value.secret, side: 1 });
+            persisted = true;
             await messages?.send({ type: "accepted" });
-            // Let the ordered acknowledgement reach the first device.
-            clearTimeout(timer);
-            timer = setTimeout(cancel, 1_000);
-          } else if (value.type === "accepted" && role === 0 && approved) cancel();
+          }
         });
         void messages.send({ type: "hello", device: self }).catch(() => channel.close());
       },
@@ -84,8 +84,12 @@ export function pairing(
       approved = true;
       const secret = toBase64Url(randomBytes(32));
       await remember({ device: candidate, secret, side: 0 });
+      persisted = true;
       await messages.send({ type: "pair", secret });
     },
+    // The remembered transport is proof that both sides saved the secret.
+    // Do not tear down the pairing channel on an arbitrary acknowledgement delay.
+    connected: (id: string) => { if (persisted && candidate?.id === id) cancel(); },
     cancel,
   };
 }

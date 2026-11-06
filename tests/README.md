@@ -260,3 +260,14 @@ provider session or vault, automatic reconnection after reload, a byte-exact
 Set `YUKI_TEST_PAIRED_CLOUD=1` (with `VITE_YANDEX_CLIENT_ID=smoke` on the app server)
 to also verify that an unavailable cloud on the first device, and disconnecting
 that cloud, do not break the account-free phone's pairing.
+
+`YUKI_TEST_WEBKIT=1` runs the receiving device in a disposable regular WebKit
+profile (private WebKit contexts cannot store Blob records). The same test checks
+that pairing closes only once the remembered connection is established, that
+idle peers settle, and that Wi-Fi rounds never change the cloud status.
+
+`pnpm test:sync-link` uses the same local servers to drop signaling, inject a
+stale ICE candidate, resume after a simulated clock jump, and restart ICE on
+real data channels. It verifies connection identity and received bytes, then
+outlives the handshake timeout to catch delayed reconnect loops. It also
+supports `YUKI_TEST_WEBKIT=1`.

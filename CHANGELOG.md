@@ -3,6 +3,12 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning — [SemVer](https://semver.org/).
 
+## [1.5.1] - 2026-11-06
+
+- Wi-Fi transfers keep their connection when the pairing service reconnects, and recover after returning to the app
+- Connect a device from one button, with the code and its input together and no extra paragraphs
+- Wi-Fi activity no longer flashes the cloud status or hides cloud errors; Sync now checks the cloud immediately
+
 ## [1.5.0] - 2026-11-06
 
 - Moving around a zoomed manga page is smooth now: when you lift your finger the page glides to a stop instead of jerking and freezing, and double-tap zoom no longer jumps

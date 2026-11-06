@@ -3,18 +3,24 @@
 // Worker: wrangler dev -c worker/wrangler.jsonc --port 1481 --var ALLOWED_ORIGINS:http://localhost:1480
 // App: VITE_PAIRING_URL=ws://localhost:1481 pnpm dev --port 1480
 import { strict as assert } from "node:assert";
-import { mkdirSync } from "node:fs";
-import { chromium, type Page } from "playwright-core";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium, webkit, type Page } from "playwright-core";
 import { fake, yandex } from "./sync-smoke-cloud.ts";
 
 const base = process.env.YUKI_TEST_BASE ?? "http://localhost:1480";
 const cloudOnMac = process.env.YUKI_TEST_PAIRED_CLOUD === "1";
 const browser = await chromium.launch({ channel: "chromium", headless: true, args: ["--disable-features=WebRtcHideLocalIpsWithMdns"] });
+const profile = process.env.YUKI_TEST_WEBKIT === "1" ? mkdtempSync(join(tmpdir(), "yuki-nearby-webkit-")) : undefined;
+// WebKit's private contexts reject even a one-byte Blob in IndexedDB.
+// Use an isolated, disposable regular profile, as the installed app does.
+const receiver = profile ? await webkit.launchPersistentContext(profile, { headless: true, locale: "en", viewport: { width: 390, height: 844 } }) : undefined;
 const errors: string[] = [];
 let providerRequests = 0;
 let ocrRequests = 0;
 async function device(phone = false) {
-  const context = await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1280, height: 800 }, locale: "en" });
+  const context = phone && receiver ? receiver : await browser.newContext({ viewport: phone ? { width: 390, height: 844 } : { width: 1280, height: 800 }, locale: "en" });
   await context.route(/https:\/\/.*(dropbox|yandex)\./, (route) => { providerRequests++; return route.abort(); });
   if (cloudOnMac && !phone) {
     for (const host of ["https://oauth.yandex.ru/**", "https://cloud-api.yandex.net/**", "https://*.disk.yandex.net/**", "https://*.disk.yandex.ru/**"]) await context.route(host, yandex);
@@ -63,6 +69,7 @@ try {
   await phone.page.evaluate(async () => (await import("/tests/sync-nearby-fixture.ts")).instrument());
   await mac.page.locator("[data-pair-create]").click();
   const code = await mac.page.locator("[data-pair-code]").innerText();
+  await phone.page.locator("[data-pair-create]").click();
   await phone.page.locator("[data-pair-input]").fill(code);
   const started = Date.now();
   await phone.page.locator("[data-pair-join]").click();
@@ -71,6 +78,10 @@ try {
   await mac.page.locator("[data-pair-confirm]").click();
   await Promise.all([connected(mac.page), connected(phone.page)]);
   await hasNovel(phone.page);
+  await mac.page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+  await phone.page.locator('[role="dialog"]').waitFor({ state: "hidden" });
+  assert.equal(await phone.page.locator("[data-pair-input]").count(), 0, "code entry is only in the pairing dialog");
+  assert.equal(await phone.page.getByText("Connect your devices once", { exact: false }).count(), 0);
   console.log(`✓ code pairing + novel received in ${Date.now() - started} ms, no account`);
   const received = await phone.page.evaluate(async () => {
     const storage = await import("/src/core/storage.ts");
@@ -86,6 +97,21 @@ try {
   await until(() => mac.page.evaluate(async () => (await (await import("/src/core/storage.ts")).loadShelfBooks()).find((book) => book.id === "novel")?.progress === 0.77));
   await until(() => mac.page.evaluate(async () => (await (await import("/src/core/sync/stats.ts")).loadMergedStats()).reduce((sum, day) => sum + day.timeMs, 0) === 180_000));
   console.log("✓ progress, pin and statistics travel both ways without double counting");
+  const peerActivity = await phone.page.evaluate(async () => (await import("/tests/sync-nearby-fixture.ts")).activity());
+  assert.equal(peerActivity.cloudBusy, false, "peer rounds do not flash the cloud spinner");
+  assert.equal(peerActivity.cloudStatus, false, "peer rounds never claim the cloud just synced");
+  if (cloudOnMac) {
+    const status = await mac.page.evaluate(async () => (await import("/src/components/sync/sync-controller.ts")).getView().status);
+    await mac.page.locator("[data-sync-now]").click();
+    await until(() => mac.page.evaluate(async (at) => {
+      const view = (await import("/src/components/sync/sync-controller.ts")).getView();
+      return !view.syncing && view.status?.ok === false && view.status.at !== at;
+    }, status?.at));
+    await phone.page.evaluate(async () => (await import("/tests/sync-nearby-fixture.ts")).readOnPhone());
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    assert.equal(await mac.page.locator('[data-sync-status="error"]').count(), 1, "direct sync cannot overwrite a cloud failure with Synced now");
+    console.log("✓ manual cloud sync runs immediately; successful Wi-Fi exchange preserves the cloud error");
+  }
   // A navigation reload loses every connection; the remembered pairing
   // must reconnect without another code and keep the remote catalog.
   await phone.page.reload();
@@ -143,6 +169,13 @@ try {
     return ocr.size === 32 && [...ocr.values()].every((record) => record.blocks[0]?.lines[0] === "本文");
   }));
   console.log("✓ missing text for an existing volume arrives separately, with no OCR model download");
+  await new Promise((resolve) => setTimeout(resolve, 2_000));
+  const settled = await phone.page.evaluate(async () => (await import("/tests/sync-nearby-fixture.ts")).activity());
+  await new Promise((resolve) => setTimeout(resolve, 3_000));
+  const idle = await phone.page.evaluate(async () => (await import("/tests/sync-nearby-fixture.ts")).activity());
+  assert.ok(idle.rounds - settled.rounds <= 1, "idle peers only have their minute timer, not an endless feedback loop");
+  assert.equal(idle.cloudBusy, false);
+  assert.equal(idle.cloudStatus, false);
   if (cloudOnMac) {
     await mac.page.evaluate(async () => (await import("/src/components/sync/sync-controller.ts")).disconnect());
     await Promise.all([connected(mac.page), connected(phone.page)]);
@@ -168,4 +201,4 @@ try {
   assert.equal(ocrRequests, 0, "transferred manga is not recognized again");
   assert.deepEqual(errors, []);
   console.log("sync-nearby smoke: all checks passed");
-} finally { await browser.close(); }
+} finally { await browser.close(); await receiver?.close(); if (profile) rmSync(profile, { recursive: true, force: true }); }

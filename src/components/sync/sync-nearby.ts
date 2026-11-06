@@ -94,10 +94,10 @@ function connectPeer(paired: PairedDevice): void {
   previous?.link.stop();
   const link = new PeerLink({
     secret: paired.secret, side: paired.side,
-    onState: (connected) => {
+    onState: () => {
       const entry = connections.get(paired.device.id);
       if (entry?.link !== link) return;
-      if (!connected) entry.snapshot = undefined;
+      if (link.isConnected()) pair.connected(paired.device.id);
       devicesChanged();
       requestSync(100);
     },
